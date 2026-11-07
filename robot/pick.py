@@ -89,6 +89,7 @@ def main():
     ap.add_argument("--to", dest="dst", required=True)
     ap.add_argument("--level", type=int, default=0)
     ap.add_argument("--dry", action="store_true")
+    ap.add_argument("--probe", type=float, default=0, help="only hover 3 cm above the block for this many s")
     args = ap.parse_args()
     su, sv = map(float, args.src.split(","))
     du, dv = map(float, args.dst.split(","))
@@ -116,6 +117,8 @@ def main():
         ("release", [*dst_a, place_z], 1.0),
         ("up", [*dst_a, TOP_Z + HOVER + args.level * BLOCK_H], 1.0),
     ]
+    if args.probe:
+        plan = [plan[0], ("probe", [*src_a, TOP_Z + 0.03], 1.0), plan[0]]
 
     station = config.load("configs/station.yaml")
     ik = yam.teleop_ik(station)[side]
@@ -163,9 +166,18 @@ def main():
                 time.sleep(1 / hz)
             time.sleep(hold)
 
-        for name, qj, g in joints:
-            print("->", name)
-            go(qj, g, hold=0.4 if name in ("grip", "release") else 0.0)
+        for i, (name, qj, g) in enumerate(joints):
+            print("->", name, flush=True)
+            go(qj, g, hold=args.probe if name == "probe" else 0.4 if name in ("grip", "release") else 0.0)
+            if name == "grip":
+                held = a.read()[1][side]
+                print(f"   gripper at {held:.2f} after closing", flush=True)
+                if held < 0.05:  # ponytail: fully closed means it closed on air; threshold is a knob
+                    print("MISSED: nothing between the fingers; backing off", flush=True)
+                    go(joints[i - 1][1], 1.0, hold=0.3)  # open where it is
+                    go(joints[1][1], 1.0)  # straight back up to 'above block'
+                    go(q_up, 1.0)
+                    break
         print("-> rest")
         go(start[side], 1.0)
         time.sleep(0.5)
