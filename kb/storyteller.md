@@ -61,6 +61,8 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 ## Gotchas
 - Install the hook after `session.start()`. The console's text/audio toggle resets the session outputs and drops
   the hook: choose `console` or `console --text` at launch.
+- `console --text` has no audio clock, so gestures fire in bursts as the text streams (seen Nov 7 against
+  `fake_stage.py`). Use it to check wiring only; judge timing in voice mode.
 - In `console --text` there is no audio, so gestures fire as the text arrives.
 - The agent registers as `storyteller` with explicit dispatch: in `dev` mode it only joins rooms it is dispatched
   to (`lk dispatch create --new-room --agent-name storyteller`, or the SIP dispatch rule).
