@@ -25,7 +25,9 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 
 ## Tag protocol (LLM output)
 - `[left:slash]`, `[right:cower]`, `[both:bow]`: arm is `left|right|both`, gesture is a stage gesture name.
-  Placed right before the words where the action happens; at most one or two per sentence.
+  Written at the end of the sentence they act out (the LLM's habit anyway); `tags_first` (the agent's
+  `transcription_node`) moves them to the start of that sentence, so the arm moves as the words begin. At most one or
+  two per sentence. Before this (Nov 7 real run) gestures visibly lagged the speech by about a sentence.
 - `[next]` at the end of a scene means "carry on". Once it has been spoken in full, the director waits
   `NEXT_SCENE_AFTER_S` (0.8 s) and asks for the next scene; the listener can jump in during that gap.
   No `[next]` means the agent waits for the listener (a question, or the end of the story).

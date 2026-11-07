@@ -123,6 +123,45 @@ async def strip_tags_for_tts(text: AsyncIterable[str]) -> AsyncIterable[str]:
         yield clean
 
 
+_SENTENCE_END = ".!?…\"'”’)"
+
+
+async def tags_first(text: AsyncIterable[str]) -> AsyncIterable[str]:
+    """Transcription transform: move each sentence's gesture tags to the start of that sentence.
+
+    The LLM tends to write a tag after the sentence it acts out, so played in place the gesture starts once the
+    words are already spoken. A tag belongs to the sentence it ends or sits in; `[next]` stays at the end.
+    ponytail: holds one sentence of text (the LLM runs well ahead of speech), so the transcript lags by at most that."""
+    parser = TagParser()
+    tags: list[str] = []
+    ctrl: list[str] = []
+    buf = ""
+
+    def emit() -> str:
+        nonlocal tags, ctrl, buf
+        lead = buf[: len(buf) - len(buf.lstrip())]
+        out = lead + "".join(t + " " for t in tags) + re.sub(r" {2,}", " ", buf[len(lead):]) + "".join(ctrl)
+        tags, ctrl, buf = [], [], ""
+        return out
+
+    async for chunk in text:
+        out = ""
+        for piece in parser.feed(chunk):
+            if isinstance(piece, Tag):
+                (ctrl if piece.arm is None else tags).append(piece.raw)
+                continue
+            for c in piece:
+                if not c.isspace() and buf[-1:].isspace() and buf.rstrip()[-1:] in _SENTENCE_END:
+                    out += emit()
+                buf += c
+        if out:
+            yield out
+    for piece in parser.flush():
+        buf += piece if isinstance(piece, str) else piece.raw
+    if rest := emit():
+        yield rest
+
+
 def hyphenate_without_tags(word: str) -> list[str]:
     """Synchronizer pacing: a tag takes no speaking time."""
     word = re.sub(r"\[[^\]]{0,%d}\]" % MAX_TAG_LEN, "", word)

@@ -19,7 +19,7 @@ from livekit.agents.voice.room_io.types import NoiseCancellationParams
 from livekit.plugins import noise_cancellation
 
 from director import Director
-from gestures import DEFAULT_GESTURES, GestureBook, GestureSync, Stage, strip_tags_for_tts
+from gestures import DEFAULT_GESTURES, GestureBook, GestureSync, Stage, strip_tags_for_tts, tags_first
 
 HERE = Path(__file__).parent
 load_dotenv(HERE / ".env")
@@ -41,6 +41,12 @@ logger = logging.getLogger("storyteller")
 
 def build_instructions(book: GestureBook) -> str:
     return (HERE / "prompt.md").read_text().replace("{{GESTURES}}", book.describe())
+
+
+class Storyteller(Agent):
+    async def transcription_node(self, text, model_settings):
+        async for chunk in tags_first(text):  # gestures start with their sentence, not after it
+            yield chunk
 
 
 def _noise_cancellation(params: NoiseCancellationParams) -> rtc.NoiseCancellationOptions:
@@ -82,7 +88,7 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.add_shutdown_callback(shutdown)
 
     await session.start(
-        agent=Agent(instructions=build_instructions(book)),
+        agent=Storyteller(instructions=build_instructions(book)),
         room=ctx.room,
         room_options=room_io.RoomOptions(audio_input=room_io.AudioInputOptions(noise_cancellation=_noise_cancellation)),
     )

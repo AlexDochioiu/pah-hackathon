@@ -41,3 +41,7 @@
 - Storyteller smoke test with the real LiveKit Inference models: LLM first token ~2.0 s, Fish TTS first audio
   ~3.2 s; tags well placed. Scripts that call `inference.*` outside the agent worker need
   `async with livekit.agents.utils.http_context.open():`.
+- First real story run with the arms (user at the console): works well, "pretty awesome". Feedback: gestures lag the
+  words a bit (fixed: tags move to their sentence start), and the arms both face the audience even when they play
+  two characters: they should face and interact with each other (passed to the duets work). Props being printed:
+  hat, sword, steering wheel, small gun.

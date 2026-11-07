@@ -2,15 +2,15 @@
 are scripted, audio plays out in real time, and the stage is a recorder."""
 import time
 
-from livekit.agents import Agent
+from storyteller import Storyteller
 from lkfakes.fake_session import FakeActions, create_session, run_session
 
 from director import CONTINUE_INSTRUCTIONS, Director
 from gestures import DEFAULT_GESTURES, GestureBook, GestureSync, strip_tags_for_tts
 
-STORY = ("Once upon a time [left:wave] a knight waved hello to the whole wide kingdom, and everybody waved back "
-         "at her with big happy smiles, and then far away a dragon woke up, stretched, yawned, wandered over "
-         "the hills and at last [right:roar] roared. [next]")
+STORY = ("Once upon a time a knight waved hello. [left:wave] The whole wide kingdom waved back at her with big happy "
+         "smiles, and then far away a dragon woke up, stretched, yawned and wandered over the hills. At last it "
+         "roared. [right:roar] [next]")  # tags after their sentence, as the LLM writes them: tags_first moves them
 
 
 class FakeStage:
@@ -58,7 +58,7 @@ async def run(actions):
         sync.install(session.output)
     session.start = start
 
-    t0 = await run_session(session, Agent(instructions="test"), drain_delay=6)
+    t0 = await run_session(session, Storyteller(instructions="test"), drain_delay=6)
     history = [m.text_content for m in session.history.messages() if m.role == "assistant"]
     return t0, stage, speaking, "".join(tts_inputs), history, replies
 
@@ -74,8 +74,8 @@ async def test_gestures_follow_speech():
     start = speaking[0] - t0
     wave, roar = plays[0][0] - start, plays[1][0] - start
     print(f"speech starts {start:.2f}s; wave +{wave:.2f}s, roar +{roar:.2f}s")
-    assert 0 <= wave < 1.0  # second word of the reply
-    assert 2.5 < roar < 4.5  # near the end of the 4 s of audio, not when the LLM wrote it
+    assert 0 <= wave < 0.5  # moved to the start of its sentence: the first word
+    assert 2.5 < roar < 4.5  # at its sentence near the end of the 4 s of audio, not when the LLM wrote it
     assert "[" not in tts_text and "knight" in tts_text
     assert "[left:wave]" in history[0]  # the LLM keeps seeing its own tags
     assert replies == [CONTINUE_INSTRUCTIONS]  # [next] was heard, so the next scene was asked for

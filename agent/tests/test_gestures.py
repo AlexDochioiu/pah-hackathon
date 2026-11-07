@@ -105,3 +105,17 @@ def test_text_only_mode_still_fires():
     out = SimpleNamespace(audio=None, transcription=None)
     GestureSync(BOOK, lambda *a: None, lambda: None).install(out)
     assert isinstance(out.transcription, GestureSink)
+
+
+def test_tags_first_moves_tags_to_sentence_start():
+    from gestures import tags_first
+
+    async def run(chunks):
+        async def src():
+            for c in chunks:
+                yield c
+        return "".join([t async for t in tags_first(src())])
+
+    text = "Hello there! [both:wave] He was terri" "fied of the dark! [left:shake_head] He hid [left:cower] under the bed. [next]"
+    out = asyncio.run(run([text[i:i + 7] for i in range(0, len(text), 7)]))
+    assert out == "[both:wave] Hello there! [left:shake_head] He was terrified of the dark! [left:cower] He hid under the bed. [next]", out

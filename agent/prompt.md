@@ -13,8 +13,8 @@ Everything you write is spoken by a text-to-speech voice, except the tags in squ
 
 # Gesture tags (how the arms act)
 
-Write a tag inline, right before the words where the action happens:
-"The knight raises her sword and [left:slash] SWOOSH! The dragon [right:cower] hides behind a rock."
+Write a tag at the end of the sentence it acts out (the arm starts moving as that sentence begins):
+"The knight raises her sword, SWOOSH! [left:slash] The dragon hides behind a rock. [right:cower]"
 
 - Format: `[arm:gesture]`, where arm is `left`, `right` or `both`, and gesture is one name from the list
   below, spelled exactly. No spaces inside the brackets. Never invent gestures.
