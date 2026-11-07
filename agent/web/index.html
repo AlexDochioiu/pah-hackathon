@@ -34,6 +34,10 @@
   #talk.held { background:var(--tomato); color:var(--paper); transform:translateY(6px); box-shadow:0 2px 0 var(--ink); }
   #talk:disabled { background:var(--cream-deep); color:var(--ink-soft); cursor:not-allowed; }
   #talk:focus-visible { outline:4px solid var(--sky); outline-offset:4px; }
+  #stop { display:block; margin:0 auto; width:min(560px, 90vw); height:64px; border:var(--line); border-radius:var(--r-md);
+          background:var(--tomato); color:var(--paper); font:800 30px var(--font-body); letter-spacing:1px;
+          box-shadow:0 5px 0 var(--ink); cursor:pointer; }
+  #stop:active { transform:translateY(4px); box-shadow:0 1px 0 var(--ink); }
   #transcript { flex:1; overflow-y:auto; border:var(--line); border-radius:var(--r-md); background:var(--paper);
                 padding:16px 22px; font-size:28px; line-height:1.4; user-select:text; -webkit-user-select:text; }
   #transcript p { margin:0 0 12px; }
@@ -57,6 +61,7 @@
 </header>
 <div id="say">Starting…</div>
 <button id="talk" disabled>HOLD TO TALK<small>or hold the space bar</small></button>
+<button id="stop">■ STOP<small style="font-size:16px;font-weight:600"> &nbsp;arms freeze, then rest · Esc</small></button>
 <div id="transcript"></div>
 <footer><span id="f-version">version ?</span><span id="f-room"></span><span id="f-stage"></span></footer>
 <div id="banner">Click to turn on the sound</div>
@@ -67,7 +72,7 @@ const LK = LivekitClient;
 const $ = (id) => document.getElementById(id);
 const talk = $("talk"), say = $("say"), transcript = $("transcript");
 
-let room = null, agent = null, connecting = false, parked = false;
+let room = null, agent = null, connecting = false, parked = false, stopped = false;
 let boot = null, pageHash = null, serverUp = false, joinedAt = 0;
 let holding = false, holdStart = 0, rpcChain = Promise.resolve();
 const segments = new Map();  // segment id -> <p>
@@ -86,7 +91,7 @@ function render() {
   chip("c-agent", agent ? "storyteller: " + st : (room ? "storyteller: not here yet" : "storyteller"),
        agent ? "ok" : (room ? "wait" : ""));
   if (!serverUp) say.textContent = "Server restarting…";
-  else if (!room) say.textContent = parked ? "This story was closed. Click to start a new one." : "Connecting…";
+  else if (!room) say.textContent = parked ? (stopped ? "Stopped: arms going to rest. Click to start a new story." : "This story was closed. Click to start a new one.") : "Connecting…";
   else if (!agent) say.textContent = "Waiting for the storyteller…";
   else if (holding) say.textContent = "Listening to you…";
   else say.textContent = { speaking: "Telling the story", thinking: "Thinking…", listening: "Hold the button and talk",
@@ -197,7 +202,19 @@ window.addEventListener("keydown", (e) => { if (e.code === "Space") { e.preventD
 window.addEventListener("keyup", (e) => { if (e.code === "Space") { e.preventDefault(); release(false); } });
 window.addEventListener("blur", () => release(true));
 $("banner").addEventListener("click", () => room && room.startAudio());
-document.addEventListener("click", () => { if (parked && serverUp && !room) { parked = false; render(); } });
+document.addEventListener("click", () => { if (parked && serverUp && !room) { parked = false; stopped = false; render(); } });
+async function stopAll(e) {
+  if (e) e.stopPropagation();
+  release(true);
+  parked = true; stopped = true;
+  const r = room; room = null; agent = null;
+  render();
+  try { await fetch("/stop", { method: "POST" }); } catch (err) { say.textContent = "STOP failed: server down. Use the e-stop!"; }
+  if (r) await r.disconnect();
+  render();
+}
+$("stop").addEventListener("click", stopAll);
+window.addEventListener("keydown", (e) => { if (e.code === "Escape") stopAll(e); });
 
 async function poll() {
   try {

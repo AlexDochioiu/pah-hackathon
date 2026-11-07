@@ -115,3 +115,6 @@ works). The talk button (or the space bar) is the only way in: the mic is ignore
   laptop with `ssh -N -L 8770:127.0.0.1:8770 nuck9`.
 - Tests (`uv run --group dev pytest -q`) need no credentials; they use LiveKit's own test fakes, vendored from the
   `livekit-agents@1.8.11` tag into `agent/tests/lkfakes/`.
+
+- **STOP** (page button or Esc): `POST /stop` on app.py freezes the arms, closes the story's room and then sends
+  `/rest` (retrying while a frozen duet finishes). Same effect as Ctrl-C in the console.

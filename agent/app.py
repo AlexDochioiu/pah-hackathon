@@ -233,6 +233,36 @@ class App:
             "worker": "running" if self.worker.running else "stopped", "stage": await self.stage_state(),
         }, headers={"Cache-Control": "no-store"})
 
+    async def stop(self, _req: web.Request) -> web.Response:
+        """The page's STOP button, like Ctrl-C in the console: freeze the arms now, end the story (its room), then
+        fold the arms to rest. A frozen duet answers 409 while it first finishes on its own path, so retry."""
+        if self.http is None:
+            self.http = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.0))
+        frozen = await self.stage_post("/freeze")
+        if self.room:
+            old, self.room = self.room, None
+            await self.delete_room(old)
+        asyncio.create_task(self.rest())
+        log.info("STOP from the page (freeze %s)", "ok" if frozen else "failed")
+        return web.json_response({"frozen": frozen})
+
+    async def stage_post(self, path: str) -> bool:
+        if self.http is None:
+            return False
+        try:
+            async with self.http.post(f"{STAGE_URL}{path}", json={}) as resp:
+                return resp.status == 200
+        except Exception as e:  # noqa: BLE001 - stage offline
+            log.warning("stage %s failed: %s", path, e)
+            return False
+
+    async def rest(self) -> None:
+        for _ in range(15):  # ponytail: retry while a frozen duet finishes (up to ~30 s)
+            await asyncio.sleep(2.0)
+            if await self.stage_post("/rest"):
+                return
+        log.warning("arms did not take /rest after STOP")
+
     async def close(self) -> None:
         if self.http is not None:
             await self.http.close()
@@ -251,7 +281,8 @@ async def main() -> None:
     worker = Worker()
     app = App(worker)
     web_app = web.Application()
-    web_app.add_routes([web.get("/", app.index), web.get("/token", app.token), web.get("/status", app.status)])
+    web_app.add_routes([web.get("/", app.index), web.get("/token", app.token), web.get("/status", app.status),
+                            web.post("/stop", app.stop)])
     runner = web.AppRunner(web_app, access_log=None)
     await runner.setup()
     try:
