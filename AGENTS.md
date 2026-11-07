@@ -26,3 +26,10 @@ how we drive the arms and how we calibrated them.
 When you learn something another person or agent would need (a fact about the hardware, a decision, a gotcha,
 a calibration value), add it to the matching `kb/` page in the same commit as the code, and add a dated line to
 [kb/log.md](kb/log.md). Write facts, not narratives; link pages with relative markdown links.
+
+## Design system
+Every interface (website, social images, slides, overlays) is built from one shared design language: colour
+tokens, type, buttons and other components. Don't invent new colours or component styles in a page; add them to
+the design system first. Social images are HTML pages using the same components, rendered to PNG with headless
+Chrome. (The design system is being picked on Nov 7; until then each `site/vN/` has its own `design.css`
+candidate.)
