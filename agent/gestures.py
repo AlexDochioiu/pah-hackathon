@@ -2,7 +2,8 @@
 when the spoken words reach them.
 
 The LLM writes `[left:slash]`, `[right:cower]`, `[both:bow]` inline, plus `[next]` at the end of a scene
-it wants to carry on from. Tags flow through the reply untouched except for two places:
+it wants to carry on from, and `[face:each_other]` / `[face:audience]` to turn the two actors toward each other
+or back to the audience (the stage server's /stance; gestures then play facing that way). Tags flow through the reply untouched except for two places:
 
 - `strip_tags_for_tts`, a TTS text transform: the voice never sees a tag.
 - `GestureSync`, a TranscriptSynchronizer wrapped around the session's outputs: it releases the reply's
@@ -44,6 +45,9 @@ SYNONYMS = {
     "idle": "idle_breathe", "curtsy": "bow",
 }
 CONTINUE_TAG = "next"
+FACE_TAG = "face"  # [face:each_other] / [face:audience] -> POST /stance
+FACINGS = {"each_other": "each_other", "other": "each_other", "eachother": "each_other", "together": "each_other",
+           "audience": "audience", "front": "audience", "us": "audience", "out": "audience", "forward": "audience"}
 MAX_TAG_LEN = 48  # a "[" left open longer than this is prose, not a tag
 _TAG_BODY = re.compile(r"^\s*([A-Za-z]+)\s*(?::\s*([A-Za-z][A-Za-z _-]*?)\s*)?$")
 
@@ -207,6 +211,7 @@ class Stage:
         self.url = url.rstrip("/")
         self._http: aiohttp.ClientSession | None = None
         self._tasks: set[asyncio.Task] = set()
+        self._order = asyncio.Lock()  # requests reach the stage in the order sent ([face:...] then [both:bow])
         self.busy_until = 0.0  # monotonic time the last fired gesture should be done
 
     def _session(self) -> aiohttp.ClientSession:
@@ -227,7 +232,7 @@ class Stage:
 
     async def _post(self, path: str, body: dict | None = None) -> None:
         try:
-            async with self._session().post(f"{self.url}{path}", json=body or {}) as resp:
+            async with self._order, self._session().post(f"{self.url}{path}", json=body or {}) as resp:
                 if resp.status >= 400:
                     logger.warning("stage %s %s -> %s %s", path, body or "", resp.status, await resp.text())
         except Exception as e:  # noqa: BLE001
@@ -242,6 +247,10 @@ class Stage:
         logger.info("gesture %s:%s", arm, gesture)
         self.busy_until = max(self.busy_until, time.monotonic() + duration_s / speed)
         self.send("/play", {"arm": arm, "gesture": gesture, "speed": speed})
+
+    def face(self, stance: str) -> None:
+        logger.info("face %s", stance)
+        self.send("/stance", {"stance": stance})
 
     def freeze(self) -> None:
         self.busy_until = 0.0
@@ -265,9 +274,10 @@ class GestureSink(io.TextOutput):
         on_continue: Callable[[], None],
         *,
         next_in_chain: io.TextOutput | None,
+        on_face: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(label="GestureSink", next_in_chain=next_in_chain)
-        self._book, self._play, self._on_continue = book, play, on_continue
+        self._book, self._play, self._on_continue, self._on_face = book, play, on_continue, on_face
         self._parser = TagParser()
 
     def _handle(self, pieces: list[str | Tag]) -> str:
@@ -278,6 +288,11 @@ class GestureSink(io.TextOutput):
             elif p.arm is None:
                 if p.name == CONTINUE_TAG:
                     self._on_continue()
+            elif p.arm == FACE_TAG:
+                if (facing := FACINGS.get(p.name)) and self._on_face:
+                    self._on_face(facing)
+                else:
+                    logger.info("dropped %s", p.raw)
             elif p.arm not in ARMS:
                 logger.info("dropped %s: unknown arm", p.raw)
             elif (name := self._book.resolve(p.name)) is None:
@@ -305,12 +320,13 @@ class GestureSync:
     output feeds a GestureSink. Call `install()` after `session.start()` has set the outputs up."""
 
     def __init__(self, book: GestureBook, play: Callable[[str, str, float], None],
-                 on_continue: Callable[[], None]) -> None:
-        self._book, self._play, self._on_continue = book, play, on_continue
+                 on_continue: Callable[[], None], on_face: Callable[[str], None] | None = None) -> None:
+        self._book, self._play, self._on_continue, self._on_face = book, play, on_continue, on_face
         self.sync: TranscriptSynchronizer | None = None
 
     def install(self, output: io.AgentOutput) -> None:
-        sink = GestureSink(self._book, self._play, self._on_continue, next_in_chain=output.transcription)
+        sink = GestureSink(self._book, self._play, self._on_continue, next_in_chain=output.transcription,
+                           on_face=self._on_face)
         if output.audio is None:  # text-only (console --text): nothing to sync to, fire as the text streams
             logger.warning("no audio output: gestures fire as the text arrives, not synced to speech")
             output.transcription = sink

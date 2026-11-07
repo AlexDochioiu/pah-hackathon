@@ -40,6 +40,11 @@ FOLD = ("stage", "rest")
 # Stage pose: lift.py's raised pose (gripper ~0.48 m up, facing the audience) with the "head" (gripper) level.
 # Not turned inward: with 15 cm props the arms have only ~0.22 m of inward room each before the 15 cm gap.
 STAGE_LEFT = np.array([0.0, 0.8, 1.2, -0.3, 0.0, 0.0])
+# Stances: the pose gestures play relative to. "audience" = STAGE_LEFT (both face the audience); "each_other" = base
+# and head yawed toward the other arm, so two characters can slash / wave / roar AT each other (left j1 < 0, j5 > 0;
+# the right arm mirrors). Every gesture is checked in each stance; one that fails a stance is refused only there.
+FACING_LEFT = np.array([-0.2, 0.0, 0.0, 0.0, 0.25, 0.0])  # delta from STAGE_LEFT
+STANCES = {"audience": STAGE_LEFT, "each_other": STAGE_LEFT + FACING_LEFT}
 
 try:
     import yaml
@@ -54,8 +59,13 @@ def mirror(dq, side):
     return np.asarray(dq) * (MIRROR if side == "right" else 1)
 
 
-def stage_pose(side):
-    return mirror(STAGE_LEFT, side)
+def stage_pose(side, stance="audience"):
+    return mirror(STANCES[stance], side)
+
+
+def key(name, side, stance="audience"):
+    """Swept-volume cache key of a gesture on one arm in one stance."""
+    return (name, side) if stance == "audience" else (name, side, stance)
 
 
 # ---------------------------------------------------------------- scene
@@ -240,12 +250,13 @@ class Gesture:
         assert self.dq.shape[1] == 6 and np.all(np.diff(self.t) > 0) and self.t[0] == 0, f"{self.name}: bad keys"
         self.duration = float(self.t[-1])
         self.max_speed = None  # set by check()
+        self.stances = {"audience"}  # stances it passed the checker in (load_library)
 
-    def samples(self, side, speed=1.0, hz=HZ):
+    def samples(self, side, speed=1.0, hz=HZ, stance="audience"):
         """(joints (N,6), grips (N,) or None) at hz for the given speed, absolute for that side."""
         n = max(2, int(round(self.duration / speed * hz)) + 1)
         tq = np.linspace(0, self.duration, n)
-        Q = stage_pose(side) + mirror(pchip(self.t, self.dq, tq), side)
+        Q = stage_pose(side, stance) + mirror(pchip(self.t, self.dq, tq), side)
         G = None if self.gt is None else pchip(self.gt, self.gv, tq)[:, 0]
         return Q, G
 
@@ -319,14 +330,14 @@ class Checker:
             probs.append(f"lowest point (prop included) is {sw[2]*100:.1f} cm above the table, needs {CLEAR*100:.0f} cm")
         return probs, sw
 
-    def check(self, g):
+    def check(self, g, stance="audience"):
         """Problems of a gesture on either arm at speed 1 (empty = ok). Sets g.max_speed and caches swept volumes."""
         probs = []
         for side in SIDES:
-            Q, G = g.samples(side)
+            Q, G = g.samples(side, stance=stance)
             p, sw = self.check_samples(side, Q, fold=g.name in FOLD)
             probs += [f"{side}: {x}" for x in p]
-            self.swept[(g.name, side)] = sw
+            self.swept[key(g.name, side, stance)] = sw
         if G is not None and (G.min() < -1e-6 or G.max() > 1 + 1e-6):
             probs.append("gripper outside 0..1")
         v, a = peak_rates(g.samples("left")[0])
@@ -368,7 +379,38 @@ def load_library(checker=None, folder=GESTURE_DIR, verbose=True):
         for b in ok:
             if gap(ck.swept[(a, "left")], ck.swept[(b, "right")]) < GAP:
                 unsafe.add((a, b))
+    # The same for the other stances (not the folds): a gesture failing there is only refused in that stance.
+    ck.stance_rejected, ck.stance_unsafe = {}, {}
+    for st in STANCES:
+        if st == "audience":
+            continue
+        good = []
+        for name, g in ok.items():
+            if name in FOLD:
+                continue
+            probs = ck.check(g, st)
+            if probs:
+                ck.stance_rejected[(name, st)] = "; ".join(probs)
+            else:
+                good.append(name)
+        others = {side: [ck.pose_sweep(side, stage_pose(side, st)), ck.pose_sweep(side, HOME[side])] for side in SIDES}
+        for side in SIDES:
+            if "idle_breathe" in good:
+                others[side].append(ck.swept[key("idle_breathe", side, st)])
+        for name in list(good):
+            for side, other in (("left", "right"), ("right", "left")):
+                d = min(gap(ck.swept[key(name, side, st)], o) for o in others[other])
+                if d < GAP:
+                    ck.stance_rejected[(name, st)] = (f"on the {side} arm comes {d*100:.1f} cm from the {st} or idle "
+                                                      f"{other} arm (< {GAP*100:.0f} cm)")
+                    good.remove(name); break
+        for name in good:
+            ok[name].stances.add(st)
+        ck.stance_unsafe[st] = {(a, b) for a in good for b in good
+                                if gap(ck.swept[key(a, "left", st)], ck.swept[key(b, "right", st)]) < GAP}
     if verbose:
         for n, why in bad.items():
             print(f"REJECTED {n}: {why}")
+        for (n, st), why in ck.stance_rejected.items():
+            print(f"not in stance {st}: {n}: {why}")
     return ok, bad, unsafe

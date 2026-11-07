@@ -47,3 +47,7 @@
   hat, sword, steering wheel, small gun.
 - Prompt: the story must be told through physical action words that match the gestures (user request), so the
   arms are busy and the show feels dynamic.
+- Face-each-other stance: `POST /stance {"stance":"each_other"}` yaws both arms ~26° toward each other (j1 ∓0.20,
+  j5 ±0.25) and solo gestures play relative to it; 16/17 pass the checker there (not `look_at_other`). Agent tag
+  `[face:each_other]` / `[face:audience]`, prompt asks for it when two characters meet. Sim-only so far
+  ([gestures.md](gestures.md#stances-facing-each-other)).

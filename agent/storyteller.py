@@ -79,7 +79,7 @@ async def entrypoint(ctx: JobContext) -> None:
         use_tts_aligned_transcript=False,
     )
     director = Director(session, stage, idle_after_s=IDLE_AFTER_S, continue_after_s=NEXT_SCENE_AFTER_S)
-    gestures = GestureSync(book, stage.play, director.request_continue)
+    gestures = GestureSync(book, stage.play, director.request_continue, stage.face)
 
     async def shutdown() -> None:
         stage.send("/rest")
@@ -95,7 +95,7 @@ async def entrypoint(ctx: JobContext) -> None:
     gestures.install(session.output)  # after start: wraps the outputs start() set up
     await ctx.connect()
 
-    stage.send("/stage")
+    stage.face("audience")  # a new show starts facing the audience (and at the stage pose)
     session.generate_reply(instructions="Greet the listener and ask what story they would like to hear.")
 
 

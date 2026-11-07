@@ -117,11 +117,27 @@ python robot/stage.py --backend kin                                   # anywhere
 - `POST /idle` blends to stage and loops `idle_breathe`; gestures then return to idle unless `hold`.
 - `POST /stage {"speed"}`, `POST /rest {"speed"}` plan a smooth move from wherever the arm is (speed ≤ 1).
 - `POST /grip {"arm","value"}` 0 closed … 1 open; refused while the arm plays a gesture.
+- `POST /stance {"stance": "audience"|"each_other", "speed"}` turns both arms to that stance's pose; every later
+  gesture, idle and `/stage` play relative to it (see Stances). Idle arms keep breathing in the new stance.
+  `GET /gestures` lists each gesture's `stances`; `/state` has `stance` and `not_in_stance` (reasons).
 - Errors: 409 (refused: unknown gesture, unsafe, busy) / 400 (bad body) with `{"ok": false, "error": "..."}`.
 - Real mode: takes the station lock, refuses unless both arms are within 0.25 rad of rest, starts holding where the
   arms are. A tracking error > 0.35 rad (something blocking an arm) freezes both arms and sets `fault`.
 - Ctrl-C / SIGTERM: smoothly back to rest (via stage if needed, auto-freeze off, a second Ctrl-C is ignored), then
   motors off. **Never `kill -9` it in real mode**: the arms would go limp wherever they are.
+
+## Stances (facing each other)
+Gestures are deltas from a stance pose. `audience` = the stage pose (both arms face the audience, the default).
+`each_other` = stage + `show.FACING_LEFT` = j1 −0.20, j5 +0.25 on the left arm (mirrored on the right: j1 +0.20,
+j5 −0.25): base and head yaw ~26° toward the other arm, so a slash, roar or wave aims at the other character
+(previews: `robot/previews/each_other/<name>.gif`). `load_library` checks every gesture in every stance (limits,
+table, lean-back, and 15 cm from the other arm at the stance pose, rest and idle); a gesture that fails a stance is
+refused only there. Today 16 of 17 play facing each other; `look_at_other` doesn't (its turn brings the prop 9.9 cm
+from the other arm, and they already look at each other). `stage`/`rest` always fold via the audience pose. In
+`each_other` 27 gesture pairs are refused when played on both arms at the same moment (409, as any clash): the
+props point at each other, so two big moves at once come too close. Larger yaws were tried: j1 −0.35 or j5 +0.55
+lose most gestures to the 15 cm gap. The agent uses `[face:each_other]` / `[face:audience]` tags
+([storyteller.md](storyteller.md)). Bring-up adds a turn to `each_other` and back at 30 %.
 
 ## Bring-up (first real run)
 `bash ~/dial/bringup.sh --real` on the station, props removed, someone at the e-stop. It runs `home.py`, then
@@ -142,6 +158,7 @@ exits (it waits, and asks before going limp). Fast hand motion gets slowed a lot
 `MUJOCO_GL=egl .venv/bin/python ~/dial/preview.py [names]` on the station (or `MUJOCO_GL=cgl` on a Mac) →
 `robot/previews/<name>.gif`, 360×240, 10 fps, ~250 KB, 3/4 view from the audience side (the left arm is on the
 right of the image, gold prop; right arm blue prop). Rejected gestures render with the reason in red.
+`preview.py --stance each_other [names]` → `robot/previews/each_other/<name>.gif`.
 
 ## Gotchas
 - After `make_gestures.py` or any gesture edit: run `check_gestures.py`, then `preview.py`, and look at the GIFs.

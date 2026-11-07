@@ -28,6 +28,9 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
   Written at the end of the sentence they act out (the LLM's habit anyway); `tags_first` (the agent's
   `transcription_node`) moves them to the start of that sentence, so the arm moves as the words begin. At most one or
   two per sentence. Before this (Nov 7 real run) gestures visibly lagged the speech by about a sentence.
+- `[face:each_other]` / `[face:audience]`: turn both actors toward each other or back to the audience
+  (`POST /stance`); the prompt asks for each_other when the two arms play characters who meet or fight, and
+  audience before the final bow. Stage requests go out in order, so `[face:audience] [both:bow]` turns, then bows.
 - `[next]` at the end of a scene means "carry on". Once it has been spoken in full, the director waits
   `NEXT_SCENE_AFTER_S` (0.8 s) and asks for the next scene; the listener can jump in during that gap.
   No `[next]` means the agent waits for the listener (a question, or the end of the story).

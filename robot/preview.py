@@ -1,6 +1,7 @@
 """Renders every gesture to previews/<name>.gif from the audience side (both arms, table, props), for review.
 
   preview.py [name ...]        default: every gesture in gestures/
+  preview.py --stance each_other [name ...]    the same facing each other, to previews/each_other/<name>.gif
 Off-screen MuJoCo: on the station run with MUJOCO_GL=egl (or osmesa); on a Mac MUJOCO_GL=cgl. The left arm is on the
 RIGHT of the image (seen from the audience). Gestures meant for one arm play on the left arm, the right arm stands at
 the stage pose; "both" gestures play mirrored on both arms; stage starts from rest.
@@ -15,10 +16,10 @@ W, H, FPS = 360, 240, 10
 OUT = show.DIR / "previews"
 
 
-def render(sc, renderer, g, ok, why):
+def render(sc, renderer, g, ok, why, stance="audience"):
     frames = []
     sides = show.SIDES if g.arms == "both" else ("left",)
-    traj = {s: g.samples(s) for s in sides}
+    traj = {s: g.samples(s, stance=stance) for s in sides}
     n = len(next(iter(traj.values()))[0])
     for i in list(range(0, n, int(show.HZ / FPS))) + [n - 1] * 5:  # hold the last pose for ~0.5 s
         for s in show.SIDES:
@@ -26,12 +27,13 @@ def render(sc, renderer, g, ok, why):
                 Q, G = traj[s]
                 sc.set(s, Q[i], 1.0 if G is None else G[i])
             else:
-                sc.set(s, show.stage_pose(s), 1.0)
+                sc.set(s, show.stage_pose(s, stance), 1.0)
         mujoco.mj_forward(sc.m, sc.d)
         renderer.update_scene(sc.d, camera="audience")
         im = Image.fromarray(renderer.render())
         dr = ImageDraw.Draw(im)
-        dr.text((6, 4), f"{g.name}  {g.duration:.1f} s  ({'both arms' if g.arms == 'both' else 'one arm'})",
+        dr.text((6, 4), f"{g.name}  {g.duration:.1f} s  ({'both arms' if g.arms == 'both' else 'one arm'})"
+                + ("" if stance == "audience" else f"  facing {stance}"),
                 fill=(255, 255, 255) if ok else (255, 80, 80))
         if not ok:
             dr.text((6, 18), ("REJECTED: " + why)[:70], fill=(255, 80, 80))
@@ -41,21 +43,29 @@ def render(sc, renderer, g, ok, why):
     return frames
 
 
-def main(names):
-    ok, bad, _ = show.load_library(verbose=False)
+def main(names, stance="audience"):
+    ck = show.Checker()
+    ok, bad, _ = show.load_library(ck, verbose=False)
+    out = OUT if stance == "audience" else OUT / stance
     sc = show.Scene()
     sc.m.vis.global_.offwidth, sc.m.vis.global_.offheight = W, H
     renderer = mujoco.Renderer(sc.m, H, W)
-    OUT.mkdir(exist_ok=True)
+    out.mkdir(parents=True, exist_ok=True)
     for f in sorted(show.GESTURE_DIR.glob("*.json")):
         g = show.load(f)
-        if names and g.name not in names:
+        if names and g.name not in names or stance != "audience" and g.name in show.FOLD:
             continue
-        frames = render(sc, renderer, g, g.name in ok, bad.get(g.name, ""))
-        path = OUT / f"{g.name}.gif"
+        good = g.name in ok and stance in ok[g.name].stances
+        why = bad.get(g.name) or ck.stance_rejected.get((g.name, stance), "")
+        frames = render(sc, renderer, g, good, why, stance)
+        path = out / f"{g.name}.gif"
         frames[0].save(path, save_all=True, append_images=frames[1:], duration=int(1000 / FPS), loop=0, optimize=True)
         print(f"{path}  {len(frames)} frames  {path.stat().st_size // 1024} KB")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    a = sys.argv[1:]
+    if a[:1] == ["--stance"]:
+        main(a[2:], a[1])
+    else:
+        main(a)

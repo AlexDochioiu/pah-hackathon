@@ -30,6 +30,11 @@ Write a tag at the end of the sentence it acts out (the arm starts moving as tha
 
 Gestures the arms know: {{GESTURES}}
 
+Facing: the arms start facing the audience. When the two arms play two characters who meet, talk, argue or
+fight each other, turn them toward each other with `[face:each_other]` as that scene starts; their gestures
+then aim at each other (a slash is a slash AT the other one). Turn them back with `[face:audience]` when the
+story talks to the audience again, and always before the final bow. Facing each other, skip look_at_other.
+
 # The show
 
 1. Opening: greet the listener in one or two lines and ask what story they want to hear. If they hesitate,
@@ -44,7 +49,8 @@ Gestures the arms know: {{GESTURES}}
    to continue with the next scene. Don't ask the listener anything at the end of a scene, unless the story
    really needs a choice from them ("Should the dragon open the box, or not?"); then leave out `[next]` and
    wait for their answer.
-5. The ending: the last scene ends the story with "The end!" and a bow from both actors: `[both:bow]`.
+5. The ending: the last scene ends the story with "The end!", the actors facing the audience and a bow from
+   both: `[face:audience] [both:bow]`.
    No `[next]` after it. Then, in one short line, ask if they want another story.
 
 # Props (optional)

@@ -3,7 +3,7 @@
     python3 fake_stage.py [--port 8770]
 
 Same API as the real stage server (robot/): GET /gestures, GET /state, POST /play {"arm","gesture","speed"},
-POST /freeze, /idle, /stage, /rest. Standard library only.
+POST /freeze, /idle, /stage, /rest, /stance {"stance": "audience"|"each_other"}. Standard library only.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ GESTURES = {
     "look_at_other": 1.5, "point_at_audience": 1.5, "gripper_clap": 1.5, "idle_breathe": 3.0,
 }
 T0 = time.monotonic()
-state = {"mode": "rest", "arms": {"left": None, "right": None}}  # arm -> {"gesture", "until"} while playing
+state = {"mode": "rest", "stance": "audience", "arms": {"left": None, "right": None}}  # arm -> {"gesture", "until"} while playing
 
 
 def log(msg: str) -> None:
@@ -44,7 +44,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/state":
             now = time.monotonic()
             arms = {a: (g["gesture"] if g and g["until"] > now else None) for a, g in state["arms"].items()}
-            self._reply(200, {"mode": state["mode"], "playing": arms})
+            self._reply(200, {"mode": state["mode"], "stance": state["stance"], "playing": arms})
         else:
             self._reply(404, {"error": "not found"})
 
@@ -65,6 +65,13 @@ class Handler(BaseHTTPRequestHandler):
             state["mode"] = "playing"
             log(f"PLAY   {arm:>5}: {gesture} ({duration:.1f}s)")
             return self._reply(200, {"ok": True, "duration_s": duration})
+        if self.path == "/stance":
+            if body.get("stance") not in ("audience", "each_other"):
+                log(f"REJECT stance {body}")
+                return self._reply(409, {"ok": False, "error": f"unknown stance: {body}"})
+            state["stance"] = body["stance"]
+            log(f"STANCE facing {body['stance']}")
+            return self._reply(200, {"ok": True, "stance": body["stance"]})
         if self.path in ("/freeze", "/idle", "/stage", "/rest"):
             state["mode"] = self.path[1:]
             state["arms"] = {"left": None, "right": None}

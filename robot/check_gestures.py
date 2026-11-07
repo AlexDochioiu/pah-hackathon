@@ -12,6 +12,11 @@ assert {"stage", "rest", "idle_breathe", "wave", "bow", "slash", "block", "die_d
 for g in ok.values():
     assert 0.5 <= g.max_speed <= 1.5, (g.name, g.max_speed)
 print(f"{len(ok)} gestures pass; {len(unsafe)} unsafe pairs")
+# Facing each other: the main character gestures must still play there (checked with the 15 cm gap and lean-back).
+facing = {n for n, g in ok.items() if "each_other" in g.stances}
+assert {"idle_breathe", "wave", "bow", "slash", "thrust", "block", "roar", "nod", "shake_head"} <= facing, sorted(facing)
+assert not facing & set(show.FOLD)
+print(f"{len(facing)} gestures also play facing each other")
 
 
 def fake(name, *keys):
@@ -73,6 +78,25 @@ time.sleep(0.5)
 assert call("/state")[1]["arms"]["right"]["grip"] < 0.05
 assert call("/bogus", {})[0] == 404
 print("HTTP API ok: /gestures /stage /play /freeze /idle /grip, queue, refusals")
+
+assert call("/stance", {"stance": "sideways"})[0] == 409
+assert call("/stance", {"stance": "each_other"})[1]["stance"] == "each_other"
+st.wait()
+assert call("/state")[1]["arms"]["left"]["playing"] == "idle_breathe"  # idle arms keep breathing in the new stance
+assert call("/stage", {})[0] == 200
+st.wait()
+assert all(np.allclose(st.cmd_q[s], show.stage_pose(s, "each_other")) for s in show.SIDES)
+assert st.cmd_q["left"][0] < 0 < st.cmd_q["right"][0]  # yawed toward each other
+assert call("/play", {"arm": "left", "gesture": "slash"})[0] == 200
+st.wait()
+assert np.allclose(st.cmd_q["left"], show.stage_pose("left", "each_other"))  # gestures return to the stance pose
+if "look_at_other" in ok and "each_other" not in ok["look_at_other"].stances:
+    code, r = call("/play", {"arm": "left", "gesture": "look_at_other"})
+    assert code == 409 and "each_other" in r["error"], r
+assert call("/stance", {"stance": "audience"})[0] == 200
+st.wait()
+assert np.allclose(st.cmd_q["left"], show.stage_pose("left"))
+print("stances ok: /stance each_other and back, gestures play relative to it")
 
 # Online arm-arm check: two poses that point the props at each other are refused together.
 with st.lock:

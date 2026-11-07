@@ -16,6 +16,8 @@ API (JSON in and out; "arm" is left | right | both, default both):
   POST /freeze {"arm"}                 hold the current pose at once, drop queues
   POST /idle {"arm"}                   go to stage and breathe; gestures return to idle afterwards
   POST /stage {"arm","speed"}          go to the stage pose and hold
+  POST /stance {"stance","speed"}      "audience" (default) or "each_other": both arms turn to the stance pose and
+                                       every gesture, idle and /stage play relative to it until the next /stance
   POST /rest {"arm","speed"}           fold back to rest and hold (motors stay on)
   POST /grip {"arm","value"}           set the gripper 0 closed .. 1 open (close it on a prop)
 Every motion is checked before it starts (limits, table clearance with the prop, 15 cm from the other arm's committed
@@ -97,6 +99,7 @@ class Stage:
         self.lib, self.rejected, self.unsafe = show.load_library(self.ck, gesture_dir)
         if "idle_breathe" not in self.lib:
             raise SystemExit("idle_breathe is missing or rejected: the stage server needs it")
+        self.stance = "audience"
         self.lock = threading.RLock()
         q, g = arms.read()
         self.cmd_q = {s: np.asarray(q[s], float).copy() for s in SIDES}
@@ -137,9 +140,13 @@ class Stage:
         g = self.lib.get(name)
         if g is None:
             raise StageError(f"unknown gesture {name!r}" + (f" (rejected: {self.rejected[name]})" if name in self.rejected else ""))
+        st = self.stance if name not in show.FOLD else "audience"  # stage/rest always fold via the audience pose
+        if st not in g.stances:
+            raise StageError(f"{name} is not available in the {st} stance: {self.ck.stance_rejected.get((name, st), '')}")
         speed = float(np.clip(speed, 0.1, g.max_speed))
-        Q, G = g.samples(side, speed)
-        return self._build(side, name, Q, G, g, speed, self.ck.swept[(g.name, side)], loop=g.loop, hold=g.hold), speed
+        Q, G = g.samples(side, speed, stance=st)
+        return self._build(side, name, Q, G, g, speed, self.ck.swept[show.key(g.name, side, st)],
+                           loop=g.loop, hold=g.hold), speed
 
     def _pose_plan(self, side, name, q, speed):
         q = np.asarray(q, float)
@@ -230,10 +237,24 @@ class Stage:
     def go_stage(self, arm=None, speed=1.0):
         with self.lock:
             sides = self.sides(arm)
-            self._commit({s: self._pose_plan(s, "stage", show.stage_pose(s), speed) for s in sides})
+            self._commit({s: self._pose_plan(s, "stage", show.stage_pose(s, self.stance), speed) for s in sides})
             for s in sides:
                 self.after[s] = "hold"; self.queue[s].clear()
             return {"ok": True}
+
+    def set_stance(self, stance, speed=1.0):
+        """Both arms turn to the stance pose; gestures, idle and /stage then play relative to it."""
+        with self.lock:
+            if stance not in show.STANCES:
+                raise StageError(f"stance must be one of {', '.join(show.STANCES)}, not {stance!r}")
+            plans = {s: self._pose_plan(s, "stance", show.stage_pose(s, stance), speed) for s in SIDES}
+            for s, p in plans.items():
+                p.hold = self.after[s] != "idle"  # an idle arm resumes breathing in the new stance
+            self._commit(plans)
+            self.stance = stance
+            for s in SIDES:
+                self.queue[s].clear()
+            return {"ok": True, "stance": stance}
 
     def go_rest(self, arm=None, speed=1.0):
         with self.lock:
@@ -272,7 +293,8 @@ class Stage:
 
     def state(self):
         with self.lock:
-            out = {"backend": self.backend, "fault": self.fault, "rejected": self.rejected,
+            out = {"backend": self.backend, "fault": self.fault, "rejected": self.rejected, "stance": self.stance,
+                   "not_in_stance": {f"{n} ({st})": why for (n, st), why in self.ck.stance_rejected.items()},
                    "unsafe_pairs": sorted([list(p) for p in self.unsafe]), "arms": {}}
             for s in SIDES:
                 p = self.plan[s]
@@ -395,6 +417,8 @@ def bringup(st, track_max):
             step(f"{s:5s} {name}", lambda: st.play(s, name, 0.5), [s], g.duration / 0.5 + 1 if g.loop else None)
             if g.hold or g.loop or np.abs(st.cmd_q[s] - show.stage_pose(s)).max() > 1e-3:
                 step(f"{s:5s} back to stage", lambda: st.go_stage(s, 0.5), [s])
+    step("face each other (30 %)", lambda: st.set_stance("each_other", 0.3))
+    step("face the audience (30 %)", lambda: st.set_stance("audience", 0.3))
     step("rest (30 %)", lambda: st.go_rest(speed=0.3))
     print(f"bring-up OK: {len(report)} steps, worst tracking error {max(e for _, e in report):.3f} rad", flush=True)
 
@@ -416,7 +440,8 @@ def serve(st, port):
             if self.path == "/gestures":
                 self._send(200, [
                     {"name": g.name, "duration_s": round(g.duration, 2), "arms": g.arms, "about": g.about,
-                     "hold": g.hold, "loop": g.loop, "max_speed": round(g.max_speed, 2), "uses_gripper": g.gt is not None}
+                     "hold": g.hold, "loop": g.loop, "max_speed": round(g.max_speed, 2), "uses_gripper": g.gt is not None,
+                     "stances": sorted(g.stances)}
                     for g in st.lib.values()])
             elif self.path == "/state":
                 self._send(200, st.state())
@@ -433,6 +458,7 @@ def serve(st, port):
                     "/freeze": lambda: st.freeze(arm),
                     "/idle": lambda: st.idle(arm),
                     "/stage": lambda: st.go_stage(arm, float(b.get("speed", 1.0))),
+                    "/stance": lambda: st.set_stance(b["stance"], float(b.get("speed", 1.0))),
                     "/rest": lambda: st.go_rest(arm, float(b.get("speed", 1.0))),
                     "/grip": lambda: st.grip(arm, float(b["value"])),
                 }

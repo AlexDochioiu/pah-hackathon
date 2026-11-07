@@ -22,11 +22,17 @@ async def test_stage_client_against_fake_stage(capsys):
         await asyncio.sleep(0.3)
         state = json.load(urllib.request.urlopen(f"{url}/state"))
         assert state["playing"]["left"] == "slash"
+        stage.face("each_other")
+        stage.play("both", "bow", 2.5)  # sent after the face: must arrive after it
+        await asyncio.sleep(0.3)
+        state = json.load(urllib.request.urlopen(f"{url}/state"))
+        assert state["stance"] == "each_other" and state["playing"]["right"] == "bow"
         stage.freeze()
         stage.send("/idle")
         await asyncio.sleep(0.3)
         out = capsys.readouterr().out
         assert "PLAY    left: slash" in out and "REJECT" in out and "FREEZE" in out and "IDLE" in out
+        assert out.index("STANCE facing each_other") < out.index("PLAY    both: bow")
     finally:
         await stage.aclose()
         server.shutdown()
