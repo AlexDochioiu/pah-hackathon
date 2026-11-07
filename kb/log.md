@@ -32,3 +32,8 @@
 - Real arms, first gesture tests: bring-up at 50 % passed (worst 0.12 rad); full speed on both arms tripped the
   0.35 rad auto-freeze in `cower`; 75 % ran clean until stopped (wrist pitch j4 lags most). Details in
   [gestures.md](gestures.md#real-arm-results-nov-7-1300).
+- Table tipped when the arms leaned back. Measured each arm's centre of mass in sim: stage +1.3 cm, rest −2.5 cm,
+  worst celebrate −10.3 cm (both arms), roar −7.8, slash −6.6, wave −6.5. New checker rule: COM ≥ stage − 2 cm
+  (`show.COM_BACK_MARGIN`, switch `LEAN_BACK_CHECK`), enforced by the stage server and `arm.py`. Reworked 10
+  gestures to raise the head with j2+/j3+ instead of leaning back ([gestures.md](gestures.md)). Added the teammate's
+  `robot/arm.py` wrapper. **The station copy `~/dial` is NOT synced yet: run `./sync.sh` before the next real run.**

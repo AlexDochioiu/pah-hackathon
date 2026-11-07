@@ -22,6 +22,7 @@ the station lock. A human must be at the e-stop for anything that moves the arms
 | `pick.py --from U,V --to U,V [--level N] [--dry] [--probe S]` | Direct-control pick & place of the block at an overhead pixel. Plans + checks in sim first. |
 | `stage.py [--real] [--port 8770]` | Stage server: owns both arms, plays safety-checked gestures, HTTP API for the storyteller. Sim unless `--real`. See [kb/gestures.md](kb/gestures.md). |
 | `bash ~/dial/bringup.sh [--real]` | First real run: `home.py`, stage at 30 %, every gesture once at 50 % per arm, rest; logs tracking error, stops on error. |
+| `arm.py` · `from arm import Arms` | High-level Python wrapper: `with Arms.open() as arms: arms.stage().play("nod", side="left").rest()`, plus joint/Cartesian moves and the gripper. Gestures and moves go through the safety checker. `arm.py --demo` runs stage, nod, rest. |
 | `record.py NAME --arm left` | Float the arms, record a hand-guided gesture, save it if it passes the safety checker. |
 | `check_gestures.py` | Self-check, sim only: every gesture passes the checker, HTTP API works. |
 | `make_gestures.py` · `preview.py` | Regenerate the built-in gesture library · render `previews/*.gif` (sim only, `MUJOCO_GL=egl`). |

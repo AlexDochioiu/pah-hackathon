@@ -13,6 +13,13 @@ We don't use Dream-1 ([dream-1.md](dream-1.md)); our scripts command joint targe
    off and the arm goes limp, so ending anywhere but rest drops it.
 5. When commanding one arm, keep sending the other arm its current pose.
 
+## High-level wrapper (`robot/arm.py`)
+A teammate's class that owns both arms, the station lock and the IK: `from arm import Arms`, then
+`with Arms.open() as arms: arms.stage().move_to("left", [0.3, -0.1, 0.2]).play("nod", side="left").rest()`.
+`play()` uses only gestures that pass `show.Checker` (capped at their `max_speed`), and every move is checked
+against the lean-back rule before it starts. Joints 4–6 run at a low gain (kp=10) and sag ~1.5° under gravity, so
+"arrived" means within 0.05 rad.
+
 ## Planning in simulation first (`robot/pick.py`)
 - Solve every waypoint with the kit's IK (`teleop_ik`) before any motor moves; reject waypoints with position
   error > 6 mm or rotation error > 0.08 rad.
@@ -37,6 +44,8 @@ We don't use Dream-1 ([dream-1.md](dream-1.md)); our scripts command joint targe
 ## Safety
 - A human stands at the e-stop for every real-arm run. Tell them before each run starts.
 - Don't run anything on the arms while someone else is using the station.
+- Never move the arms' mass behind the bases: the table tips (seen Nov 7). `show.Checker` enforces it (each arm's
+  centre of mass stays ≥ stage − 2 cm in x; [gestures.md](gestures.md#safety-checker-showchecker-showload_library)).
 - Tracking lag: fast wrist waves lag up to ~0.19 rad behind the command; slow moves track within ~0.03 rad.
 
 ## E-stop recovery

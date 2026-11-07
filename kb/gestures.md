@@ -53,6 +53,16 @@ Every gesture is checked on **both** arms at load (the server and bring-up refus
   is rejected. Two gestures at once: the swept volumes (all frames, any timing) of left × right are compared for
   every pair; pairs closer than 15 cm are listed as `unsafe_pairs` (currently none; closest is `look_at_other` on
   both arms, 19 cm). The gap check subtracts the 1 cm voxel error.
+- **Don't lean back** (Nov 7: the arms leaning back tipped the light table): each arm's centre of mass (link1 and
+  below plus gripper, i2rt link masses, 4.1 kg; arm base frame) must stay at x ≥ stage COM − `COM_BACK_MARGIN`
+  (2 cm) in every gesture, idle and blend. Stage COM x = +1.3 cm, so the limit is −0.7 cm. Folds (the `stage`/`rest`
+  gestures, the server's blends and `/stage`/`/rest` moves, `arm.py` moves; all slow, ≤ 75 % of the joint limits)
+  may lean back as far as rest (−2.5 cm) or their start pose, minus the margin, no further. `show.LEAN_BACK_CHECK =
+  False` switches the rule off everywhere. At stage the COM moves ~+24 cm/rad with j2, −10 with j3, −1 with j4, so
+  "head up" pairs j2+ with j3+ (~1:2.4) instead of j2−.
+- Not enforced, measured: accelerating the arm's mass forward pushes the table back too (fast forward moves).
+  Acceleration-shifted COM x − (z + 0.75 m table) · aₓ / g, at speed 1 (cm): roar −10.4, thrust −7.8, slash −6.2,
+  point_at_audience −6.1, gallop −5.0, bow −2.7; everything else ≥ −1.5. If the table still rocks, slow those.
 - Online (stage server): every plan (blend from wherever the arm is + gesture, or a pose move) is re-checked before it
   starts, and its swept volume must clear the other arm's **committed** motion by 15 cm; otherwise HTTP 409.
 - Assumption: props point out of the fingers along the grasp axis. A prop held crosswise is not modelled.
@@ -67,18 +77,25 @@ Every gesture is checked on **both** arms at load (the server and bring-up refus
 | `bow` | 2.9 | lean toward audience, head down |
 | `nod` | 2.5 | yes ×2 |
 | `shake_head` | 2.9 | no ×2 |
-| `slash` | 3.5 | wind up high/outside, chop down-across to the front |
-| `thrust` | 3.3 | draw back, stab forward level |
-| `block` | 3.9 | prop raised upright in front, hold |
-| `celebrate` | 4.0 | prop up high, wiggle |
-| `cower` | 3.9 | shrink back/away, head down, tremble |
-| `die_dramatically` | 3.9 | stagger, slump backwards (not toward the table); holds: send `/stage` or `/rest` after |
+| `slash` | 3.9 | wind up high/outside (upward, not back), chop down-across to the front |
+| `thrust` | 3.0 | raise the prop, stab forward level |
+| `block` | 4.5 | prop raised upright in front, hold |
+| `celebrate` | 4.8 | prop up high, wiggle |
+| `cower` | 3.8 | shrink down, head turned away from the other arm and down, tremble |
+| `die_dramatically` | 3.9 | stagger, slump forward and sideways (away from the other arm), droop; holds: send `/stage` or `/rest` after |
 | `gallop` | 3.0 | bounce |
-| `roar` | 3.8 | rear back, lunge at audience, head shake |
+| `roar` | 3.7 | rise up tall, lunge at audience, head shake |
 | `sneak` | 4.6 | crouch, creep across, head bob |
 | `look_at_other` | 2.8 | turn head toward the other arm |
 | `point_at_audience` | 2.8 | reach forward, point |
 | `gripper_clap` | 2.4 | opens the gripper: **drops a held prop** |
+
+Lean-back rework (Nov 7, pose-only; same requested move times, stretched where the joint deltas grew): minimum COM x per arm before → after, cm (limit −0.7;
+mirrored both-arm gestures double the moment): celebrate −10.3 → −0.4 (both arms), roar −7.8 → 1.0, slash −6.6 →
+−0.6, wave −6.5 → 0.5, block −5.3 → −0.1, thrust −4.9 → 0.6, look_at_other −4.3 → 0.0 (both arms),
+die_dramatically −2.9 → 1.2, cower −2.1 → 0.5, sneak −1.1 → 1.0. Unchanged and within the rule: bow, nod,
+shake_head, point_at_audience, gripper_clap 1.3, gallop 0.8, idle_breathe 0.2; stage/rest −2.7 (folds).
+Previews of the changed gestures re-rendered locally (Mac, `MUJOCO_GL=cgl`).
 
 Speed limits make gestures slower than a cartoon: a 1.5 rad/s limit allows e.g. a ±0.25 rad wave at 0.6 Hz.
 Shakes in `make_gestures.py` are capped automatically to ~60 % of the limits.
