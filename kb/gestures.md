@@ -3,7 +3,7 @@
 The arms act as puppets: named joint-space motions ("gestures") played by one long-running stage server that the
 storyteller agent ([storyteller.md](storyteller.md)) calls over HTTP. Code in `robot/`; everything below runs in
 simulation unless `--real` is given. Status (Nov 7): built and sim-tested end to end (kinematic sim and i2rt's MuJoCo
-sim on the station); **not yet run on the real arms**.
+sim on the station), then run on the real arms (results at the end).
 
 ## Files
 | File | What |
@@ -163,3 +163,8 @@ right of the image, gold prop; right arm blue prop). Rejected gestures render wi
   brings them back to ERROR-ACTIVE and every motor answers.
 - A Dream "station agent" (`station_frames.py`, left by `dreamcli`) can hold `~/.dreamlabs/arms.lock` and the
   cameras; stop it with `kill -INT` (not -9) once its owner is done.
+
+## Reworked (no lean-back) gestures on the real arms (Nov 7, evening)
+`speedtest.py 0.5 block,celebrate,cower,die_dramatically,look_at_other,roar,slash,sneak,thrust,wave`, both arms
+at once: **all passed**, no fault. Worst tracking 0.134 rad (`block`), j4 again lags most (≤ 0.13). Freeze, idle
+and rest all worked. Shutdown printed the usual harmless `file descriptor -1` trace.

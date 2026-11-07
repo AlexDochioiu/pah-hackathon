@@ -37,3 +37,7 @@
   (`show.COM_BACK_MARGIN`, switch `LEAN_BACK_CHECK`), enforced by the stage server and `arm.py`. Reworked 10
   gestures to raise the head with j2+/j3+ instead of leaning back ([gestures.md](gestures.md)). Added the teammate's
   `robot/arm.py` wrapper. **The station copy `~/dial` is NOT synced yet: run `./sync.sh` before the next real run.**
+- Reworked 10 gestures run on the real arms at 50 %, both arms: all passed, worst 0.134 rad (`block`).
+- Storyteller smoke test with the real LiveKit Inference models: LLM first token ~2.0 s, Fish TTS first audio
+  ~3.2 s; tags well placed. Scripts that call `inference.*` outside the agent worker need
+  `async with livekit.agents.utils.http_context.open():`.
