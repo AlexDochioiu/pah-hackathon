@@ -29,3 +29,6 @@
 - Launch site: 3 candidate designs in `site/v1-3/` (ArmChair Theatre / Once Upon a Bot / Sword & Servo), each with
   its own `design.css` design language, `stage.js` animated arms, `style.html` design sheet and `og-image.png`;
   screenshots in `site/shots/` for the team to pick ([site.md](site.md)).
+- Real arms, first gesture tests: bring-up at 50 % passed (worst 0.12 rad); full speed on both arms tripped the
+  0.35 rad auto-freeze in `cower`; 75 % ran clean until stopped (wrist pitch j4 lags most). Details in
+  [gestures.md](gestures.md#real-arm-results-nov-7-1300).

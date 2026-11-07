@@ -132,3 +132,17 @@ right of the image, gold prop; right arm blue prop). Rejected gestures render wi
   crcmod, python-can, mujoco 3.17) on `PYTHONPATH`. `--backend kin` still needs i2rt for the model, not the kit.
 - The scene is rebuilt from i2rt's `combine_arm_and_gripper_xml` each start (~0.2 s); checking the whole library
   takes ~3 s.
+
+## Real-arm results (Nov 7, ~13:00)
+- `bringup.sh --real` (each gesture at 50 %, one arm at a time): **passed**, 41 steps, worst tracking 0.124 rad.
+- `speedtest.py 1.0` (both arms at once, full speed): **auto-freeze in `cower`**, left arm 0.36 rad behind; block
+  and celebrate already reached ~0.20 rad. The server froze, folded to rest and switched off as designed; all
+  motors answered afterwards.
+- `speedtest.py 0.75` (stopped by hand after shake_head, no fault): worst 0.174 rad (`die_dramatically`). Per joint,
+  the **wrist pitch j4 lags most** (0.08–0.17 rad); shoulder/elbow stay ≤ 0.12.
+- So: ~75 % is the practical ceiling as tuned. To go faster, slow only the j4 parts of fast gestures (or soften
+  their shakes) rather than everything.
+- After a stage/bring-up run both CAN links may show ERROR-PASSIVE/WARNING from the shutdown race; a down/up reset
+  brings them back to ERROR-ACTIVE and every motor answers.
+- A Dream "station agent" (`station_frames.py`, left by `dreamcli`) can hold `~/.dreamlabs/arms.lock` and the
+  cameras; stop it with `kill -INT` (not -9) once its owner is done.
