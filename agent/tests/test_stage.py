@@ -1,0 +1,39 @@
+"""Stage client against fake_stage.py, over real HTTP."""
+import asyncio
+import json
+import threading
+import urllib.request
+from http.server import ThreadingHTTPServer
+
+import fake_stage
+from gestures import Stage
+
+
+async def test_stage_client_against_fake_stage(capsys):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), fake_stage.Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{server.server_port}"
+    stage = Stage(url)
+    try:
+        gestures = await stage.fetch_gestures()
+        assert gestures and gestures["slash"] == 1.2
+        stage.play("left", "slash", gestures["slash"])
+        stage.send("/play", {"arm": "left", "gesture": "moonwalk"})  # rejected, logged, never raised
+        await asyncio.sleep(0.3)
+        state = json.load(urllib.request.urlopen(f"{url}/state"))
+        assert state["playing"]["left"] == "slash"
+        stage.freeze()
+        stage.send("/idle")
+        await asyncio.sleep(0.3)
+        out = capsys.readouterr().out
+        assert "PLAY    left: slash" in out and "REJECT" in out and "FREEZE" in out and "IDLE" in out
+    finally:
+        await stage.aclose()
+        server.shutdown()
+
+
+async def test_stage_down_falls_back():
+    stage = Stage("http://127.0.0.1:9")  # nothing listens there
+    assert await stage.fetch_gestures() is None
+    stage.freeze()  # must not raise
+    await stage.aclose()

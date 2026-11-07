@@ -16,3 +16,8 @@
 - **Pivot to robot story theatre** (see [decisions.md](decisions.md)). Started in parallel: gesture library + stage
   server (sim only, arms busy with another team), LiveKit storyteller agent, 3 website versions.
 - Knowledge base set up in `kb/` (this folder) plus `AGENTS.md` for anyone's AI agents.
+- Storyteller agent in `agent/` ([storyteller.md](storyteller.md)): LiveKit Agents 1.8 on LiveKit Inference
+  (gemma-4-31b + Fish Audio s2.1-pro expressive). Gesture tags are synced to playout through a
+  TranscriptSynchronizer; listener speech freezes the arms; `[next]` chains scenes. `fake_stage.py` for dev.
+  Verified without credentials: 14 tests incl. a full AgentSession with LiveKit's fakes. Needs a LiveKit Cloud
+  project + keys in `agent/.env` to talk to it.

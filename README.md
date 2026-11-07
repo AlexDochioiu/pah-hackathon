@@ -20,3 +20,8 @@ A human must be at the e-stop for anything that moves the arms ([kb/arm-control.
 | `teach.py [secs]` | Float arms; log gripper-tip touches for camera↔arm calibration → `~/dial/teach.npz`. |
 | `calib.py` | Fit overhead pixel → arm frame from the touches → `~/dial/calib.json` (copy in repo). |
 | `pick.py --from U,V --to U,V [--level N] [--dry] [--probe S]` | Direct-control pick & place of the block at an overhead pixel. Plans + checks in sim first. |
+
+## Storyteller agent (`agent/`)
+LiveKit voice agent that narrates and cues the arms. Setup and run: [agent/README.md](agent/README.md); how it
+works: [kb/storyteller.md](kb/storyteller.md). Quick try without arms: `cd agent && python3 fake_stage.py` and,
+in another terminal, `uv run storyteller.py console`.

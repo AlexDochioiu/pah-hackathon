@@ -1,0 +1,97 @@
+"""Sparky the storyteller: a LiveKit voice agent that makes up a story live and has two robot arms act it out.
+
+    uv run storyteller.py console   # talk to it in this terminal (mic + speaker)
+    uv run storyteller.py dev       # serve it to LiveKit Cloud rooms (web playground, phone calls)
+
+See README.md for setup. The prompt lives in prompt.md; gesture timing in gestures.py; freeze/idle/next-scene
+logic in director.py.
+"""
+from __future__ import annotations
+
+import logging
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+from livekit import rtc
+from livekit.agents import Agent, AgentServer, AgentSession, JobContext, TurnHandlingOptions, cli, inference, room_io
+from livekit.agents.voice.room_io.types import NoiseCancellationParams
+from livekit.plugins import noise_cancellation
+
+from director import Director
+from gestures import DEFAULT_GESTURES, GestureBook, GestureSync, Stage, strip_tags_for_tts
+
+HERE = Path(__file__).parent
+load_dotenv(HERE / ".env")
+
+# --- Models, all on LiveKit Inference (one LIVEKIT_API_KEY, billed to the project's credits) -------------
+# Catalogue: https://docs.livekit.io/agents/models/  Override any of these in .env.
+STT_MODEL = os.getenv("STT_MODEL", "assemblyai/universal-3-6-pro")
+LLM_MODEL = os.getenv("LLM_MODEL", "google/gemma-4-31b-it")  # LiveKit's latency-optimised voice default
+TTS_MODEL = os.getenv("TTS_MODEL", "fishaudio/s2.1-pro")  # expressive: emotion, pacing, laughs
+TTS_VOICE = os.getenv("TTS_VOICE", "e3cd384158934cc9a01029cd7d278634")  # "Laura", a confident narrator
+EXPRESSIVE = os.getenv("EXPRESSIVE", "1") == "1"  # let the LLM steer the voice's emotion inline
+
+STAGE_URL = os.getenv("STAGE_URL", "http://127.0.0.1:8770")
+IDLE_AFTER_S = float(os.getenv("IDLE_AFTER_S", "1.5"))  # quiet stage -> POST /idle after this long
+NEXT_SCENE_AFTER_S = float(os.getenv("NEXT_SCENE_AFTER_S", "0.8"))  # pause between scenes for interjections
+
+logger = logging.getLogger("storyteller")
+
+
+def build_instructions(book: GestureBook) -> str:
+    return (HERE / "prompt.md").read_text().replace("{{GESTURES}}", book.describe())
+
+
+def _noise_cancellation(params: NoiseCancellationParams) -> rtc.NoiseCancellationOptions:
+    if params.participant.kind == rtc.ParticipantKind.PARTICIPANT_KIND_SIP:
+        return noise_cancellation.BVCTelephony()
+    return noise_cancellation.BVC()
+
+
+server = AgentServer()
+
+
+@server.rtc_session(agent_name="storyteller")
+async def entrypoint(ctx: JobContext) -> None:
+    stage = Stage(STAGE_URL)
+    book = GestureBook(await stage.fetch_gestures() or DEFAULT_GESTURES)
+    logger.info("gestures: %s", ", ".join(book.names))
+
+    session = AgentSession(
+        stt=inference.STT(model=STT_MODEL, language="en"),
+        llm=inference.LLM(model=LLM_MODEL),
+        tts=inference.TTS(model=TTS_MODEL, voice=TTS_VOICE),
+        turn_handling=TurnHandlingOptions(
+            turn_detection=inference.TurnDetector(),  # LiveKit's turn detector decides when the listener is done
+            preemptive_generation={"enabled": True},  # start the reply before the turn is confirmed over
+        ),
+        expressive=EXPRESSIVE,
+        # Gestures ride on the LLM text, which the voice must never read out...
+        tts_text_transforms=[strip_tags_for_tts, "filter_markdown", "filter_emoji"],
+        # ...and must reach the transcript, which a TTS-aligned transcript would replace with the TTS's words.
+        use_tts_aligned_transcript=False,
+    )
+    director = Director(session, stage, idle_after_s=IDLE_AFTER_S, continue_after_s=NEXT_SCENE_AFTER_S)
+    gestures = GestureSync(book, stage.play, director.request_continue)
+
+    async def shutdown() -> None:
+        stage.send("/rest")
+        await stage.aclose()
+
+    ctx.add_shutdown_callback(shutdown)
+
+    await session.start(
+        agent=Agent(instructions=build_instructions(book)),
+        room=ctx.room,
+        room_options=room_io.RoomOptions(audio_input=room_io.AudioInputOptions(noise_cancellation=_noise_cancellation)),
+    )
+    gestures.install(session.output)  # after start: wraps the outputs start() set up
+    await ctx.connect()
+
+    stage.send("/stage")
+    session.generate_reply(instructions="Greet the listener and ask what story they would like to hear.")
+
+
+if __name__ == "__main__":
+    cli.run_app(server)
