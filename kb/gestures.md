@@ -193,6 +193,34 @@ error, so contacts at 1.5 cm may touch or miss; the slow approach keeps a touch 
 prop at grip 0.31 (`G_ON_PROP`). Rebuild with `make_duets.py`, check with `duets.py`, render with
 `preview_duets.py`.
 
+### Ensembles (both arms as ONE thing, action or mood)
+
+Duets with `"kind": "ensemble"` in their JSON: same format, checker and `/duet` playback, listed with their kind by
+`GET /duets`. No casting lock: the storyteller keeps two characters and drops into an ensemble at a big or
+illustrative beat (the storm, the gate, "THIS big!"), even mid-scene; the stage blends in from the current stance
+(audience or each_other) and back to it. Built in `make_duets.py` as joint deltas (`ens()`), mirrored unless both
+arms are given; none touch (all ≥ 20 cm). Previews: `robot/previews/ensemble_<name>.gif`.
+
+| Ensemble | s |
+|---|---|
+| `chomp`: one giant pair of crocodile jaws (left = upper, right = lower jaw), open wide and snap, three times | 5.6 |
+| `wings`: spread wide, flap three times, glide | 7.1 |
+| `this_big`: gather in, then arms thrown wide apart | 3.5 |
+| `shrug`: both heads pop up and tilt out | 2.3 |
+| `rocket`: crouch for the countdown, rumble, blast up high | 5.9 |
+| `waves`: the arms rise and fall in turn | 3.7 |
+| `storm`: both bend and whip the same way, like trees in the wind | 4.9 |
+| `gate_opening`: shut, then slowly creaking wide open | 4.8 |
+| `explosion`: huddle, the fuse fizzes, BOOM outward and up, debris drifts down | 6.7 |
+| `row_boat`: reach and pull, three strokes | 4.8 |
+| `once_upon_a_time`: heads low, then a slow grand sweep up and out | 4.0 |
+| `the_end`: arms wide, then a deep bow together | 4.0 |
+
+Lean-back rule of thumb for writing them: the arm's centre of mass moves about `24·j2 − 11·j3 − 1.7·p` cm (deltas
+in rad, p = head pitch) and must stay above −2 cm, so raising the elbow or the head needs j2 forward with it.
+Not built yet (they need hand contact, which props block, or a no-prop mode): clap, rub hands, hug, pull a rope,
+heart shape.
+
 ## Readability review of the solo gestures (Nov 7; suggestions, not applied)
 Goal: a viewer without sound names the action in a second. Big moves through j1–j3, not wrist flicks.
 - Cut `gripper_clap`: only the fingers move, invisible at audience distance, and it drops a held prop.

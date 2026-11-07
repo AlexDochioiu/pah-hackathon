@@ -65,3 +65,6 @@
 - New direction from the user: each arm is a puppet head (camera lenses = eyes, gripper = mouth). Step A, the
   talking mouth: `POST /talk` overlay (3–5.5 Hz syllables, grip rate ≤ 3.5/s, small head bob), agent tag
   `[talk:left] "..."` on until the closing quote. Sim-only; the gripper's real speed is untested.
+- Ensembles (step between A and B): 12 two-arm moves where both arms are ONE thing, action or mood (chomp jaws,
+  wings, this_big, shrug, rocket, waves, storm, gate_opening, explosion, row_boat, once_upon_a_time, the_end), as
+  `"kind": "ensemble"` duets; agent tag `[ensemble:name]`, no casting lock, blend in from either stance and back.

@@ -19,6 +19,8 @@ GESTURES = {
 }
 DUETS = {"cross_swords": 8.7, "cheers": 9.0, "poke": 8.8, "quick_draw": 7.7, "tip_hats": 5.6, "copycat": 7.3,
          "car_ride": 6.8}
+ENSEMBLES = {"chomp": 5.6, "wings": 7.1, "this_big": 3.5, "shrug": 2.3, "rocket": 5.9, "waves": 3.7, "storm": 4.9,
+             "gate_opening": 4.8, "explosion": 6.7, "row_boat": 4.8, "once_upon_a_time": 4.0, "the_end": 4.0}
 T0 = time.monotonic()
 state = {"mode": "rest", "stance": "audience", "arms": {"left": None, "right": None}}  # arm -> {"gesture", "until"} while playing
 
@@ -44,7 +46,8 @@ class Handler(BaseHTTPRequestHandler):
             arms = ["left", "right", "both"]
             self._reply(200, [{"name": n, "duration_s": d, "arms": arms} for n, d in GESTURES.items()])
         elif self.path == "/duets":
-            self._reply(200, [{"name": n, "duration_s": d} for n, d in DUETS.items()])
+            self._reply(200, [{"name": n, "kind": "duet", "duration_s": d} for n, d in DUETS.items()]
+                        + [{"name": n, "kind": "ensemble", "duration_s": d} for n, d in ENSEMBLES.items()])
         elif self.path == "/state":
             now = time.monotonic()
             arms = {a: (g["gesture"] if g and g["until"] > now else None) for a, g in state["arms"].items()}
@@ -71,10 +74,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(200, {"ok": True, "duration_s": duration})
         if self.path == "/duet":
             name = body.get("name")
-            if name not in DUETS:
+            if name not in DUETS | ENSEMBLES:
                 log(f"REJECT duet {body}")
                 return self._reply(409, {"ok": False, "error": f"unknown duet: {body}"})
-            duration = DUETS[name] / float(body.get("speed") or 1.0)
+            duration = (DUETS | ENSEMBLES)[name] / float(body.get("speed") or 1.0)
             for a in ("left", "right"):
                 state["arms"][a] = {"gesture": f"duet:{name}", "until": time.monotonic() + duration}
             log(f"DUET   {name} ({duration:.1f}s)")

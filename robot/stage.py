@@ -16,7 +16,9 @@ API (JSON in and out; "arm" is left | right | both, default both):
   POST /freeze {"arm"}                 hold the current pose at once, drop queues
   POST /idle {"arm"}                   go to stage and breathe; gestures return to idle afterwards
   POST /stage {"arm","speed"}          go to the stage pose and hold
-  GET  /duets                          [{"name","duration_s","about","max_speed","closest_contact_cm"}]
+  GET  /duets                          [{"name","kind","duration_s","about","max_speed","closest_contact_cm"}]
+                                       kind "duet": two characters together; "ensemble": both arms as ONE thing
+                                       (wings, a storm, a castle gate). Both play through /duet, from either stance.
   POST /duet {"name","speed"}          a two-arm duet (the arms touch); needs both arms free, and while it plays
                                        everything but /freeze is refused. /freeze stops both arms on the duet's
                                        path; the next request then first finishes the duet at half speed (409)
@@ -589,7 +591,7 @@ def serve(st, port):
                      "stances": sorted(g.stances)}
                     for g in st.lib.values()])
             elif self.path == "/duets":
-                self._send(200, [{"name": d.name, "duration_s": round(d.duration, 2), "about": d.about,
+                self._send(200, [{"name": d.name, "kind": d.kind, "duration_s": round(d.duration, 2), "about": d.about,
                                   "max_speed": round(d.max_speed, 2), "closest_contact_cm": d.stats["closest_contact_cm"]}
                                  for d in st.duets.values()])
             elif self.path == "/state":

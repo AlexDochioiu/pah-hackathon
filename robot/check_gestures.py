@@ -42,7 +42,10 @@ base = duets.load(duets.DUET_DIR / "cross_swords.json").d
 assert any("not a declared contact" in p for p in dc.check(duets.Duet(dict(base, contact=[]))))
 fast = duets.Duet(dict(base, keys=[dict(k, t=k["t"] * 0.5) for k in base["keys"]]))
 assert any("closes at" in p for p in dc.check(fast)), dc.check(fast)
-print(f"{len(dok)} duets pass; undeclared contact and fast approach refused")
+ens = {n for n, d in dok.items() if d.kind == "ensemble"}
+assert {"chomp", "wings", "this_big", "shrug", "rocket", "waves", "storm", "gate_opening", "explosion", "row_boat",
+        "once_upon_a_time", "the_end"} <= ens, sorted(ens)
+print(f"{len(dok)} duets pass ({len(ens)} of them ensembles); undeclared contact and fast approach refused")
 
 st = stage.Stage(stage.KinArms(), "kin", warp=4)
 st.thread.start()
@@ -125,7 +128,8 @@ st.wait()
 assert np.allclose(st.cmd_q["left"], show.stage_pose("left"))
 print("stances ok: /stance each_other and back, gestures play relative to it")
 
-assert {"cross_swords", "cheers"} <= {d["name"] for d in call("/duets")[1]}
+kinds = {d["name"]: d["kind"] for d in call("/duets")[1]}
+assert kinds["cheers"] == "duet" and kinds["storm"] == "ensemble", kinds
 assert call("/stance", {"stance": "each_other"})[0] == 200  # a duet from the facing stance returns to it
 st.wait()
 assert call("/play", {"arm": "left", "gesture": "wave"})[0] == 200
@@ -136,6 +140,9 @@ assert call("/duet", {"name": "cheers"})[0] == 200
 time.sleep(0.2)
 assert call("/state")[1]["duet"] == "cheers"
 assert call("/play", {"arm": "right", "gesture": "nod"})[0] == 409  # nothing else while a duet plays
+st.wait()
+assert all(np.allclose(st.cmd_q[s], show.stage_pose(s, "each_other")) for s in show.SIDES)
+assert call("/duet", {"name": "shrug"})[0] == 200  # an ensemble also blends in from the facing stance and back
 st.wait()
 assert all(np.allclose(st.cmd_q[s], show.stage_pose(s, "each_other")) for s in show.SIDES)
 assert call("/duet", {"name": "cross_swords"})[0] == 200

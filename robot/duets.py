@@ -2,7 +2,7 @@
 
 A duet file (duets/<name>.json) holds synchronized keyframes for BOTH arms as absolute joints (solved by IK at build
 time in make_duets.py), played with the same monotone cubic at 50 Hz as gestures:
-  {"name", "about", "contact": [{"left": [parts], "right": [parts], "min": m}, ...],
+  {"name", "kind": "duet"|"ensemble", "about", "contact": [{"left": [parts], "right": [parts], "min": m}, ...],
    "prop": {"t": s, "to": "right"} (optional: the left hands its prop to the right at t),
    "keys": [{"t": s, "left": [6 rad], "right": [6 rad], "gl": 0..1, "gr": 0..1 (grips optional)}, ...]}
 Every duet starts and ends with both arms at the stage pose. Parts: "prop" (the 15 cm stick, on whichever arm holds
@@ -41,6 +41,7 @@ class Duet:
     def __init__(self, d):
         self.d = d
         self.name, self.about = d["name"], d.get("about", "")
+        self.kind = d.get("kind", "duet")  # "duet": two characters, often touching; "ensemble": both arms as one thing
         keys = d["keys"]
         self.t = np.array([k["t"] for k in keys], float)
         self.q = {s: np.array([k[s] for k in keys], float) for s in SIDES}

@@ -230,7 +230,7 @@ class Seq:
     def home(self, T=1.0):
         return self.move(np.zeros(6), T=T)
 
-    def duet(self, name, about, contact, prop=None):
+    def duet(self, name, about, contact, prop=None, kind="duet"):
         rows = self.rows
         keys = []
         for t, ql, qr in rows:
@@ -246,7 +246,7 @@ class Seq:
         for k in keys[1:]:
             if k["t"] > out[-1]["t"] + 1e-6:
                 out.append(k)
-        d = {"name": name, "about": about, "contact": contact, "keys": out}
+        d = {"name": name, "kind": kind, "about": about, "contact": contact, "keys": out}
         if prop:
             d["prop"] = prop
         return d
@@ -436,7 +436,120 @@ def car_ride():
                   "turns and bounce on a bump.", [])
 
 
-LIBRARY = [cross_swords, cheers, poke, quick_draw, tip_hats, copycat, car_ride]
+# ---------------------------------------------------------------- ensembles: both arms as ONE thing, action or mood
+# Joint deltas, left-arm convention (j1 + = out, away from the other arm; p = head pitch, + up). Mirrored on the right
+# unless both are given. Lean-back rule of thumb: COM x moves ~ 24*j2 - 11*j3 - 1.7*p cm and must stay > -2 cm,
+# so raising the elbow (j3+) or the head (p+) needs j2 forward with it.
+
+def ens(name, about, s):
+    return s.home(T=0.9).duet(name, about, [], kind="ensemble")
+
+
+def wings():
+    s = Seq()
+    spread = pose(j1=0.45, j2=0.18, j3=0.35, p=0.2)
+    s.move(spread + pose(j2=0.08, j3=-0.1, p=-0.3), T=0.7).move(spread, T=0.4, hold=0.1)
+    for _ in range(3):
+        s.move(spread + pose(j2=0.12, j3=0.3, p=0.35), T=0.4).move(spread + pose(j2=0.15, j3=-0.15, p=-0.35), T=0.4)
+    s.move(spread + pose(j3=0.1, p=0.1, j6=0.3), T=0.6, hold=0.4)           # glide
+    return ens("wings", "Both arms are a great pair of wings: spread wide, flap three times, glide.", s)
+
+
+def this_big():
+    s = Seq()
+    s.move(pose(j1=-0.1, j2=0.05, p=-0.25), T=0.4, hold=0.1)               # gather in
+    s.move(pose(j1=0.6, j2=0.2, j3=0.3, p=0.25), T=0.6, hold=1.0)           # THIS big!
+    return ens("this_big", "Arms thrown wide apart: \"it was THIS big!\"", s)
+
+
+def shrug():
+    s = Seq()
+    s.move(pose(j2=0.15, j3=0.3, p=0.35, j5=-0.2, j6=0.45), T=0.35, hold=0.7)  # heads up and tilted out
+    return ens("shrug", "Both heads pop up and tilt: a big shrug, \"who knows?\"", s)
+
+
+def rocket():
+    s = Seq()
+    crouch = pose(j2=-0.1, j3=-0.28, p=-0.35)
+    s.move(crouch, T=0.6, hold=0.3)                                         # crouch: the countdown
+    for _ in range(2):                                                      # rumble
+        s.move(crouch + pose(j6=0.12), T=0.15).move(crouch + pose(j6=-0.12), T=0.15)
+    s.move(pose(j1=-0.15, j2=0.4, j3=0.6, p=1.1), T=0.6, hold=0.6)         # LIFT-OFF: up high, tips together
+    return ens("rocket", "Crouch for the countdown, rumble, then blast up high together: a rocket lifting off.", s)
+
+
+def waves():
+    s = Seq()
+    hi, lo = pose(j2=0.1, j3=0.35, p=0.35), pose(j2=0.2, j3=-0.12, p=-0.35)
+    for k in range(4):
+        s.move(hi if k % 2 == 0 else lo, lo if k % 2 == 0 else hi, T=0.6, mirror=False)
+    return ens("waves", "The two arms rise and fall in turn like rolling ocean waves.", s)
+
+
+def storm():
+    s = Seq()
+    for yaw, T in [(0.3, 0.5), (-0.25, 0.4), (0.35, 0.45), (-0.2, 0.35), (0.25, 0.4)]:
+        bend = pose(j2=0.08, j3=0.05, p=-0.1, j6=0.25 * np.sign(yaw))
+        # both bend the SAME way, like trees in the wind: the right arm's j1 delta is negated
+        s.move(pose(j1=yaw) + bend, pose(j1=-yaw) + bend * [1, 1, 1, 1, 1, -1], T=T, mirror=False)
+    return ens("storm", "Both arms bend and whip together like trees in a howling storm.", s)
+
+
+def gate_opening():
+    s = Seq()
+    shut = pose(j1=-0.22, j5=0.3)
+    s.move(shut, T=0.6, hold=0.4)                                           # the gate is shut
+    s.move(pose(j1=0.15, j5=0.0), T=1.2, hold=0.25)                         # creeeak...
+    s.move(pose(j1=0.55, j5=-0.25), T=1.0, hold=0.5)                        # ...wide open
+    return ens("gate_opening", "The two arms are a castle gate: shut, then slowly creaking wide open.", s)
+
+
+def explosion():
+    s = Seq()
+    gather = pose(j1=-0.2, j2=-0.1, j3=-0.25, p=-0.4)
+    s.move(gather, T=0.7, hold=0.2)
+    for _ in range(2):                                                      # the fuse fizzes
+        s.move(gather + pose(j6=0.1), T=0.32).move(gather + pose(j6=-0.1), T=0.32)
+    s.move(pose(j1=0.55, j2=0.35, j3=0.5, p=1.0), T=0.5, hold=0.5)           # BOOM
+    s.move(pose(j1=0.3, j2=0.25, j3=0.0, p=-0.3), T=1.2)                    # debris drifts down
+    return ens("explosion", "Huddle in, the fuse fizzes, then BOOM: both burst outward and up, and drift down.", s)
+
+
+def row_boat():
+    s = Seq()
+    reach, pull = pose(j2=0.3, j3=-0.05, p=-0.25), pose(j2=0.12, j3=0.3, p=0.25)
+    for _ in range(3):
+        s.move(reach, T=0.6).move(pull, T=0.7)
+    return ens("row_boat", "Both arms row a boat together: reach forward, pull back, three strokes.", s)
+
+
+def once_upon_a_time():
+    s = Seq()
+    s.move(pose(j2=0.1, j3=-0.2, p=-0.55), T=0.6, hold=0.3)                 # heads down, waiting
+    s.move(pose(j1=0.45, j2=0.15, j3=0.45, p=0.6, j6=0.3), T=1.6, hold=0.6)  # a slow, grand sweep up and out
+    return ens("once_upon_a_time", "The narrator's opening flourish: heads low, then a slow grand sweep up and out.", s)
+
+
+def the_end():
+    s = Seq()
+    s.move(pose(j1=0.5, j2=0.2, j3=0.35, p=0.4), T=0.7, hold=0.8)            # arms wide: THE END
+    s.move(pose(j2=0.3, j3=-0.1, p=-0.7), T=0.9, hold=0.6)                  # and a deep bow
+    return ens("the_end", "Arms wide for \"THE END!\", then a deep bow together.", s)
+
+
+def chomp():
+    s = Seq()
+    up, lo = pose(j1=-0.3, j2=0.3, j3=0.45, p=-0.35), pose(j1=-0.3, j2=0.1, j3=-0.15, p=0.35)
+    s.move(up, lo, T=0.8, mirror=False, hold=0.2)                           # the left is the upper jaw, the right the lower
+    for _ in range(3):
+        s.move(up + pose(j3=0.12, p=0.3), lo + pose(j3=-0.08, p=-0.3), T=0.4, mirror=False)  # open wide...
+        s.move(up + pose(j3=-0.05, p=-0.15), lo + pose(j3=0.05, p=0.15), T=0.25, mirror=False, hold=0.15)  # ...SNAP
+    return ens("chomp", "The two arms are one giant pair of crocodile jaws: open wide and snap shut, three times.", s)
+
+
+ENSEMBLES = [chomp, wings, this_big, shrug, rocket, waves, storm, gate_opening, explosion, row_boat, once_upon_a_time,
+             the_end]
+LIBRARY = [cross_swords, cheers, poke, quick_draw, tip_hats, copycat, car_ride] + ENSEMBLES
 
 
 def main(names):

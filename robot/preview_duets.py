@@ -1,4 +1,4 @@
-"""Renders every duet to previews/duet_<name>.gif: the audience view (same style as preview.py) plus a close-up
+"""Renders every duet to previews/duet_<name>.gif (ensembles to ensemble_<name>.gif): the audience view (same style as preview.py) plus a close-up
 inset of the middle, where the arms meet, and the live gap between the declared contact parts.
 
   preview_duets.py [name ...]        default: every duet in duets/
@@ -58,7 +58,7 @@ def main(names):
                 dr.rectangle([W - IW - 5, H - IH - 19, W - 4, H - 18], outline=(255, 255, 255))
                 dr.text((W - IW, H - 16), "close-up", fill=(200, 200, 200))
             col = (255, 255, 255) if good else (255, 80, 80)
-            dr.text((6, 4), f"duet: {du.name}  {du.duration:.1f} s", fill=col)
+            dr.text((6, 4), f"{du.kind}: {du.name}  {du.duration:.1f} s", fill=col)
             if not good:
                 dr.text((6, 18), ("REJECTED: " + bad.get(du.name, ""))[:64], fill=(255, 80, 80))
             if cd.size:
@@ -70,7 +70,7 @@ def main(names):
             frames.append(im.quantize(64, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE))
         for s in show.SIDES:
             m.geom_rgba[props[s]] = rgba[s]
-        path = OUT / f"duet_{du.name}.gif"
+        path = OUT / f"{du.kind}_{du.name}.gif"
         frames[0].save(path, save_all=True, append_images=frames[1:], duration=int(1000 / FPS), loop=0, optimize=True)
         print(f"{path}  {len(frames)} frames  {path.stat().st_size // 1024} KB")
 

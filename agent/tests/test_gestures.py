@@ -85,18 +85,19 @@ def test_sink_fires_and_strips():
             pass
 
     faced = []
-    book = GestureBook(DEFAULT_GESTURES, {"cross_swords": 9.3})
+    book = GestureBook(DEFAULT_GESTURES, {"cross_swords": 9.3}, {"storm": 4.9})
+    assert book.describe_duets() == "cross_swords (9.3s)" and book.describe_duets(ensembles=True) == "storm (4.9s)"
     sink = GestureSink(book, lambda a, g, d: played.append((a, g)), lambda: continued.append(1),
                        next_in_chain=Collect(), on_face=faced.append)
 
     async def run():
         for c in ["Hi [face:each other] [left:wa", "ve] there [right:juggle] and [knight:bow] [face:sideways] ",
-                  "[duet:cross swords] [duet:tango] [face:audience] [both:cheer] yay [next]"]:
+                  "[duet:cross swords] [duet:tango] [ensemble:Storm] [face:audience] [both:cheer] yay [next]"]:
             await sink.capture_text(c)
         sink.flush()
         await asyncio.sleep(0)
     asyncio.run(run())
-    assert played == [("left", "wave"), ("duet", "cross_swords"), ("both", "celebrate")]
+    assert played == [("left", "wave"), ("duet", "cross_swords"), ("duet", "storm"), ("both", "celebrate")]
     assert continued == [1]
     assert faced == ["each_other", "audience"]
     assert "[" not in "".join(forwarded)

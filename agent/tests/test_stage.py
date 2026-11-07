@@ -18,6 +18,8 @@ async def test_stage_client_against_fake_stage(capsys):
         gestures = await stage.fetch_gestures()
         assert gestures and gestures["slash"] == 1.2
         assert (await stage.fetch_duets())["cheers"] > 3
+        ensembles = await stage.fetch_duets("ensemble")
+        assert "storm" in ensembles and "cheers" not in ensembles
         stage.play("left", "slash", gestures["slash"])
         stage.send("/play", {"arm": "left", "gesture": "moonwalk"})  # rejected, logged, never raised
         await asyncio.sleep(0.3)

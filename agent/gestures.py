@@ -4,7 +4,8 @@ when the spoken words reach them.
 The LLM writes `[left:slash]`, `[right:cower]`, `[both:bow]` inline, plus `[next]` at the end of a scene
 it wants to carry on from, and `[face:each_other]` / `[face:audience]` to turn the two actors toward each other
 or back to the audience (the stage server's /stance; gestures then play facing that way), and `[duet:cheers]` for
-a two-arm duet (the stage server's /duet: both arms together, they touch). `[talk:left]` right before a character's
+a two-arm duet (the stage server's /duet: both arms together, they touch). `[ensemble:storm]` makes both arms one
+thing, action or mood for a beat (also /duet; the stage blends in from either stance and back). `[talk:left]` right before a character's
 quoted line flaps that arm's gripper like a talking mouth (/talk) from the opening quote's line to its closing quote. Tags flow through the reply untouched except for two places:
 
 - `strip_tags_for_tts`, a TTS text transform: the voice never sees a tag.
@@ -50,6 +51,7 @@ CONTINUE_TAG = "next"
 TALK_TAG = "talk"  # [talk:left] "..." -> POST /talk on, off at the closing quote
 QUOTES_OPEN, QUOTES_CLOSE = '"“', '"”'
 DUET_TAG = "duet"  # [duet:cross_swords] -> POST /duet
+ENSEMBLE_TAG = "ensemble"  # [ensemble:storm] -> POST /duet too: the stage's ensemble-kind duets
 DUET_MARGIN_S = 0.3  # the stage's blend into a gesture makes it a bit longer than its duration
 FACE_TAG = "face"  # [face:each_other] / [face:audience] -> POST /stance
 FACINGS = {"each_other": "each_other", "other": "each_other", "eachother": "each_other", "together": "each_other",
@@ -196,17 +198,20 @@ def hyphenate_without_tags(word: str) -> list[str]:
 class GestureBook:
     """The gestures the stage knows, and mapping of whatever the LLM wrote onto them."""
 
-    def __init__(self, gestures: dict[str, float], duets: dict[str, float] | None = None) -> None:
+    def __init__(self, gestures: dict[str, float], duets: dict[str, float] | None = None,
+                 ensembles: dict[str, float] | None = None) -> None:
         self.durations = dict(gestures)
-        self.duets = dict(duets or {})  # name -> seconds
+        self.ensembles = dict(ensembles or {})  # name -> seconds; both arms as one thing
+        self.duets = {**(duets or {}), **self.ensembles}  # name -> seconds; either tag plays any of them
 
     def resolve_duet(self, name: str) -> str | None:
         name = re.sub(r"[\s-]+", "_", name.strip().lower())
         close = difflib.get_close_matches(name, list(self.duets), n=1, cutoff=0.6)
         return name if name in self.duets else close[0] if close else None
 
-    def describe_duets(self) -> str:
-        return ", ".join(f"{n} ({d:.1f}s)" for n, d in self.duets.items()) or "none today"
+    def describe_duets(self, ensembles: bool = False) -> str:
+        return ", ".join(f"{n} ({d:.1f}s)" for n, d in self.duets.items()
+                         if (n in self.ensembles) == ensembles) or "none today"
 
     @property
     def names(self) -> list[str]:
@@ -261,11 +266,13 @@ class Stage:
             logger.warning("stage server at %s unreachable (%s); using the default gesture list", self.url, e)
             return None
 
-    async def fetch_duets(self) -> dict[str, float]:
+    async def fetch_duets(self, kind: str = "duet") -> dict[str, float]:
+        """The stage's duets of one kind: "duet" (two characters) or "ensemble" (both arms as one thing)."""
         try:
             async with self._session().get(f"{self.url}/duets") as resp:
                 resp.raise_for_status()
-                return {d["name"]: float(d.get("duration_s") or 8.0) for d in await resp.json() if d.get("name")}
+                return {d["name"]: float(d.get("duration_s") or 8.0) for d in await resp.json()
+                        if d.get("name") and d.get("kind", "duet") == kind}
         except Exception as e:  # noqa: BLE001 - no duets then
             logger.warning("no duets from the stage server (%s)", e)
             return {}
@@ -372,7 +379,7 @@ class GestureSink(io.TextOutput):
                     self._on_face(facing)
                 else:
                     logger.info("dropped %s", p.raw)
-            elif p.arm == DUET_TAG:
+            elif p.arm in (DUET_TAG, ENSEMBLE_TAG):
                 if name := self._book.resolve_duet(p.name):
                     self._play(DUET_TAG, name, self._book.duets[name])
                 else:
