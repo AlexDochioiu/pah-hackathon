@@ -21,3 +21,8 @@
   TranscriptSynchronizer; listener speech freezes the arms; `[next]` chains scenes. `fake_stage.py` for dev.
   Verified without credentials: 14 tests incl. a full AgentSession with LiveKit's fakes. Needs a LiveKit Cloud
   project + keys in `agent/.env` to talk to it.
+- Gesture library + stage server built, sim only ([gestures.md](gestures.md)): 19 procedural gestures, all pass the
+  checker (limits, 1.5 rad/s, ≥ 4 cm table clearance with a 15 cm prop, ≥ 15 cm between arms; no unsafe pairs).
+  `stage.py` HTTP API on :8770 matches `agent/fake_stage.py` (`GET /gestures` = list with `duration_s`).
+  Bring-up passes in i2rt's MuJoCo sim on the station (41 steps, ~0.01 rad tracking). Not yet run on real arms:
+  next is `bash ~/dial/bringup.sh --real` once the arms are free. GIF previews in `robot/previews/`.

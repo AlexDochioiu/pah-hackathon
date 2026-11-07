@@ -27,6 +27,8 @@
 - Dream Labs CLI in `~/dream-env` (`dreamcli` 1.0.37). Its config `~/.dreamlabs/station.yaml` holds each arm's
   **home (rest) pose**. See [dream-1.md](dream-1.md).
 - `uv` at `~/.local/bin/uv`.
+- Kit venv versions: mujoco 3.17.0, numpy 2.2.6, Pillow 13 (no imageio, no ffmpeg). Off-screen MuJoCo rendering
+  works headless with `MUJOCO_GL=egl` (no GPU, Mesa EGL), so GIFs are written with Pillow.
 
 ## Arm facts
 - Rest pose (folded) ≈ all zeros. Exact values in `~/.dreamlabs/station.yaml`:

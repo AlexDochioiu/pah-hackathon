@@ -21,6 +21,19 @@ We don't use Dream-1 ([dream-1.md](dream-1.md)); our scripts command joint targe
 - Start and end through the raised pose (rest + `[0, 0.8, 1.2, 0, 0, 0]`).
 - `--dry` prints the plan and exits; use it first, always.
 
+## YAM joint geometry (from FK on i2rt's model)
+- At zero the joint axes are j1 +z (base yaw), j2 +y, j3 −y, j4 −y (pitches), j5 −z (wrist yaw), j6 +x (roll).
+- j1 > 0 turns the arm toward +y. For the left arm the other arm is at −y, so it faces the other arm with j1 < 0;
+  the right arm with j1 > 0. Mirroring a motion between the arms = multiply joints by `[−1, 1, 1, 1, −1, −1]`.
+- j2 + tips the upper arm forward (gripper forward and down); j3 + raises the forearm (gripper up and back).
+  Gripper pitch relative to a pose = −Δj2 + Δj3 + Δj4, so `Δj4 = Δj2 − Δj3` keeps the gripper level.
+- j6 rolls about the gripper's pointing axis: it spins a held prop about itself, it doesn't re-aim it.
+- `grasp_site`'s z axis points out of the fingers. At rest (zeros) it is ~0.17 m up, pointing at the audience; at
+  `lift.py`'s raised pose ~0.55 m up. Base and link1 never leave the table; link2 (shoulder) is the lowest moving
+  part at ~9.5 cm above the table.
+- i2rt's model limits j3 to [0, 3.14] (not 3.67). `get_yam_robot(..., sim=True)` returns a `SimRobot` before
+  any CAN access, so `arms.open_arms(station, energize=True, sim=True)` is safe to run while others use the arms.
+
 ## Safety
 - A human stands at the e-stop for every real-arm run. Tell them before each run starts.
 - Don't run anything on the arms while someone else is using the station.
