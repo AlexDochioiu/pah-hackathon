@@ -18,6 +18,8 @@ Run each as `cd ~/physical-ai-hacks && .venv/bin/python ~/dial/<script>.py`. All
 | `lift.py` | Lift ~38 cm, clap, sway, wave, lower. Refuses unless at rest. |
 | `snap.py` | One frame from each camera → `~/dial/snaps/`. |
 | `teach.py [secs]` | Float arms; log gripper-tip touches for camera↔arm calibration → `~/dial/teach.npz`. |
+| `calib.py` | Fit overhead pixel → arm frame from the touches → `~/dial/calib.json` (copy in repo). |
+| `pick.py --from U,V --to U,V [--level N] [--dry]` | Direct-control pick & place of the block at an overhead pixel. Plans + checks in sim first. |
 
 ## E-stop recovery
 1. Fold arms by hand. 2. Release e-stop **and** do the power reset. 3. Reset CAN (`sudo ip link set can_follower_X down/up type can bitrate 1000000`). 4. `home.py`.
