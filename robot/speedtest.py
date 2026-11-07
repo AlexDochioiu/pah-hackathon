@@ -1,7 +1,8 @@
-"""Speed test through a running stage server (stage.py --real): every gesture on both arms. speedtest.py [SPEED]"""
+"""Speed test through a running stage server (stage.py --real): every gesture on both arms. speedtest.py [SPEED] [name,name,...]"""
 import json, sys, time, urllib.request
 import numpy as np
 SPEED = float(sys.argv[1]) if len(sys.argv) > 1 else 1.0
+ONLY = set(sys.argv[2].split(",")) if len(sys.argv) > 2 else None  # e.g. speedtest.py 0.5 celebrate,roar
 U = "http://127.0.0.1:8770"
 def req(path, body=None):
     r = urllib.request.Request(U + path, data=json.dumps(body).encode() if body is not None else None,
@@ -28,6 +29,7 @@ for _ in range(60):
 print("stage", req("/stage", {"arm": "both", "speed": 0.5}).get("ok"), f"{wait(6):.3f}")
 for g in req("/gestures"):
     if g["name"] in ("stage", "rest", "idle_breathe"): continue
+    if ONLY and g["name"] not in ONLY: continue
     r = req("/play", {"arm": "both", "gesture": g["name"], "speed": SPEED})
     if not r.get("ok", True): print(f"{g['name']:18s} refused: {r.get('error')}"); continue
     e = wait(g["duration_s"] + 0.8)
