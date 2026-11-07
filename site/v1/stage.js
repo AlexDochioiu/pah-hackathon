@@ -206,13 +206,15 @@ function mount(root) {
   new IntersectionObserver(es => { S.visible = es[0].isIntersecting; }).observe(svg);
   S.title.textContent = STORIES[storyIx].title;
   cue(S.L, ['rest', ''], true); cue(S.R, ['hide', ''], true);
-  if (RM) { const b = STORIES[storyIx].beats[0]; cue(S.L, b.L, true); cue(S.R, b.R, true); spotTo(b.spot); say('The Narrator', b.say); }
   setScene(STORIES[storyIx].set);
   run();
+  // reduced motion: start paused on a composed still of the first beat (Play continues the story)
+  if (RM) { const b = STORIES[storyIx].beats[0]; cue(S.L, b.L, true); cue(S.R, b.R, true); spotTo(b.spot); say('The Narrator', b.say); }
+  render(S, 0, true);
 }
 
-function render(S, dt) {
-  if (!S.still && (S.paused || !S.visible)) return;
+function render(S, dt, force) {
+  if (!force && !S.still && (S.paused || !S.visible)) return;
   S.t += dt; const t = S.t;
   for (const a of S.arms) {
     if (!a.frozen && dt) for (let i = 0; i < 4; i++) { a.vel[i] += ((a.tgt[i] - a.cur[i]) * 38 - a.vel[i] * 9.5) * dt; a.cur[i] += a.vel[i] * dt; }
