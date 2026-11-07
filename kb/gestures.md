@@ -161,8 +161,15 @@ held: keeping link3 15 cm apart needs the hands angled in, and then the props cr
 
 | Duet | s | Closest contact | Others | Fastest close (inside 5 cm) |
 |---|---|---|---|---|
-| `cross_swords`: en garde, wind up, swing; the blades lock in an X, shove left and right, spring apart | 9.3 | prop×prop 1.8 cm | 20 cm | 4.3 cm/s |
-| `cheers`: raise, lift, swing in, clink the tips, glasses up high | 9.7 | prop×prop 1.5 cm | 16 cm | 4.3 cm/s |
+| `cross_swords`: en garde, wind up, swing; the blades lock in an X, shove left and right, spring apart | 8.7 | prop×prop 1.8 cm | ≥ 20 cm | 4.3 cm/s |
+| `cheers`: raise, lift, swing in, clink the tips, glasses up high | 9.0 | prop×prop 1.5 cm | 16 cm | 4.4 cm/s |
+| `poke`: the left sneaks up and pokes the right's head with its prop; the right flinches, shakes its head | 8.8 | prop×right hand 1.6 cm | 16.2 cm | 4.0 cm/s |
+| `quick_draw`: face off, hands low, twitch, draw! The left fires, the right is hit and slumps | 7.7 | no touch | ≥ 20 cm | |
+| `tip_hats`: turn to each other, the left tips its hat, the right answers deeper | 5.6 | no touch | ≥ 20 cm | |
+| `copycat`: the right copies the left a beat late, gets caught, looks away innocent | 7.3 | no touch | ≥ 20 cm | |
+| `car_ride`: the left steers (wheel on j6), both lean into the turns and bounce | 6.8 | no touch | ≥ 20 cm | |
+
+"≥ 20 cm" is the distance cap of the check (15 cm + 5). `poke` closes the right gripper on its prop first (grip 0).
 
 Server: `GET /duets`, `POST /duet {"name","speed"}` (speed ≤ 1). Refused (409) unless both arms are free (holding
 or idling); while a duet plays everything except `/freeze` is refused. `/freeze` brakes both arms over 0.15 s on the
@@ -172,6 +179,17 @@ Agent tag `[duet:name]` ([storyteller.md](storyteller.md)). Real-arm limits: abo
 error, so contacts at 1.5 cm may touch or miss; the slow approach keeps a touch gentle; fingers close on the 3 cm
 prop at grip 0.31 (`G_ON_PROP`). Rebuild with `make_duets.py`, check with `duets.py`, render with
 `preview_duets.py`.
+
+## Readability review of the solo gestures (Nov 7; suggestions, not applied)
+Goal: a viewer without sound names the action in a second. Big moves through j1–j3, not wrist flicks.
+- Cut `gripper_clap`: only the fingers move, invisible at audience distance, and it drops a held prop.
+- Cut `look_at_other`: the face-each-other stance does it better, and it is refused there.
+- Redo `nod`: j4 alone (±0.17 rad), small and the joint that lags most on the real arms; bob j2/j3 with the head.
+- Redo `shake_head`: j5 alone (±0.2 rad); add j1 ±0.15 so the whole arm says no.
+- Redo `gallop`: 0.04–0.12 rad bounces read as jitter; a bigger j2/j3 bounce, prop forward like reins.
+- Redo `sneak`: 4.6 s of slow j1 drift with a tiny bob; shorter, with big lifted tiptoe steps.
+- Redo `die_dramatically`: 2.5 s of small shaking before the slump delays the payoff; a 0.5 s stagger, then a big slump.
+- Keep `wave`, `bow`, `slash`, `thrust`, `block`, `celebrate`, `cower`, `roar`, `point_at_audience`, `idle_breathe`.
 
 ## Bring-up (first real run)
 `bash ~/dial/bringup.sh --real` on the station, props removed, someone at the e-stop. It runs `home.py`, then

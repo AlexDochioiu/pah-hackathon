@@ -54,3 +54,5 @@
 - Duets, first two: `cross_swords` and `cheers` (prop to prop, 1.5–1.8 cm closest, final approach ≤ 4.3 cm/s),
   `POST /duet`, `GET /duets`, agent tag `[duet:name]`. Hand-to-hand duets (high five, handshake) are infeasible with
   15 cm props held. Sim-only so far ([gestures.md](gestures.md#duets-robotduetspy)).
+- Duets 3–7: `poke` (prop to the right's hand), and no-touch `quick_draw`, `tip_hats`, `copycat`, `car_ride`
+  (5.6–7.7 s). `cross_swords`/`cheers` trimmed to 8.7/9.0 s. Approach moves now ease their turn in and out.

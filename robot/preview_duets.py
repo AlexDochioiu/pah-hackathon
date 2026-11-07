@@ -52,9 +52,11 @@ def main(names):
             im = Image.fromarray(big.render())
             small.update_scene(d, camera=cam)
             inset = Image.fromarray(small.render())
-            im.paste(inset, (W - IW - 4, H - IH - 18))
             dr = ImageDraw.Draw(im)
-            dr.rectangle([W - IW - 5, H - IH - 19, W - 4, H - 18], outline=(255, 255, 255))
+            if du.contact:  # no-touch duets: no close-up
+                im.paste(inset, (W - IW - 4, H - IH - 18))
+                dr.rectangle([W - IW - 5, H - IH - 19, W - 4, H - 18], outline=(255, 255, 255))
+                dr.text((W - IW, H - 16), "close-up", fill=(200, 200, 200))
             col = (255, 255, 255) if good else (255, 80, 80)
             dr.text((6, 4), f"duet: {du.name}  {du.duration:.1f} s", fill=col)
             if not good:
@@ -65,7 +67,6 @@ def main(names):
                     dr.text((6, 32), f"gap {gapcm:4.1f} cm", fill=(255, 230, 120) if gapcm < 5 else (220, 220, 220))
             dr.text((6, H - 14), "right arm", fill=(200, 200, 200)); dr.text((W - IW - 60, H - 14), "left arm", fill=(200, 200, 200))
             dr.text((W - 44, 4), f"{tq[i]:4.1f} s", fill=(200, 200, 200))
-            dr.text((W - IW, H - 16), "close-up", fill=(200, 200, 200))
             frames.append(im.quantize(64, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE))
         for s in show.SIDES:
             m.geom_rgba[props[s]] = rgba[s]

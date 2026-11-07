@@ -34,9 +34,10 @@ print("checker rejects fast / table / limit / lean-back motions")
 # Duets: all pass; an undeclared close pair (< 15 cm) and a fast final approach (> 5 cm/s inside 5 cm) are refused.
 dc = duets.DuetChecker(ck)
 dok, dbad = duets.load_duets(dc)
-assert not dbad and {"cross_swords", "cheers"} <= set(dok), (sorted(dok), dbad)
+assert not dbad and {"cross_swords", "cheers", "poke", "quick_draw", "tip_hats", "copycat", "car_ride"} <= set(dok), \
+    (sorted(dok), dbad)
 for d in dok.values():
-    assert d.max_speed <= 1 and min(d.stats["closest_contact_cm"].values()) > 0 and d.stats["closest_other_cm"] >= 15, d.stats
+    assert d.max_speed <= 1 and min(d.stats["closest_contact_cm"].values(), default=1) > 0 and d.stats["closest_other_cm"] >= 15, d.stats
 base = duets.load(duets.DUET_DIR / "cross_swords.json").d
 assert any("not a declared contact" in p for p in dc.check(duets.Duet(dict(base, contact=[]))))
 fast = duets.Duet(dict(base, keys=[dict(k, t=k["t"] * 0.5) for k in base["keys"]]))

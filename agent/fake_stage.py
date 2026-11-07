@@ -17,7 +17,8 @@ GESTURES = {
     "celebrate": 2.5, "cower": 2.0, "die_dramatically": 3.0, "gallop": 2.5, "roar": 2.0, "sneak": 2.5,
     "look_at_other": 1.5, "point_at_audience": 1.5, "gripper_clap": 1.5, "idle_breathe": 3.0,
 }
-DUETS = {"cross_swords": 9.3, "cheers": 9.7}
+DUETS = {"cross_swords": 8.7, "cheers": 9.0, "poke": 8.8, "quick_draw": 7.7, "tip_hats": 5.6, "copycat": 7.3,
+         "car_ride": 6.8}
 T0 = time.monotonic()
 state = {"mode": "rest", "stance": "audience", "arms": {"left": None, "right": None}}  # arm -> {"gesture", "until"} while playing
 

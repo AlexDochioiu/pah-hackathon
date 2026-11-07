@@ -170,7 +170,7 @@ class Seq:
             if approach is not None:
                 U = approach_law(D, **approach)
                 zone = approach.get("zone", 0.04)
-                urot = np.clip(U * D / max(D - zone, 1e-6), 0, 1)
+                urot = show.quintic(np.clip(U * D / max(D - zone, 1e-6), 0, 1))  # turn eases in and out
             else:  # quintic, stretched until the joint path it needs stays within ~80 % of the limits
                 q = {s: self.q[s].copy() for s in SIDES}
                 for s in SIDES:
@@ -293,10 +293,10 @@ def cross_swords():
     s.move(*clash(z, sep=gap + 0.07), T=0.4)                             # swing: X formed, still apart in depth
     s.move(*clash(z), approach=dict(zone=0.021, vc=0.021, vmax=0.15, acc=1.0, taper=0.06), hold=0.3)  # lock (slow)
     (pl, al), (pr, ar) = clash(z)
-    for dy in (-0.04, 0.035, 0.0):                                       # struggle: the locked blades shove sideways
+    for dy in (-0.04, 0.0):                                              # struggle: the locked blades shove sideways
         s.move((pl + [0, dy, 0.01], al), (pr + [0, dy, 0.01], ar), T=0.5, line=True, mirror=False)
     s.move(*clash(z, sep=gap + 0.10), T=0.3, line=True)                  # unlock: straight back apart in depth
-    s.move(out(z, 0.09, -0.04, 0.5), T=0.4, hold=0.15)                  # spring apart
+    s.move(out(z, 0.09, -0.04, 0.5), T=0.4, hold=0.1)                   # spring apart
     s.home(T=0.9)
     return s.duet("cross_swords", "En garde, wind up and clash: the swords lock in an X in the middle, shove "
                   "each other left and right, then spring apart.",
@@ -340,14 +340,17 @@ def cheers():
     s = Seq()
     az, el, z = 0.9, 0.55, 0.66
     s.move(*tips(0.35, el, z - 0.04, sep=0.16), T=0.9, hold=0.1)         # raise the glasses
-    s.move(*tips(0.15, el + 0.15, z + 0.02, sep=0.22), T=0.45)           # anticipation: lift and lean back out
+    s.move(*tips(0.25, el + 0.15, z + 0.02, sep=0.19), T=0.45)           # anticipation: lift and lean back out
     s.move(*tips(az, el, z, sep=0.05), T=0.5)                             # swing in, tips nearly touching
     s.move(*tips(az, el, z), approach=dict(zone=0.025, vc=0.021, vmax=0.12, acc=1.0, taper=0.06), hold=0.35)  # clink
     s.move(*tips(az, el, z, sep=0.06), T=0.3, line=True)                  # bounce off
-    s.move(*tips(0.2, el + 0.2, z + 0.04, sep=0.24), T=0.5, hold=0.2)    # glasses up high: cheers!
+    s.move(*tips(0.35, el + 0.2, z + 0.04, sep=0.2), T=0.5, hold=0.2)    # glasses up high: cheers!
     s.home(T=1.0)
     return s.duet("cheers", "Raise the glasses, lift, swing in and clink the tips together in the middle, then hold "
                   "them up high.", [{"left": ["prop"], "right": ["prop"], "min": 0.012}])
+
+
+POKE = -0.003  # target gap past the estimated inner face of the right hand: lands ~1.5 cm off it (the wrist sticks out)
 
 
 def poke():
@@ -361,12 +364,12 @@ def poke():
         return tip - show.PROP_LEN * a, a
     s.grip("right", 0.0, 0.6)                                             # the right holds its prop (known width)
     s.move(at(0.14, az=0.8, el=0.35, dz=0.08), T=1.0, mirror=False)      # sneak up, prop raised: wind up
-    s.move(at(0.015), approach=dict(zone=0.045, vc=0.04, vmax=0.3, acc=1.2, taper=0.08), mirror=False, hold=0.3)  # poke!
+    s.move(at(0.075), T=0.5, mirror=False)                                # aim: the prop levels at the head
+    s.move(at(POKE), approach=dict(zone=0.045, vc=0.04, vmax=0.3, acc=1.2, taper=0.08), mirror=False, hold=0.3)  # poke!
     s.move(at(0.05), T=0.2, line=True, mirror=False)                      # left snaps back
     flinch = pose(j1=0.45, j2=-0.05, j3=-0.1, p=-0.15, j5=-0.3)
     s.move(at(0.09, dz=0.02), flinch, T=0.4, mirror=False)               # right flinches away
     s.move(np.zeros(6), flinch + pose(j5=0.25), T=0.4, mirror=False)      # left goes back, giggling; right shakes its head
-    s.move(None, flinch - pose(j5=0.25), T=0.35, mirror=False)
     s.move(None, np.zeros(6), T=0.8, mirror=False)
     return s.duet("poke", "The left arm sneaks up and pokes the right one on the side of its head with its prop; the "
                   "right flinches away and shakes its head.",
@@ -374,7 +377,66 @@ def poke():
                    {"left": ["prop"], "right": ["prop"], "min": 0.04}])
 
 
-LIBRARY = [cross_swords, cheers]  # poke: its approach still breaks the accel limits
+FACE = pose(j1=-0.2, j5=0.25)  # the each_other stance (show.FACING_LEFT), as a delta
+
+
+def quick_draw():
+    """Western standoff: face each other, hands low at the holsters, twitch... DRAW! The left fires (recoil), the right
+    is hit, rears back and slumps."""
+    s = Seq()
+    low = FACE + pose(j2=-0.1, j3=-0.25, p=-0.55)
+    s.move(low, T=0.8, hold=0.7)                                           # the standoff
+    s.move(low + pose(j6=0.3), T=0.25).move(low, T=0.25, hold=0.5)        # twitchy fingers
+    aimq = FACE + pose(j2=0.05, j3=0.15, p=0.05)
+    s.move(aimq, T=0.35, hold=0.3)                                         # DRAW
+    s.move(aimq + pose(p=0.35, j2=-0.03), aimq + pose(j1=0.15, p=0.4, j5=-0.2), T=0.25, mirror=False)  # BANG / hit
+    s.move(aimq, aimq + pose(j1=0.25, j2=0.05, j3=-0.35, p=-1.0, j5=-0.3, j6=0.5), T=0.9, mirror=False, hold=0.6)
+    s.home(T=1.0)
+    return s.duet("quick_draw", "Western standoff: face each other, hands low, twitch, draw! The left fires, the "
+                  "right is hit, rears back and slumps.", [])
+
+
+def tip_hats():
+    """Two gentlemen meet: the left turns and tips its hat, the right answers with a deeper one, both straighten."""
+    s = Seq()
+    up = FACE + pose(j2=0.05, j3=0.2, p=0.15)
+    tip = FACE + pose(j2=0.12, j3=0.05, p=-0.55, j6=0.35)
+    s.move(up, T=0.7, hold=0.3)                                            # turn to each other, chin up
+    s.move(tip, up, T=0.5, mirror=False, hold=0.35)                        # left tips its hat
+    s.move(up, tip + pose(p=-0.15), T=0.5, mirror=False, hold=0.45)        # the right answers, deeper
+    s.move(up, T=0.5, hold=0.2)
+    s.home(T=0.9)
+    return s.duet("tip_hats", "Turn to each other; the left tips its hat, the right answers with a deeper tip.", [])
+
+
+def copycat():
+    """The right copies everything the left does, a beat late; the left catches it and the right looks innocent."""
+    s = Seq()
+    a = pose(j2=0.22, j3=0.5, p=1.0)                        # stretch up tall (celebrate's pose)
+    b = pose(j1=0.2, j2=0.12, j3=0.15, p=0.0, j5=-0.35)     # lean out, look away
+    s.move(a, None, T=0.6, mirror=False, hold=0.15)
+    s.move(b, a, T=0.6, mirror=False, hold=0.15)
+    s.move(None, b, T=0.75, mirror=False, hold=0.2)
+    s.move(FACE + pose(j5=0.25), None, T=0.4, mirror=False, hold=0.2)     # the left whips round: caught!
+    s.move(None, np.zeros(6) + pose(j5=-0.4, p=0.2), T=0.4, mirror=False, hold=0.5)  # the right: who, me?
+    s.home(T=0.9)
+    return s.duet("copycat", "The right copies every move of the left a beat late; the left whips round and "
+                  "catches it; the right looks away, innocent.", [])
+
+
+def car_ride():
+    """The left drives (steering wheel on j6), the right rides along: both lean into the turns and bounce on bumps."""
+    s = Seq()
+    for t, (yaw, roll) in enumerate([(0.15, 0.6), (-0.15, -0.6), (0.15, 0.6), (0.0, 0.0)]):
+        bump = pose(j2=0.03, j3=0.08) if t % 2 else np.zeros(6)
+        # same world direction for both: the right arm's j1 delta is negated (show.mirror flips it back)
+        s.move(pose(j1=yaw, j6=roll) + bump, pose(j1=-yaw, j5=-yaw) + bump, T=0.7, mirror=False, hold=0.15)
+    s.home(T=0.6)
+    return s.duet("car_ride", "The left steers a car (the wheel turns), the right rides along: both lean into the "
+                  "turns and bounce on a bump.", [])
+
+
+LIBRARY = [cross_swords, cheers, poke, quick_draw, tip_hats, copycat, car_ride]
 
 
 def main(names):
