@@ -68,3 +68,9 @@
 - Ensembles (step between A and B): 12 two-arm moves where both arms are ONE thing, action or mood (chomp jaws,
   wings, this_big, shrug, rocket, waves, storm, gate_opening, explosion, row_boat, once_upon_a_time, the_end), as
   `"kind": "ensemble"` duets; agent tag `[ensemble:name]`, no casting lock, blend in from either stance and back.
+- Gesture coverage (`agent/coverage.py`): 12 generated scenes, an LLM lists physical actions left untagged. The LLM
+  saw only gesture names; now it gets each gesture's look (`about` from the stage) and the story verbs it plays
+  (inverted `SYNONYMS`), plus prompt rules: build the plot from the known moves, use the mouths a lot, face each
+  other by default. Franchise asks (Star Wars, Pokemon, aliens vs predators…): every scene faces each other, every
+  quote has a talk tag, untagged actions 45 → 33. Still missing: look around/spot, jump back/leap out, duck/dodge,
+  land/stomp, snap jaws, beat chest, snore, sigh, hop.

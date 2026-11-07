@@ -46,6 +46,15 @@ SYNONYMS = {
     "growl": "roar", "tiptoe": "sneak", "creep": "sneak", "hello": "wave", "goodbye": "wave", "yes": "nod",
     "no": "shake_head", "point": "point_at_audience", "look": "look_at_other", "breathe": "idle_breathe",
     "idle": "idle_breathe", "curtsy": "bow",
+    # story verbs that went untagged in a 12-story sample (Nov 7), mapped to the gesture that looks most like them
+    "spot": "look_at_other", "notice": "look_at_other", "stare": "look_at_other", "watch": "look_at_other",
+    "grab": "thrust", "snatch": "thrust", "catch": "thrust", "push": "thrust", "shove": "thrust", "leap": "thrust",
+    "pounce": "thrust", "throw": "slash", "toss": "slash", "hit": "slash", "punch": "slash", "smash": "slash",
+    "jump": "celebrate", "win": "celebrate", "eat": "gripper_clap", "chomp": "gripper_clap", "bite": "gripper_clap",
+    "munch": "gripper_clap", "laugh": "nod", "agree": "nod", "refuse": "shake_head", "shudder": "cower",
+    "startle": "cower", "flinch": "cower", "fall": "die_dramatically", "trip": "die_dramatically",
+    "chase": "gallop", "flee": "gallop", "race": "gallop", "prowl": "sneak", "patrol": "sneak", "grow": "roar",
+    "shout": "roar", "thank": "bow",
 }
 CONTINUE_TAG = "next"
 TALK_TAG = "talk"  # [talk:left] "..." -> POST /talk on, off at the closing quote
@@ -199,18 +208,30 @@ class GestureBook:
     """The gestures the stage knows, and mapping of whatever the LLM wrote onto them."""
 
     def __init__(self, gestures: dict[str, float], duets: dict[str, float] | None = None,
-                 ensembles: dict[str, float] | None = None) -> None:
+                 ensembles: dict[str, float] | None = None, about: dict[str, str] | None = None) -> None:
         self.durations = dict(gestures)
         self.ensembles = dict(ensembles or {})  # name -> seconds; both arms as one thing
         self.duets = {**(duets or {}), **self.ensembles}  # name -> seconds; either tag plays any of them
+        self.about = dict(about or {})  # name -> what it looks like (from the stage server)
 
     def resolve_duet(self, name: str) -> str | None:
         name = re.sub(r"[\s-]+", "_", name.strip().lower())
         close = difflib.get_close_matches(name, list(self.duets), n=1, cutoff=0.6)
         return name if name in self.duets else close[0] if close else None
 
+    def _line(self, name: str, secs: float) -> str:
+        """`- slash (1.2s): Wind up high... Use for: attack, strike, swing.` The verbs come from SYNONYMS, so the
+        LLM sees which story actions each gesture can play."""
+        verbs = [v for v, g in SYNONYMS.items() if g == name]
+        line = f"- {name} ({secs:.1f}s)"
+        if about := self.about.get(name, "").strip():
+            line += f": {about}"
+        if verbs:
+            line += f" Use for: {', '.join(verbs)}."
+        return line
+
     def describe_duets(self, ensembles: bool = False) -> str:
-        return ", ".join(f"{n} ({d:.1f}s)" for n, d in self.duets.items()
+        return "\n".join(self._line(n, d) for n, d in self.duets.items()
                          if (n in self.ensembles) == ensembles) or "none today"
 
     @property
@@ -234,7 +255,7 @@ class GestureBook:
         return None
 
     def describe(self) -> str:
-        return ", ".join(f"{n} ({d:.1f}s)" for n, d in self.durations.items())
+        return "\n".join(self._line(n, d) for n, d in self.durations.items() if n not in ("stage", "rest"))
 
 
 class Stage:
@@ -244,6 +265,7 @@ class Stage:
 
     def __init__(self, url: str) -> None:
         self.url = url.rstrip("/")
+        self.about: dict[str, str] = {}  # gesture/duet name -> description, filled by fetch_gestures/fetch_duets
         self._http: aiohttp.ClientSession | None = None
         self._tasks: set[asyncio.Task] = set()
         self._pending: asyncio.Task | None = None  # a duet waiting for the arms to be free
@@ -261,6 +283,7 @@ class Stage:
                 resp.raise_for_status()
                 data = await resp.json()
             gestures = {g["name"]: float(g.get("duration_s") or 1.5) for g in data if g.get("name")}
+            self.about.update({g["name"]: str(g.get("about") or "") for g in data if g.get("name")})
             return gestures or None
         except Exception as e:  # noqa: BLE001 - any failure means "use the defaults"
             logger.warning("stage server at %s unreachable (%s); using the default gesture list", self.url, e)
@@ -271,7 +294,9 @@ class Stage:
         try:
             async with self._session().get(f"{self.url}/duets") as resp:
                 resp.raise_for_status()
-                return {d["name"]: float(d.get("duration_s") or 8.0) for d in await resp.json()
+                data = await resp.json()
+                self.about.update({d["name"]: str(d.get("about") or "") for d in data if d.get("name")})
+                return {d["name"]: float(d.get("duration_s") or 8.0) for d in data
                         if d.get("name") and d.get("kind", "duet") == kind}
         except Exception as e:  # noqa: BLE001 - no duets then
             logger.warning("no duets from the stage server (%s)", e)

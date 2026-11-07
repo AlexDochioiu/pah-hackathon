@@ -86,7 +86,7 @@ def test_sink_fires_and_strips():
 
     faced = []
     book = GestureBook(DEFAULT_GESTURES, {"cross_swords": 9.3}, {"storm": 4.9})
-    assert book.describe_duets() == "cross_swords (9.3s)" and book.describe_duets(ensembles=True) == "storm (4.9s)"
+    assert book.describe_duets() == "- cross_swords (9.3s)" and book.describe_duets(ensembles=True) == "- storm (4.9s)"
     sink = GestureSink(book, lambda a, g, d: played.append((a, g)), lambda: continued.append(1),
                        next_in_chain=Collect(), on_face=faced.append)
 

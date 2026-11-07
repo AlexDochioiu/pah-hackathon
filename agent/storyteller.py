@@ -67,7 +67,7 @@ server = AgentServer(num_idle_processes=1) if PTT else AgentServer()  # PTT: a w
 async def entrypoint(ctx: JobContext) -> None:
     stage = Stage(STAGE_URL)
     book = GestureBook(await stage.fetch_gestures() or DEFAULT_GESTURES, await stage.fetch_duets(),
-                       await stage.fetch_duets("ensemble"))
+                       await stage.fetch_duets("ensemble"), stage.about)
     logger.info("gestures: %s; duets: %s", ", ".join(book.names), book.describe_duets())
 
     session = AgentSession(
