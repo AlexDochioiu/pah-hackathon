@@ -185,8 +185,9 @@ def move_time(a, b, want=0.0, frac=0.75):
 
 
 def blend(q0, q1, speed=1.0, g0=None, g1=None, hz=HZ):
-    """Quintic joint-space move q0 -> q1 at hz, excluding q0 (empty if already there); grips too if given."""
-    T = move_time(q0, q1, 0.3 if np.abs(np.asarray(q1) - q0).max() > 1e-3 else 0.0) / max(speed, 1e-3)
+    """Quintic joint-space move q0 -> q1 at hz, excluding q0 (empty if already there); grips too if given.
+    speed scales it down (0.3 = 30 %); above 1 it stays at 1, already 75 % of the limits."""
+    T = move_time(q0, q1, 0.3 if np.abs(np.asarray(q1) - q0).max() > 1e-3 else 0.0) / float(np.clip(speed, 1e-3, 1.0))
     if g0 is not None and g1 is not None:
         T = max(T, abs(g1 - g0) * 0.6)  # ponytail: ~0.6 s for a full gripper stroke, like lift.py's clap
     n = int(np.ceil(T * hz))
@@ -281,7 +282,7 @@ class Checker:
         probs = motion_problems(Q)
         sw = self.scene.sweep(side, Q)
         if sw[2] < CLEAR:
-            probs.append(f"comes {sw[2]*100:.1f} cm above the table (< {CLEAR*100:.0f} cm) with the prop")
+            probs.append(f"lowest point (prop included) is {sw[2]*100:.1f} cm above the table, needs {CLEAR*100:.0f} cm")
         return probs, sw
 
     def check(self, g):

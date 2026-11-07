@@ -9,8 +9,9 @@ at rest, and on Ctrl-C / SIGTERM folds both arms back to rest before switching t
 Run on the station: cd ~/physical-ai-hacks && .venv/bin/python ~/dial/stage.py [--real]
 
 API (JSON in and out; "arm" is left | right | both, default both):
-  GET  /gestures                       names, durations, arms, max speed, rejected gestures, unsafe pairs
-  GET  /state                          per arm: what it plays, progress, queue, joints, tracking error, last error
+  GET  /gestures                       [{"name","duration_s","arms","about","hold","loop","max_speed","uses_gripper"}]
+  GET  /state                          per arm: what it plays, progress, queue, joints, tracking error, last error;
+                                       plus rejected gestures and gesture pairs refused on the two arms at once
   POST /play {"arm","gesture","speed":1.0,"mode":"now"|"queue"}   now = newest wins (default), queue = after current
   POST /freeze {"arm"}                 hold the current pose at once, drop queues
   POST /idle {"arm"}                   go to stage and breathe; gestures return to idle afterwards
@@ -270,7 +271,8 @@ class Stage:
 
     def state(self):
         with self.lock:
-            out = {"backend": self.backend, "fault": self.fault, "arms": {}}
+            out = {"backend": self.backend, "fault": self.fault, "rejected": self.rejected,
+                   "unsafe_pairs": sorted([list(p) for p in self.unsafe]), "arms": {}}
             for s in SIDES:
                 p = self.plan[s]
                 out["arms"][s] = {
@@ -334,9 +336,14 @@ class Stage:
 
 
 def shutdown(st, close, lock):
-    """Fold both arms to rest, wait, switch off."""
+    """Fold both arms to rest, wait, switch off. A second Ctrl-C is ignored: switching off mid-air drops the arms."""
+    if threading.current_thread() is threading.main_thread():
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(sig, lambda *_: print("still returning to rest, please wait", flush=True))
     try:
-        st.fault = None
+        if not st.thread.is_alive():
+            raise StageError("control loop is not running: cannot return to rest; fold the arms by hand")
+        st.fault, st.track_stop = None, float("inf")  # like home.py: keep driving to rest, never freeze mid-air
         try:
             st.go_rest(speed=0.5)
         except StageError as e:  # ponytail: last resort, the same straight slow homing as home.py
@@ -348,6 +355,8 @@ def shutdown(st, close, lock):
                                       show.join(), hold=True)
         st.wait(timeout=60)
         time.sleep(0.5)
+    except StageError as e:
+        print(f"COULD NOT RETURN TO REST: {e}", flush=True)
     finally:
         st.stop.set(); st.thread.join(timeout=2)
         close()
@@ -404,11 +413,10 @@ def serve(st, port):
 
         def do_GET(self):
             if self.path == "/gestures":
-                self._send(200, {"gestures": [
-                    {"name": g.name, "duration": round(g.duration, 2), "arms": g.arms, "about": g.about,
+                self._send(200, [
+                    {"name": g.name, "duration_s": round(g.duration, 2), "arms": g.arms, "about": g.about,
                      "hold": g.hold, "loop": g.loop, "max_speed": round(g.max_speed, 2), "uses_gripper": g.gt is not None}
-                    for g in st.lib.values()], "rejected": st.rejected,
-                    "unsafe_pairs": sorted([list(p) for p in st.unsafe])})
+                    for g in st.lib.values()])
             elif self.path == "/state":
                 self._send(200, st.state())
             else:
@@ -476,6 +484,7 @@ def main(argv=None):
     def on_signal(*_):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGINT, on_signal)  # also when started in the background (SIGINT ignored there)
     code = 0
     httpd = None
     try:

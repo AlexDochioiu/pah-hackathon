@@ -42,7 +42,8 @@ def call(path, body=None):
 
 
 code, lib = call("/gestures")
-assert code == 200 and len(lib["gestures"]) == len(ok) and not lib["rejected"]
+assert code == 200 and len(lib) == len(ok) and all(g["duration_s"] > 0 for g in lib)
+assert call("/state")[1]["rejected"] == {}
 assert call("/stage", {"speed": 1.0})[0] == 200
 st.wait()
 assert np.allclose(st.cmd_q["left"], show.stage_pose("left")) and np.allclose(st.cmd_q["right"], show.stage_pose("right"))
