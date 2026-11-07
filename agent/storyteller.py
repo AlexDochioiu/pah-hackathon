@@ -85,7 +85,7 @@ async def entrypoint(ctx: JobContext) -> None:
         use_tts_aligned_transcript=False,
     )
     director = Director(session, stage, idle_after_s=IDLE_AFTER_S, continue_after_s=NEXT_SCENE_AFTER_S)
-    gestures = GestureSync(book, stage.play, director.request_continue, stage.face)
+    gestures = GestureSync(book, stage.play, director.request_continue, stage.face, stage.talk)
 
     async def shutdown() -> None:
         stage.send("/rest")

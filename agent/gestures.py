@@ -4,7 +4,8 @@ when the spoken words reach them.
 The LLM writes `[left:slash]`, `[right:cower]`, `[both:bow]` inline, plus `[next]` at the end of a scene
 it wants to carry on from, and `[face:each_other]` / `[face:audience]` to turn the two actors toward each other
 or back to the audience (the stage server's /stance; gestures then play facing that way), and `[duet:cheers]` for
-a two-arm duet (the stage server's /duet: both arms together, they touch). Tags flow through the reply untouched except for two places:
+a two-arm duet (the stage server's /duet: both arms together, they touch). `[talk:left]` right before a character's
+quoted line flaps that arm's gripper like a talking mouth (/talk) from the opening quote's line to its closing quote. Tags flow through the reply untouched except for two places:
 
 - `strip_tags_for_tts`, a TTS text transform: the voice never sees a tag.
 - `GestureSync`, a TranscriptSynchronizer wrapped around the session's outputs: it releases the reply's
@@ -46,6 +47,8 @@ SYNONYMS = {
     "idle": "idle_breathe", "curtsy": "bow",
 }
 CONTINUE_TAG = "next"
+TALK_TAG = "talk"  # [talk:left] "..." -> POST /talk on, off at the closing quote
+QUOTES_OPEN, QUOTES_CLOSE = '"“', '"”'
 DUET_TAG = "duet"  # [duet:cross_swords] -> POST /duet
 DUET_MARGIN_S = 0.3  # the stage's blend into a gesture makes it a bit longer than its duration
 FACE_TAG = "face"  # [face:each_other] / [face:audience] -> POST /stance
@@ -155,7 +158,13 @@ async def tags_first(text: AsyncIterable[str]) -> AsyncIterable[str]:
         out = ""
         for piece in parser.feed(chunk):
             if isinstance(piece, Tag):
-                (ctrl if piece.arm is None else tags).append(piece.raw)
+                if talk_arm(piece) is None:
+                    (ctrl if piece.arm is None else tags).append(piece.raw)
+                    continue
+                # a talk tag stays where it is (just before its quote); a sentence may end right before it
+                if buf[-1:].isspace() and buf.rstrip()[-1:] in _SENTENCE_END:
+                    out += emit()
+                buf += piece.raw
                 continue
             for c in piece:
                 if not c.isspace() and buf[-1:].isspace() and buf.rstrip()[-1:] in _SENTENCE_END:
@@ -167,6 +176,15 @@ async def tags_first(text: AsyncIterable[str]) -> AsyncIterable[str]:
         buf += piece if isinstance(piece, str) else piece.raw
     if rest := emit():
         yield rest
+
+
+def talk_arm(tag: Tag) -> str | None:
+    """`[talk:left]` (or `[left:talk]`) -> "left"; any other tag -> None."""
+    if tag.arm == TALK_TAG and tag.name in ("left", "right"):
+        return tag.name
+    if tag.arm in ("left", "right") and tag.name == TALK_TAG:
+        return tag.arm
+    return None
 
 
 def hyphenate_without_tags(word: str) -> list[str]:
@@ -279,6 +297,10 @@ class Stage:
         self.busy_until = max(self.busy_until, time.monotonic() + duration_s / speed)
         self.send("/play", {"arm": arm, "gesture": gesture, "speed": speed})
 
+    def talk(self, arm: str, on: bool) -> None:
+        logger.info("talk %s %s", arm, "on" if on else "off")
+        self.send("/talk", {"arm": arm, "on": on})
+
     def face(self, stance: str) -> None:
         logger.info("face %s", stance)
         self.send("/stance", {"stance": stance})
@@ -308,16 +330,40 @@ class GestureSink(io.TextOutput):
         *,
         next_in_chain: io.TextOutput | None,
         on_face: Callable[[str], None] | None = None,
+        on_talk: Callable[[str, bool], None] | None = None,
     ) -> None:
         super().__init__(label="GestureSink", next_in_chain=next_in_chain)
         self._book, self._play, self._on_continue, self._on_face = book, play, on_continue, on_face
+        self._on_talk = on_talk
         self._parser = TagParser()
+        self._talker: str | None = None  # the arm whose mouth is talking
+        self._quoted = False               # its quote has opened
+
+    def _talk(self, arm: str | None) -> None:
+        if self._talker and self._on_talk:
+            self._on_talk(self._talker, False)
+        self._talker, self._quoted = arm, False
+        if arm and self._on_talk:
+            self._on_talk(arm, True)
+
+    def _scan_quotes(self, text: str) -> None:
+        """The talking mouth stops at its quote's closing mark (the text arrives as it is spoken)."""
+        for c in text:
+            if not self._talker:
+                return
+            if not self._quoted and c in QUOTES_OPEN:
+                self._quoted = True
+            elif self._quoted and c in QUOTES_CLOSE:
+                self._talk(None)
 
     def _handle(self, pieces: list[str | Tag]) -> str:
         text = ""
         for p in pieces:
             if isinstance(p, str):
                 text += p
+                self._scan_quotes(p)
+            elif (who := talk_arm(p)) is not None:
+                self._talk(who)
             elif p.arm is None:
                 if p.name == CONTINUE_TAG:
                     self._on_continue()
@@ -347,6 +393,7 @@ class GestureSink(io.TextOutput):
     def flush(self) -> None:
         # an interrupted segment flushes too; whatever is held back was never spoken, so drop its tags
         rest = "".join(p for p in self._parser.flush() if isinstance(p, str))
+        self._talk(None)  # end of the reply, or an interruption: the mouth shuts
         if self.next_in_chain:
             if rest:
                 asyncio.ensure_future(self.next_in_chain.capture_text(rest))
@@ -358,13 +405,15 @@ class GestureSync:
     output feeds a GestureSink. Call `install()` after `session.start()` has set the outputs up."""
 
     def __init__(self, book: GestureBook, play: Callable[[str, str, float], None],
-                 on_continue: Callable[[], None], on_face: Callable[[str], None] | None = None) -> None:
+                 on_continue: Callable[[], None], on_face: Callable[[str], None] | None = None,
+                 on_talk: Callable[[str, bool], None] | None = None) -> None:
         self._book, self._play, self._on_continue, self._on_face = book, play, on_continue, on_face
+        self._on_talk = on_talk
         self.sync: TranscriptSynchronizer | None = None
 
     def install(self, output: io.AgentOutput) -> None:
         sink = GestureSink(self._book, self._play, self._on_continue, next_in_chain=output.transcription,
-                           on_face=self._on_face)
+                           on_face=self._on_face, on_talk=self._on_talk)
         if output.audio is None:  # text-only (console --text): nothing to sync to, fire as the text streams
             logger.warning("no audio output: gestures fire as the text arrives, not synced to speech")
             output.transcription = sink

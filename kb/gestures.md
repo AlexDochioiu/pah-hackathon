@@ -19,6 +19,7 @@ sim on the station), then run on the real arms (results at the end).
 | `robot/duets/*.json` | The duets. |
 | `robot/make_duets.py` | Builds the duets from Cartesian targets (IK) and checks them. |
 | `robot/preview_duets.py` | Renders `robot/previews/duet_<name>.gif` with a close-up inset and the live gap. |
+| `robot/mouth.py` | The talking mouth overlay (`POST /talk`); `python mouth.py` self-checks its rates. |
 | `robot/check_gestures.py` | Assert-based self-check (library, checker, HTTP API in sim). |
 
 ## Frames and poses
@@ -129,6 +130,18 @@ python robot/stage.py --backend kin                                   # anywhere
   arms are. A tracking error > 0.35 rad (something blocking an arm) freezes both arms and sets `fault`.
 - Ctrl-C / SIGTERM: smoothly back to rest (via stage if needed, auto-freeze off, a second Ctrl-C is ignored), then
   motors off. **Never `kill -9` it in real mode**: the arms would go limp wherever they are.
+
+## Talking mouth (`robot/mouth.py`, `POST /talk {"arm","on"}`)
+Each arm is a puppet head: the wrist camera's two lenses are its eyes, the gripper is its mouth, j4 nods, j5 turns,
+j6 tilts. `/talk` flaps an arm's gripper like a talking mouth on top of whatever the arm plays or idles: irregular
+syllables at 3–5.5 Hz with varied openings and short breaths between phrases, plus a small head bob (j4 lifts up
+to 0.05 rad as the mouth opens, low-passed) and slow j6 tilts (±0.06 rad). The overlay fades in and out over
+0.25 s. It stops on `"on": false`, `/freeze`, the start of a duet, shutdown, or after 20 s. The gripper never moves
+faster than `show.GRIP_VMAX` = 3.5/s (the DM4310 at ~21 rad/s turns its 6.57 rad stroke in ~0.3 s; **untested on
+the real gripper: tune it there**), so a 4 Hz syllable opens to ~45 %. The checker also caps gestures' grip
+rates by it (`max_speed`). The overlay's head offsets are not in the swept volumes: ≤ 0.06 rad at the wrist moves
+the gripper < 1 cm, inside the 4 cm table and 15 cm arm margins. The mouth opens the gripper: **a held prop drops**.
+Preview: `preview.py --talk` → `robot/previews/talk.gif`.
 
 ## Stances (facing each other)
 Gestures are deltas from a stance pose. `audience` = the stage pose (both arms face the audience, the default).

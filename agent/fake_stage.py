@@ -3,7 +3,7 @@
     python3 fake_stage.py [--port 8770]
 
 Same API as the real stage server (robot/): GET /gestures, GET /state, POST /play {"arm","gesture","speed"},
-GET /duets, POST /duet {"name","speed"}, POST /freeze, /idle, /stage, /rest, /stance {"stance": "audience"|"each_other"}. Standard library only.
+GET /duets, POST /duet {"name","speed"}, POST /talk {"arm","on"}, POST /freeze, /idle, /stage, /rest, /stance {"stance": "audience"|"each_other"}. Standard library only.
 """
 from __future__ import annotations
 
@@ -79,6 +79,9 @@ class Handler(BaseHTTPRequestHandler):
                 state["arms"][a] = {"gesture": f"duet:{name}", "until": time.monotonic() + duration}
             log(f"DUET   {name} ({duration:.1f}s)")
             return self._reply(200, {"ok": True, "duet": name})
+        if self.path == "/talk":
+            log(f"TALK   {body.get('arm', 'both'):>5}: {'on' if body.get('on', True) else 'off'}")
+            return self._reply(200, {"ok": True})
         if self.path == "/stance":
             if body.get("stance") not in ("audience", "each_other"):
                 log(f"REJECT stance {body}")

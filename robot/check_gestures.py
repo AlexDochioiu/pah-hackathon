@@ -92,6 +92,20 @@ assert call("/state")[1]["arms"]["right"]["grip"] < 0.05
 assert call("/bogus", {})[0] == 404
 print("HTTP API ok: /gestures /stage /play /freeze /idle /grip, queue, refusals")
 
+assert call("/talk", {"arm": "left", "on": True})[0] == 200  # the mouth flaps on top of the idle breathing
+G = []
+for _ in range(60):
+    G.append(st.mouth["left"].g if st.mouth["left"].g is not None else st.cmd_g["left"]); time.sleep(0.01)
+assert max(G) - min(G) > 0.2 and call("/state")[1]["arms"]["left"]["talking"], G
+assert call("/talk", {"arm": "left", "on": False})[0] == 200
+time.sleep(0.5)
+assert st.mouth["left"].g is None and not st.dq["left"].any()  # back to the plan's grip, no head offset
+assert call("/talk", {"arm": "both"})[0] == 200 and call("/freeze", {})[0] == 200
+assert not any(st.mouth[s].on for s in show.SIDES)  # freeze shuts the mouths
+time.sleep(0.5)
+assert call("/idle", {})[0] == 200
+print("talking mouth ok: /talk on and off, freeze stops it")
+
 assert call("/stance", {"stance": "sideways"})[0] == 409
 assert call("/stance", {"stance": "each_other"})[1]["stance"] == "each_other"
 st.wait(); time.sleep(0.1)  # the next tick starts the breathing

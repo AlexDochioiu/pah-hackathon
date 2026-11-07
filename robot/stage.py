@@ -20,6 +20,8 @@ API (JSON in and out; "arm" is left | right | both, default both):
   POST /duet {"name","speed"}          a two-arm duet (the arms touch); needs both arms free, and while it plays
                                        everything but /freeze is refused. /freeze stops both arms on the duet's
                                        path; the next request then first finishes the duet at half speed (409)
+  POST /talk {"arm","on"}             the arm's gripper flaps like a talking mouth (head bobbing a little) on top
+                                       of whatever it plays or idles, until "on": false, /freeze or 20 s
   POST /stance {"stance","speed"}      "audience" (default) or "each_other": both arms turn to the stance pose and
                                        every gesture, idle and /stage play relative to it until the next /stance
   POST /rest {"arm","speed"}           fold back to rest and hold (motors stay on)
@@ -30,11 +32,12 @@ motion); a refused request returns 409 with the reason and nothing moves.
 import argparse, collections, json, signal, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import numpy as np
-import duets, show
+import duets, mouth, show
 
 SIDES = show.SIDES
 REST_TOL = 0.25      # rad from home that counts as resting (same as lift.py)
 FREEZE_S = 0.15      # s to brake to a stop on /freeze
+TALK_MAX_S = 20.0    # s: a mouth left talking stops by itself after this
 TRACK_STOP = 0.35    # rad: tracking error above this freezes everything (something is blocking an arm)
 
 
@@ -112,6 +115,9 @@ class Stage:
         if "idle_breathe" not in self.lib:
             raise SystemExit("idle_breathe is missing or rejected: the stage server needs it")
         self.duets, self.duets_rejected = duets.load_duets(duets.DuetChecker(self.ck), verbose=False)
+        self.mouth = {s: mouth.Mouth() for s in SIDES}
+        self.talk_ticks = {s: 0 for s in SIDES}
+        self.dq = {s: np.zeros(6) for s in SIDES}  # the mouth's head offsets, last tick
         self.duet_left = None  # a duet frozen half-way: {"name", "Q": {side: path}, "G": {side: grips}}
         self.stance = "audience"
         self.lock = threading.RLock()
@@ -264,6 +270,7 @@ class Stage:
                         parts[s][k] = (np.vstack([Qk.reshape(-1, 6), np.repeat(last, n - len(Qk), 0)]),
                                        np.concatenate([Gk, np.repeat(lastg, n - len(Gk))]))
             for s in SIDES:
+                self.mouth[s].on = False  # a duet may carry props and touch: the mouths fade out on the way in
                 Q = np.vstack([q for q, _ in parts[s]]); G = np.concatenate([g for _, g in parts[s]])
                 # its sweep, for whatever the other arm does next, is where it ends: nothing else moves meanwhile
                 self.plan[s] = Plan(f"duet:{name}", Q, G, self.ck.pose_sweep(s, Q[-1]),
@@ -271,6 +278,16 @@ class Stage:
                 self.queue[s].clear(); self.last_error[s] = None
             self.fault = None
             return {"ok": True, "duet": name, "speed": round(speed, 2), "duration_s": round(len(Q) / show.HZ, 2)}
+
+    def talk(self, arm, on=True):
+        with self.lock:
+            p = self.plan["left"]
+            if on and p.duet and not p.done:
+                raise StageError(f"duet {p.duet} is playing: no talking during a duet")
+            for s in self.sides(arm):
+                self.mouth[s].on = bool(on)
+                self.talk_ticks[s] = int(TALK_MAX_S * show.HZ) if on else 0
+            return {"ok": True}
 
     def play(self, arm, gesture, speed=1.0, mode="now"):
         with self.lock:
@@ -295,6 +312,8 @@ class Stage:
 
     def freeze(self, arm=None):
         with self.lock:
+            for s in self.sides(arm):
+                self.mouth[s].on = False
             p = self.plan["left"]
             if p.duet and not p.done:  # both arms brake together on the duet's own (checked) path
                 k = np.arange(1, int(FREEZE_S * show.HZ) + 1)
@@ -409,7 +428,8 @@ class Stage:
                     "progress": round(p.i / max(len(p.Q) - 1, 1), 2), "after": self.after[s],
                     "queue": [g for g, _ in self.queue[s]], "grip": round(self.cmd_g[s], 2),
                     "joints": np.round(self.cmd_q[s], 3).tolist(), "measured": np.round(self.meas[s], 3).tolist(),
-                    "tracking_error": round(p.err, 3), "last_error": self.last_error[s]}
+                    "tracking_error": round(p.err, 3), "last_error": self.last_error[s],
+                    "talking": self.mouth[s].on}
             return out
 
     # ---------------------------------------------------------------- 50 Hz loop
@@ -444,15 +464,23 @@ class Stage:
                     p = self.plan[s]
                     self.cmd_q[s] = p.Q[p.i].copy()
                     self.cmd_g[s] = float(p.G[p.i])
+                    if self.talk_ticks[s] > 0:
+                        self.talk_ticks[s] -= 1
+                        if not self.talk_ticks[s]:
+                            self.mouth[s].on = False
+                out_q, out_g = {}, {}
+                for s in SIDES:  # the mouth overlay: small head offsets (<= 0.06 rad) and the gripper
+                    out_g[s], self.dq[s] = self.mouth[s].step(self.cmd_g[s])
+                    out_q[s] = self.cmd_q[s] + self.dq[s]
                 try:
-                    self.arms.command(dict(self.cmd_q), dict(self.cmd_g))
+                    self.arms.command(out_q, out_g)
                     q, _ = self.arms.read()
                 except Exception as e:
                     self.fault = f"arm I/O failed: {e}"; print(self.fault, flush=True); self.stop.set(); break
                 for s in SIDES:
                     self.meas[s] = np.asarray(q[s], float)
                     p = self.plan[s]
-                    err = float(np.max(np.abs(self.meas[s] - p.Q[max(p.i - 1, 0)])))  # vs last tick's target
+                    err = float(np.max(np.abs(self.meas[s] - p.Q[max(p.i - 1, 0)] - self.dq[s])))  # vs last tick's
                     p.err = max(p.err, err)
                     if err > self.track_stop and not self.fault:
                         self.fault = f"{s} arm tracking error {err:.2f} rad (blocked?): froze both arms"
@@ -473,6 +501,9 @@ def shutdown(st, close, lock):
         if not st.thread.is_alive():
             raise StageError("control loop is not running: cannot return to rest; fold the arms by hand")
         st.fault, st.track_stop = None, float("inf")  # like home.py: keep driving to rest, never freeze mid-air
+        with st.lock:
+            for s in SIDES:
+                st.mouth[s].on, st.talk_ticks[s] = False, 0
         t0 = time.monotonic()
         while st.thread.is_alive() and time.monotonic() - t0 < 30:  # a duet ends on its own path first: the arms
             with st.lock:                                             # may be touching, so no straight homing
@@ -577,6 +608,7 @@ def serve(st, port):
                     "/idle": lambda: st.idle(arm),
                     "/stage": lambda: st.go_stage(arm, float(b.get("speed", 1.0))),
                     "/duet": lambda: st.play_duet(b["name"], float(b.get("speed", 1.0))),
+                    "/talk": lambda: st.talk(arm, bool(b.get("on", True))),
                     "/stance": lambda: st.set_stance(b["stance"], float(b.get("speed", 1.0))),
                     "/rest": lambda: st.go_rest(arm, float(b.get("speed", 1.0))),
                     "/grip": lambda: st.grip(arm, float(b["value"])),

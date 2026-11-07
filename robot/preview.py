@@ -2,6 +2,7 @@
 
   preview.py [name ...]        default: every gesture in gestures/
   preview.py --stance each_other [name ...]    the same facing each other, to previews/each_other/<name>.gif
+  preview.py --talk                            previews/talk.gif: the talking mouth (POST /talk)
 Off-screen MuJoCo: on the station run with MUJOCO_GL=egl (or osmesa); on a Mac MUJOCO_GL=cgl. The left arm is on the
 RIGHT of the image (seen from the audience). Gestures meant for one arm play on the left arm, the right arm stands at
 the stage pose; "both" gestures play mirrored on both arms; stage starts from rest.
@@ -63,9 +64,51 @@ def main(names, stance="audience"):
         print(f"{path}  {len(frames)} frames  {path.stat().st_size // 1024} KB")
 
 
+def talk(stance="each_other"):
+    """previews/talk.gif: idling, the left arm talks, then the right answers; close-up of the talking head."""
+    import mouth
+    sc = show.Scene()
+    sc.m.vis.global_.offwidth, sc.m.vis.global_.offheight = W, H
+    big, small = mujoco.Renderer(sc.m, H, W), mujoco.Renderer(sc.m, 100, 150)
+    for s in show.SIDES:  # no props: the mouth is free
+        sc.m.geom_rgba[sc.m.geom(("l_" if s == "left" else "r_") + "prop").id] = 0
+    g = show.load(show.GESTURE_DIR / "idle_breathe.json")
+    traj = {s: g.samples(s, stance=stance)[0] for s in show.SIDES}
+    mo = {s: mouth.Mouth(seed=i) for i, s in enumerate(show.SIDES)}
+    script = [(0.5, None), (2.5, "left"), (0.6, None), (2.5, "right"), (0.8, None)]
+    frames, i = [], 0
+    for secs, who in script:
+        for s in show.SIDES:
+            mo[s].on = s == who
+        for k in range(int(secs * show.HZ)):
+            for s in show.SIDES:
+                gr, dq = mo[s].step(0.05)
+                sc.set(s, traj[s][i % len(traj[s])] + dq, gr)
+            i += 1
+            if k % int(show.HZ / FPS):
+                continue
+            mujoco.mj_forward(sc.m, sc.d)
+            big.update_scene(sc.d, camera="audience")
+            im = Image.fromarray(big.render())
+            if who:
+                cam = mujoco.MjvCamera()
+                cam.lookat[:] = sc.d.site_xpos[sc.site[who]]; cam.distance, cam.azimuth, cam.elevation = 0.3, 180, -10
+                small.update_scene(sc.d, camera=cam)
+                im.paste(Image.fromarray(small.render()), (W - 154, H - 118))
+            dr = ImageDraw.Draw(im)
+            dr.text((6, 4), f"/talk  {who + ' arm talking' if who else 'idle'}", fill=(255, 255, 255))
+            dr.text((6, H - 14), "right arm", fill=(200, 200, 200)); dr.text((W - 210, H - 14), "left arm", fill=(200, 200, 200))
+            frames.append(im.quantize(64, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE))
+    path = OUT / "talk.gif"
+    frames[0].save(path, save_all=True, append_images=frames[1:], duration=int(1000 / FPS), loop=0, optimize=True)
+    print(path, len(frames), "frames")
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
-    if a[:1] == ["--stance"]:
+    if a[:1] == ["--talk"]:
+        talk()
+    elif a[:1] == ["--stance"]:
         main(a[2:], a[1])
     else:
         main(a)

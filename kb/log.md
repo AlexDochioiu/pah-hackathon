@@ -62,3 +62,6 @@
   speech without the button gets no reaction; a held turn gets a story with gestures, the reply starting ~3.5 s after
   release. Gotcha: if the STT finalises while the button is still held, `commit_user_turn` waits for a second final
   until `transcript_timeout`, so it is 2.5 s (it was 13 s with 10 s).
+- New direction from the user: each arm is a puppet head (camera lenses = eyes, gripper = mouth). Step A, the
+  talking mouth: `POST /talk` overlay (3–5.5 Hz syllables, grip rate ≤ 3.5/s, small head bob), agent tag
+  `[talk:left] "..."` on until the closing quote. Sim-only; the gripper's real speed is untested.

@@ -123,3 +123,37 @@ def test_tags_first_moves_tags_to_sentence_start():
     text = "Hello there! [both:wave] He was terri" "fied of the dark! [left:shake_head] He hid [left:cower] under the bed. [next]"
     out = asyncio.run(run([text[i:i + 7] for i in range(0, len(text), 7)]))
     assert out == "[both:wave] Hello there! [left:shake_head] He was terrified of the dark! [left:cower] He hid under the bed. [next]", out
+
+
+def test_talk_tags_stay_put_and_mouth_follows_the_quote():
+    from gestures import tags_first
+
+    async def first(text):
+        async def src():
+            for i in range(0, len(text), 5):
+                yield text[i:i + 5]
+        return "".join([t async for t in tags_first(src())])
+
+    text = 'The dragon sighs. [talk:right] "I am so hungry!" [right:roar] The end.'
+    assert asyncio.run(first(text)) == 'The dragon sighs. [right:roar] [talk:right] "I am so hungry!" The end.'
+
+    talks, forwarded = [], []
+
+    class Collect:
+        async def capture_text(self, t):
+            forwarded.append(t)
+
+        def flush(self):
+            pass
+
+    sink = GestureSink(BOOK, lambda *a: None, lambda: None, next_in_chain=Collect(),
+                       on_talk=lambda arm, on: talks.append((arm, on)))
+
+    async def run():
+        for c in ['Then [talk:left] “Who', ' goes there?” she asks. [left:talk] "Me', 'ow', '!" [talk:right] "Hi']:
+            await sink.capture_text(c)
+        sink.flush()  # the reply ends (or is interrupted) mid-quote: the mouth shuts
+        await asyncio.sleep(0)
+    asyncio.run(run())
+    assert talks == [("left", True), ("left", False), ("left", True), ("left", False), ("right", True), ("right", False)]
+    assert "[" not in "".join(forwarded)

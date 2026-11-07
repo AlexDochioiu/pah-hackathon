@@ -25,6 +25,7 @@ SAFE_LO, SAFE_HI = LO + MARGIN, HI - MARGIN
 SAFE_LO[1:3] = -0.02
 VMAX = 1.5                                     # rad/s, any joint
 AMAX = np.array([8.0, 8.0, 8.0, 15.0, 15.0, 15.0])  # rad/s^2; the wrist joints carry little mass
+GRIP_VMAX = 3.5  # gripper (0..1) per s: the DM4310 (~21 rad/s) turns the 6.57 rad stroke in ~0.3 s; untested
 CLEAR = 0.04                                   # m every moving link, grasp site and prop tip stay above the table
 GAP = 0.15                                     # m the two arms (links + props) stay apart
 VOX = 0.01                                     # swept-volume voxel; the gap check subtracts its error (VOX*sqrt(3))
@@ -340,8 +341,11 @@ class Checker:
             self.swept[key(g.name, side, stance)] = sw
         if G is not None and (G.min() < -1e-6 or G.max() > 1 + 1e-6):
             probs.append("gripper outside 0..1")
-        v, a = peak_rates(g.samples("left")[0])
-        g.max_speed = float(min(1.5, VMAX / max(v.max(), 1e-6), np.sqrt(np.min(AMAX / np.maximum(a, 1e-6)))))
+        Q, G = g.samples("left")
+        v, a = peak_rates(Q)
+        gv = np.abs(np.diff(G)).max() * HZ if G is not None and len(G) > 1 else 0.0
+        g.max_speed = float(min(1.5, VMAX / max(v.max(), 1e-6), np.sqrt(np.min(AMAX / np.maximum(a, 1e-6))),
+                                GRIP_VMAX / max(gv, 1e-6)))
         return probs
 
     def pose_sweep(self, side, q):
