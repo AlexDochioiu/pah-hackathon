@@ -19,3 +19,8 @@ Pieces:
 4. **Props** built by hand by the team.
 
 Earlier ideas (Dial-a-Robot phone line, block castle by pick-and-place) are in [decisions.md](decisions.md).
+
+## Backlog (waiting for the user's go)
+- **VLA for props**: train a vision-language-action policy to recognise the 3D-printed props (hat, sword, steering
+  wheel, toy gun, …) and pick them up. Don't start until the user says so (asked Nov 7 evening). Starting points:
+  Dream-1 ([dream-1.md](dream-1.md)), camera↔arm calibration ([calibration.md](calibration.md)), `robot/pick.py`.
