@@ -3,7 +3,7 @@
     python3 fake_stage.py [--port 8770]
 
 Same API as the real stage server (robot/): GET /gestures, GET /state, POST /play {"arm","gesture","speed"},
-POST /freeze, /idle, /stage, /rest, /stance {"stance": "audience"|"each_other"}. Standard library only.
+GET /duets, POST /duet {"name","speed"}, POST /freeze, /idle, /stage, /rest, /stance {"stance": "audience"|"each_other"}. Standard library only.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ GESTURES = {
     "celebrate": 2.5, "cower": 2.0, "die_dramatically": 3.0, "gallop": 2.5, "roar": 2.0, "sneak": 2.5,
     "look_at_other": 1.5, "point_at_audience": 1.5, "gripper_clap": 1.5, "idle_breathe": 3.0,
 }
+DUETS = {"cross_swords": 9.3, "cheers": 9.7}
 T0 = time.monotonic()
 state = {"mode": "rest", "stance": "audience", "arms": {"left": None, "right": None}}  # arm -> {"gesture", "until"} while playing
 
@@ -41,6 +42,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/gestures":
             arms = ["left", "right", "both"]
             self._reply(200, [{"name": n, "duration_s": d, "arms": arms} for n, d in GESTURES.items()])
+        elif self.path == "/duets":
+            self._reply(200, [{"name": n, "duration_s": d} for n, d in DUETS.items()])
         elif self.path == "/state":
             now = time.monotonic()
             arms = {a: (g["gesture"] if g and g["until"] > now else None) for a, g in state["arms"].items()}
@@ -65,6 +68,16 @@ class Handler(BaseHTTPRequestHandler):
             state["mode"] = "playing"
             log(f"PLAY   {arm:>5}: {gesture} ({duration:.1f}s)")
             return self._reply(200, {"ok": True, "duration_s": duration})
+        if self.path == "/duet":
+            name = body.get("name")
+            if name not in DUETS:
+                log(f"REJECT duet {body}")
+                return self._reply(409, {"ok": False, "error": f"unknown duet: {body}"})
+            duration = DUETS[name] / float(body.get("speed") or 1.0)
+            for a in ("left", "right"):
+                state["arms"][a] = {"gesture": f"duet:{name}", "until": time.monotonic() + duration}
+            log(f"DUET   {name} ({duration:.1f}s)")
+            return self._reply(200, {"ok": True, "duet": name})
         if self.path == "/stance":
             if body.get("stance") not in ("audience", "each_other"):
                 log(f"REJECT stance {body}")

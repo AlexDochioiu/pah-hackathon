@@ -51,3 +51,6 @@
   j5 ±0.25) and solo gestures play relative to it; 16/17 pass the checker there (not `look_at_other`). Agent tag
   `[face:each_other]` / `[face:audience]`, prompt asks for it when two characters meet. Sim-only so far
   ([gestures.md](gestures.md#stances-facing-each-other)).
+- Duets, first two: `cross_swords` and `cheers` (prop to prop, 1.5–1.8 cm closest, final approach ≤ 4.3 cm/s),
+  `POST /duet`, `GET /duets`, agent tag `[duet:name]`. Hand-to-hand duets (high five, handshake) are infeasible with
+  15 cm props held. Sim-only so far ([gestures.md](gestures.md#duets-robotduetspy)).

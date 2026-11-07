@@ -17,6 +17,7 @@ async def test_stage_client_against_fake_stage(capsys):
     try:
         gestures = await stage.fetch_gestures()
         assert gestures and gestures["slash"] == 1.2
+        assert (await stage.fetch_duets())["cheers"] > 3
         stage.play("left", "slash", gestures["slash"])
         stage.send("/play", {"arm": "left", "gesture": "moonwalk"})  # rejected, logged, never raised
         await asyncio.sleep(0.3)
@@ -27,6 +28,14 @@ async def test_stage_client_against_fake_stage(capsys):
         await asyncio.sleep(0.3)
         state = json.load(urllib.request.urlopen(f"{url}/state"))
         assert state["stance"] == "each_other" and state["playing"]["right"] == "bow"
+        stage.busy_until = 0.0  # as if the bow had finished
+        stage.play("left", "nod", 0.2)
+        stage.play("duet", "cheers", 9.7)  # waits for the nod (0.2 s + margin) before it is sent
+        await asyncio.sleep(0.15)
+        assert json.load(urllib.request.urlopen(f"{url}/state"))["playing"]["right"] != "duet:cheers"
+        await asyncio.sleep(0.6)
+        state = json.load(urllib.request.urlopen(f"{url}/state"))
+        assert state["playing"]["left"] == state["playing"]["right"] == "duet:cheers"
         stage.freeze()
         stage.send("/idle")
         await asyncio.sleep(0.3)

@@ -3,7 +3,7 @@ works against the kinematic sim. Never touches hardware.  Run: python robot/chec
 """
 import json, threading, time, urllib.error, urllib.request
 import numpy as np
-import show, stage
+import duets, show, stage
 
 ck = show.Checker()
 ok, bad, unsafe = show.load_library(ck)
@@ -30,6 +30,18 @@ assert any("table" in p for p in ck.check(fake("dive", (0, [0] * 6), (3, [0, 1.3
 assert any("j4 reaches" in p for p in ck.check(fake("limit", (0, [0] * 6), (3, [0, 0, 0, 1.9, 0, 0]))))
 assert any("leans back" in p for p in ck.check(fake("lean", (0, [0] * 6), (3, [0, -0.3, 0.4, 0, 0, 0]))))
 print("checker rejects fast / table / limit / lean-back motions")
+
+# Duets: all pass; an undeclared close pair (< 15 cm) and a fast final approach (> 5 cm/s inside 5 cm) are refused.
+dc = duets.DuetChecker(ck)
+dok, dbad = duets.load_duets(dc)
+assert not dbad and {"cross_swords", "cheers"} <= set(dok), (sorted(dok), dbad)
+for d in dok.values():
+    assert d.max_speed <= 1 and min(d.stats["closest_contact_cm"].values()) > 0 and d.stats["closest_other_cm"] >= 15, d.stats
+base = duets.load(duets.DUET_DIR / "cross_swords.json").d
+assert any("not a declared contact" in p for p in dc.check(duets.Duet(dict(base, contact=[]))))
+fast = duets.Duet(dict(base, keys=[dict(k, t=k["t"] * 0.5) for k in base["keys"]]))
+assert any("closes at" in p for p in dc.check(fast)), dc.check(fast)
+print(f"{len(dok)} duets pass; undeclared contact and fast approach refused")
 
 st = stage.Stage(stage.KinArms(), "kin", warp=4)
 st.thread.start()
@@ -81,7 +93,7 @@ print("HTTP API ok: /gestures /stage /play /freeze /idle /grip, queue, refusals"
 
 assert call("/stance", {"stance": "sideways"})[0] == 409
 assert call("/stance", {"stance": "each_other"})[1]["stance"] == "each_other"
-st.wait()
+st.wait(); time.sleep(0.1)  # the next tick starts the breathing
 assert call("/state")[1]["arms"]["left"]["playing"] == "idle_breathe"  # idle arms keep breathing in the new stance
 assert call("/stage", {})[0] == 200
 st.wait()
@@ -98,6 +110,33 @@ st.wait()
 assert np.allclose(st.cmd_q["left"], show.stage_pose("left"))
 print("stances ok: /stance each_other and back, gestures play relative to it")
 
+assert {"cross_swords", "cheers"} <= {d["name"] for d in call("/duets")[1]}
+assert call("/stance", {"stance": "each_other"})[0] == 200  # a duet from the facing stance returns to it
+st.wait()
+assert call("/play", {"arm": "left", "gesture": "wave"})[0] == 200
+code, r = call("/duet", {"name": "cheers"})
+assert code == 409 and "free" in r["error"], r  # both arms must be free
+st.wait()
+assert call("/duet", {"name": "cheers"})[0] == 200
+time.sleep(0.2)
+assert call("/state")[1]["duet"] == "cheers"
+assert call("/play", {"arm": "right", "gesture": "nod"})[0] == 409  # nothing else while a duet plays
+st.wait()
+assert all(np.allclose(st.cmd_q[s], show.stage_pose(s, "each_other")) for s in show.SIDES)
+assert call("/duet", {"name": "cross_swords"})[0] == 200
+time.sleep(1.5)
+assert call("/freeze", {})[0] == 200  # both arms brake on the duet's path and hold
+time.sleep(0.3)
+q = {s: st.cmd_q[s].copy() for s in show.SIDES}; time.sleep(0.2)
+assert all(np.allclose(q[s], st.cmd_q[s]) for s in show.SIDES), "duet freeze did not hold"
+code, r = call("/idle", {})
+assert code == 409 and "finishing" in r["error"], r  # the next request first finishes the duet, slowly
+st.wait()
+assert all(np.allclose(st.cmd_q[s], show.stage_pose(s, "each_other")) for s in show.SIDES)
+assert call("/stance", {"stance": "audience"})[0] == 200
+st.wait()
+print("duets ok: /duets, /duet, both-arms-free and duet-playing refusals, freeze and finish")
+
 # Online arm-arm check: two poses that point the props at each other are refused together.
 with st.lock:
     clash = {s: st._pose_plan(s, "clash", show.stage_pose(s) + show.mirror([-0.9, 0.2, 0, 0, 0, 0], s), 1.0)
@@ -109,7 +148,9 @@ with st.lock:
         assert "from the" in str(e), e
 print("arm-to-arm clash refused")
 
+assert call("/duet", {"name": "cheers"})[0] == 200
+time.sleep(0.5)
 httpd.shutdown()
-stage.shutdown(st, lambda: None, None)
+stage.shutdown(st, lambda: None, None)  # mid-duet: the duet ends on its path, then the arms fold
 assert max(np.abs(st.cmd_q[s] - show.HOME[s]).max() for s in show.SIDES) < 1e-6, "not back at rest"
 print("shutdown returns to rest\nALL CHECKS PASSED")

@@ -40,7 +40,8 @@ logger = logging.getLogger("storyteller")
 
 
 def build_instructions(book: GestureBook) -> str:
-    return (HERE / "prompt.md").read_text().replace("{{GESTURES}}", book.describe())
+    return ((HERE / "prompt.md").read_text().replace("{{GESTURES}}", book.describe())
+            .replace("{{DUETS}}", book.describe_duets()))
 
 
 class Storyteller(Agent):
@@ -61,8 +62,8 @@ server = AgentServer()
 @server.rtc_session(agent_name="storyteller")
 async def entrypoint(ctx: JobContext) -> None:
     stage = Stage(STAGE_URL)
-    book = GestureBook(await stage.fetch_gestures() or DEFAULT_GESTURES)
-    logger.info("gestures: %s", ", ".join(book.names))
+    book = GestureBook(await stage.fetch_gestures() or DEFAULT_GESTURES, await stage.fetch_duets())
+    logger.info("gestures: %s; duets: %s", ", ".join(book.names), book.describe_duets())
 
     session = AgentSession(
         stt=inference.STT(model=STT_MODEL, language="en"),

@@ -16,6 +16,10 @@ API (JSON in and out; "arm" is left | right | both, default both):
   POST /freeze {"arm"}                 hold the current pose at once, drop queues
   POST /idle {"arm"}                   go to stage and breathe; gestures return to idle afterwards
   POST /stage {"arm","speed"}          go to the stage pose and hold
+  GET  /duets                          [{"name","duration_s","about","max_speed","closest_contact_cm"}]
+  POST /duet {"name","speed"}          a two-arm duet (the arms touch); needs both arms free, and while it plays
+                                       everything but /freeze is refused. /freeze stops both arms on the duet's
+                                       path; the next request then first finishes the duet at half speed (409)
   POST /stance {"stance","speed"}      "audience" (default) or "each_other": both arms turn to the stance pose and
                                        every gesture, idle and /stage play relative to it until the next /stance
   POST /rest {"arm","speed"}           fold back to rest and hold (motors stay on)
@@ -26,7 +30,7 @@ motion); a refused request returns 409 with the reason and nothing moves.
 import argparse, collections, json, signal, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import numpy as np
-import show
+import duets, show
 
 SIDES = show.SIDES
 REST_TOL = 0.25      # rad from home that counts as resting (same as lift.py)
@@ -82,9 +86,17 @@ def open_backend(real, backend):
     return KinArms(), None, "kin"
 
 
+def along(Q, u):
+    """Rows of Q at fractional indices u (linear in between): a path re-timed."""
+    i = np.clip(np.floor(u).astype(int), 0, len(Q) - 2)
+    f = (np.asarray(u) - i)[:, None]
+    return Q[i] * (1 - f) + Q[i + 1] * f
+
+
 class Plan:
-    def __init__(self, name, Q, G, sweep, gesture=None, loop=False, hold=False):
+    def __init__(self, name, Q, G, sweep, gesture=None, loop=False, hold=False, duet=None):
         self.name, self.Q, self.G, self.sweep, self.gesture, self.loop, self.hold = name, Q, G, sweep, gesture, loop, hold
+        self.duet = duet  # duet name: both arms' plans run in lockstep
         self.i, self.err = 0, 0.0
 
     @property
@@ -99,6 +111,8 @@ class Stage:
         self.lib, self.rejected, self.unsafe = show.load_library(self.ck, gesture_dir)
         if "idle_breathe" not in self.lib:
             raise SystemExit("idle_breathe is missing or rejected: the stage server needs it")
+        self.duets, self.duets_rejected = duets.load_duets(duets.DuetChecker(self.ck), verbose=False)
+        self.duet_left = None  # a duet frozen half-way: {"name", "Q": {side: path}, "G": {side: grips}}
         self.stance = "audience"
         self.lock = threading.RLock()
         q, g = arms.read()
@@ -188,8 +202,79 @@ class Stage:
             raise StageError(f"arm must be left, right or both, not {arm!r}")
         return [arm]
 
+    def _guard(self):
+        """Nothing else moves while a duet plays. A duet frozen half-way is finished first, slowly, on its path."""
+        p = self.plan["left"]
+        if p.duet and not p.done:
+            raise StageError(f"duet {p.duet} is playing ({(len(p.Q) - 1 - p.i) / show.HZ:.1f} s left); /freeze stops it")
+        if self.duet_left:
+            name = self.duet_left["name"]
+            self._finish_duet()
+            raise StageError(f"duet {name} was frozen half-way: finishing it at half speed first; try again after it")
+
+    def _finish_duet(self, rate=0.5):
+        left, self.duet_left = self.duet_left, None
+        n = len(left["Q"]["left"])
+        r = rate * np.minimum(1.0, np.arange(1, 4 * n) / (0.3 * show.HZ))  # samples per tick, eased in over 0.3 s
+        u = np.concatenate([[0.0], np.cumsum(r)])
+        u = np.append(u[u < n - 1], n - 1)
+        for s in SIDES:
+            Q = along(left["Q"][s], u)
+            self.plan[s] = Plan("duet", Q, np.interp(u, np.arange(n), left["G"][s]), self.ck.pose_sweep(s, Q[-1]),
+                                hold=True, duet=left["name"])
+
+    def play_duet(self, name, speed=1.0):
+        """Both arms: blend to the stage pose, the duet, blend back to the stance pose, in lockstep."""
+        with self.lock:
+            du = self.duets.get(name)
+            if du is None:
+                raise StageError(f"unknown duet {name!r}" + (f" (rejected: {self.duets_rejected[name]})"
+                                                              if name in self.duets_rejected else ""))
+            self._guard()
+            busy = [s for s in SIDES if not (self.plan[s].done or self.plan[s].loop) or self.queue[s]]
+            if busy:
+                raise StageError(f"duet {name} needs both arms free; {busy[0]} is playing {self.plan[busy[0]].name}")
+            speed = float(np.clip(speed, 0.1, du.max_speed))
+            smp = du.samples(speed)
+            parts = {}
+            for s in SIDES:
+                Q, G = smp[s]
+                G = np.full(len(Q), self.cmd_g[s]) if G is None else G
+                BQ, BG = show.blend(self.cmd_q[s], Q[0], speed, self.cmd_g[s], G[0])
+                OQ, OG = show.blend(Q[-1], show.stage_pose(s, self.stance), speed, G[-1], G[-1])
+                parts[s] = [(np.vstack([self.cmd_q[s][None], BQ]), np.concatenate([[self.cmd_g[s]], BG])), (Q[1:], G[1:]),
+                            (OQ, OG)]
+            # The duet itself passed DuetChecker; the blends in and out are checked like any move, both arms at once.
+            for k, before in ((0, None), (2, 1)):
+                sw = {}
+                for s in SIDES:
+                    Qk = parts[s][k][0] if before is None else np.vstack([smp[s][0][-1:], parts[s][k][0]])
+                    probs, sw[s] = self.ck.check_samples(s, Qk, fold=True)
+                    if probs:
+                        raise StageError(f"duet {name}: {s} {'into' if k == 0 else 'out of'} it: " + "; ".join(probs))
+                if show.gap(sw["left"], sw["right"]) < show.GAP:
+                    raise StageError(f"duet {name}: the arms would come within {show.GAP*100:.0f} cm "
+                                     f"{'on the way in' if k == 0 else 'on the way back'}")
+                n = max(len(parts[s][k][0]) for s in SIDES)  # the shorter blend waits: both start the duet together
+                for s in SIDES:
+                    Qk, Gk = parts[s][k]
+                    if len(Qk) < n:
+                        last = Qk[-1:] if len(Qk) else smp[s][0][-1:]
+                        lastg = Gk[-1:] if len(Gk) else smp[s][1][-1:] if smp[s][1] is not None else [self.cmd_g[s]]
+                        parts[s][k] = (np.vstack([Qk.reshape(-1, 6), np.repeat(last, n - len(Qk), 0)]),
+                                       np.concatenate([Gk, np.repeat(lastg, n - len(Gk))]))
+            for s in SIDES:
+                Q = np.vstack([q for q, _ in parts[s]]); G = np.concatenate([g for _, g in parts[s]])
+                # its sweep, for whatever the other arm does next, is where it ends: nothing else moves meanwhile
+                self.plan[s] = Plan(f"duet:{name}", Q, G, self.ck.pose_sweep(s, Q[-1]),
+                                    hold=self.after[s] != "idle", duet=name)
+                self.queue[s].clear(); self.last_error[s] = None
+            self.fault = None
+            return {"ok": True, "duet": name, "speed": round(speed, 2), "duration_s": round(len(Q) / show.HZ, 2)}
+
     def play(self, arm, gesture, speed=1.0, mode="now"):
         with self.lock:
+            self._guard()
             sides = self.sides(arm)
             if mode == "queue":
                 started = {}
@@ -210,6 +295,20 @@ class Stage:
 
     def freeze(self, arm=None):
         with self.lock:
+            p = self.plan["left"]
+            if p.duet and not p.done:  # both arms brake together on the duet's own (checked) path
+                k = np.arange(1, int(FREEZE_S * show.HZ) + 1)
+                u = np.minimum(p.i + np.cumsum(1 - k / (len(k) + 1)), len(p.Q) - 1)
+                self.duet_left = {"name": p.duet, "Q": {}, "G": {}}
+                for s in SIDES:
+                    ps = self.plan[s]
+                    Q = along(ps.Q, u)
+                    self.duet_left["Q"][s] = np.vstack([Q[-1:], ps.Q[int(np.ceil(u[-1])):]])
+                    self.duet_left["G"][s] = np.concatenate([[ps.G[int(u[-1])]], ps.G[int(np.ceil(u[-1])):]])
+                    self.plan[s] = Plan("freeze", np.vstack([self.cmd_q[s][None], Q]), np.full(len(Q) + 1, self.cmd_g[s]),
+                                        self.ck.pose_sweep(s, Q[-1]), hold=True, duet=p.duet)
+                    self.queue[s].clear(); self.after[s] = "hold"
+                return {"ok": True}
             for s in self.sides(arm):
                 self.queue[s].clear()
                 self.after[s] = "hold"
@@ -227,6 +326,7 @@ class Stage:
 
     def idle(self, arm=None):
         with self.lock:
+            self._guard()
             sides = self.sides(arm)
             plans = {s: self._gesture_plan(s, "idle_breathe", 1.0)[0] for s in sides}
             self._commit(plans)
@@ -236,6 +336,7 @@ class Stage:
 
     def go_stage(self, arm=None, speed=1.0):
         with self.lock:
+            self._guard()
             sides = self.sides(arm)
             self._commit({s: self._pose_plan(s, "stage", show.stage_pose(s, self.stance), speed) for s in sides})
             for s in sides:
@@ -245,6 +346,7 @@ class Stage:
     def set_stance(self, stance, speed=1.0):
         """Both arms turn to the stance pose; gestures, idle and /stage then play relative to it."""
         with self.lock:
+            self._guard()
             if stance not in show.STANCES:
                 raise StageError(f"stance must be one of {', '.join(show.STANCES)}, not {stance!r}")
             plans = {s: self._pose_plan(s, "stance", show.stage_pose(s, stance), speed) for s in SIDES}
@@ -258,6 +360,7 @@ class Stage:
 
     def go_rest(self, arm=None, speed=1.0):
         with self.lock:
+            self._guard()
             sides = self.sides(arm)
             self._commit({s: self._rest_plan(s, speed) for s in sides})
             for s in sides:
@@ -266,6 +369,7 @@ class Stage:
 
     def grip(self, arm=None, value=0.0):
         with self.lock:
+            self._guard()
             v = float(np.clip(value, 0, 1))
             plans = {}
             for s in self.sides(arm):
@@ -280,7 +384,7 @@ class Stage:
 
     def busy(self, sides=SIDES):
         with self.lock:
-            return any(not self.plan[s].done or self.queue[s] for s in sides)
+            return any(not self.plan[s].done or self.queue[s] for s in sides) or bool(self.duet_left)
 
     def wait(self, sides=SIDES, timeout=120):
         t0 = time.monotonic()
@@ -294,6 +398,8 @@ class Stage:
     def state(self):
         with self.lock:
             out = {"backend": self.backend, "fault": self.fault, "rejected": self.rejected, "stance": self.stance,
+                   "duet": self.plan["left"].duet if not self.plan["left"].done else None,
+                   "duet_frozen": self.duet_left["name"] if self.duet_left else None, "rejected_duets": self.duets_rejected,
                    "not_in_stance": {f"{n} ({st})": why for (n, st), why in self.ck.stance_rejected.items()},
                    "unsafe_pairs": sorted([list(p) for p in self.unsafe]), "arms": {}}
             for s in SIDES:
@@ -367,6 +473,14 @@ def shutdown(st, close, lock):
         if not st.thread.is_alive():
             raise StageError("control loop is not running: cannot return to rest; fold the arms by hand")
         st.fault, st.track_stop = None, float("inf")  # like home.py: keep driving to rest, never freeze mid-air
+        t0 = time.monotonic()
+        while st.thread.is_alive() and time.monotonic() - t0 < 30:  # a duet ends on its own path first: the arms
+            with st.lock:                                             # may be touching, so no straight homing
+                if st.duet_left:
+                    st._finish_duet()
+                if not st.plan["left"].duet or st.plan["left"].done:
+                    break
+            time.sleep(0.05)
         try:
             st.go_rest(speed=0.5)
         except StageError as e:  # ponytail: last resort, the same straight slow homing as home.py
@@ -443,6 +557,10 @@ def serve(st, port):
                      "hold": g.hold, "loop": g.loop, "max_speed": round(g.max_speed, 2), "uses_gripper": g.gt is not None,
                      "stances": sorted(g.stances)}
                     for g in st.lib.values()])
+            elif self.path == "/duets":
+                self._send(200, [{"name": d.name, "duration_s": round(d.duration, 2), "about": d.about,
+                                  "max_speed": round(d.max_speed, 2), "closest_contact_cm": d.stats["closest_contact_cm"]}
+                                 for d in st.duets.values()])
             elif self.path == "/state":
                 self._send(200, st.state())
             else:
@@ -458,6 +576,7 @@ def serve(st, port):
                     "/freeze": lambda: st.freeze(arm),
                     "/idle": lambda: st.idle(arm),
                     "/stage": lambda: st.go_stage(arm, float(b.get("speed", 1.0))),
+                    "/duet": lambda: st.play_duet(b["name"], float(b.get("speed", 1.0))),
                     "/stance": lambda: st.set_stance(b["stance"], float(b.get("speed", 1.0))),
                     "/rest": lambda: st.go_rest(arm, float(b.get("speed", 1.0))),
                     "/grip": lambda: st.grip(arm, float(b["value"])),

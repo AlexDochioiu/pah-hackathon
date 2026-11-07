@@ -31,6 +31,9 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 - `[face:each_other]` / `[face:audience]`: turn both actors toward each other or back to the audience
   (`POST /stance`); the prompt asks for each_other when the two arms play characters who meet or fight, and
   audience before the final bow. Stage requests go out in order, so `[face:audience] [both:bow]` turns, then bows.
+- `[duet:name]`: both arms play a two-arm duet (`POST /duet`), names from `GET /duets` (`{{DUETS}}` in the
+  prompt). The client holds the request until the gestures it already fired should be done (`busy_until` +
+  0.3 s), since the stage refuses a duet unless both arms are free; `/freeze` cancels a duet still waiting.
 - `[next]` at the end of a scene means "carry on". Once it has been spoken in full, the director waits
   `NEXT_SCENE_AFTER_S` (0.8 s) and asks for the next scene; the listener can jump in during that gap.
   No `[next]` means the agent waits for the listener (a question, or the end of the story).

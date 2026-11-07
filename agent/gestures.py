@@ -3,7 +3,8 @@ when the spoken words reach them.
 
 The LLM writes `[left:slash]`, `[right:cower]`, `[both:bow]` inline, plus `[next]` at the end of a scene
 it wants to carry on from, and `[face:each_other]` / `[face:audience]` to turn the two actors toward each other
-or back to the audience (the stage server's /stance; gestures then play facing that way). Tags flow through the reply untouched except for two places:
+or back to the audience (the stage server's /stance; gestures then play facing that way), and `[duet:cheers]` for
+a two-arm duet (the stage server's /duet: both arms together, they touch). Tags flow through the reply untouched except for two places:
 
 - `strip_tags_for_tts`, a TTS text transform: the voice never sees a tag.
 - `GestureSync`, a TranscriptSynchronizer wrapped around the session's outputs: it releases the reply's
@@ -45,6 +46,8 @@ SYNONYMS = {
     "idle": "idle_breathe", "curtsy": "bow",
 }
 CONTINUE_TAG = "next"
+DUET_TAG = "duet"  # [duet:cross_swords] -> POST /duet
+DUET_MARGIN_S = 0.3  # the stage's blend into a gesture makes it a bit longer than its duration
 FACE_TAG = "face"  # [face:each_other] / [face:audience] -> POST /stance
 FACINGS = {"each_other": "each_other", "other": "each_other", "eachother": "each_other", "together": "each_other",
            "audience": "audience", "front": "audience", "us": "audience", "out": "audience", "forward": "audience"}
@@ -175,8 +178,17 @@ def hyphenate_without_tags(word: str) -> list[str]:
 class GestureBook:
     """The gestures the stage knows, and mapping of whatever the LLM wrote onto them."""
 
-    def __init__(self, gestures: dict[str, float]) -> None:
+    def __init__(self, gestures: dict[str, float], duets: dict[str, float] | None = None) -> None:
         self.durations = dict(gestures)
+        self.duets = dict(duets or {})  # name -> seconds
+
+    def resolve_duet(self, name: str) -> str | None:
+        name = re.sub(r"[\s-]+", "_", name.strip().lower())
+        close = difflib.get_close_matches(name, list(self.duets), n=1, cutoff=0.6)
+        return name if name in self.duets else close[0] if close else None
+
+    def describe_duets(self) -> str:
+        return ", ".join(f"{n} ({d:.1f}s)" for n, d in self.duets.items()) or "none today"
 
     @property
     def names(self) -> list[str]:
@@ -211,6 +223,7 @@ class Stage:
         self.url = url.rstrip("/")
         self._http: aiohttp.ClientSession | None = None
         self._tasks: set[asyncio.Task] = set()
+        self._pending: asyncio.Task | None = None  # a duet waiting for the arms to be free
         self._order = asyncio.Lock()  # requests reach the stage in the order sent ([face:...] then [both:bow])
         self.busy_until = 0.0  # monotonic time the last fired gesture should be done
 
@@ -230,7 +243,18 @@ class Stage:
             logger.warning("stage server at %s unreachable (%s); using the default gesture list", self.url, e)
             return None
 
-    async def _post(self, path: str, body: dict | None = None) -> None:
+    async def fetch_duets(self) -> dict[str, float]:
+        try:
+            async with self._session().get(f"{self.url}/duets") as resp:
+                resp.raise_for_status()
+                return {d["name"]: float(d.get("duration_s") or 8.0) for d in await resp.json() if d.get("name")}
+        except Exception as e:  # noqa: BLE001 - no duets then
+            logger.warning("no duets from the stage server (%s)", e)
+            return {}
+
+    async def _post(self, path: str, body: dict | None = None, delay: float = 0.0) -> None:
+        if delay:
+            await asyncio.sleep(delay)
         try:
             async with self._order, self._session().post(f"{self.url}{path}", json=body or {}) as resp:
                 if resp.status >= 400:
@@ -238,13 +262,20 @@ class Stage:
         except Exception as e:  # noqa: BLE001
             logger.warning("stage %s failed: %s", path, e)
 
-    def send(self, path: str, body: dict | None = None) -> None:
-        task = asyncio.create_task(self._post(path, body))
+    def send(self, path: str, body: dict | None = None, delay: float = 0.0) -> asyncio.Task:
+        task = asyncio.create_task(self._post(path, body, delay))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+        return task
 
     def play(self, arm: str, gesture: str, duration_s: float, speed: float = 1.0) -> None:
         logger.info("gesture %s:%s", arm, gesture)
+        if arm == DUET_TAG:  # needs both arms free: let the gestures already fired finish first
+            now = time.monotonic()
+            wait = self.busy_until + DUET_MARGIN_S - now if self.busy_until > now else 0.0
+            self.busy_until = now + wait + duration_s / speed
+            self._pending = self.send("/duet", {"name": gesture, "speed": speed}, delay=wait)
+            return
         self.busy_until = max(self.busy_until, time.monotonic() + duration_s / speed)
         self.send("/play", {"arm": arm, "gesture": gesture, "speed": speed})
 
@@ -254,6 +285,8 @@ class Stage:
 
     def freeze(self) -> None:
         self.busy_until = 0.0
+        if self._pending:  # the listener interrupted: a duet still waiting never starts
+            self._pending.cancel()
         self.send("/freeze")
 
     async def aclose(self) -> None:
@@ -293,6 +326,11 @@ class GestureSink(io.TextOutput):
                     self._on_face(facing)
                 else:
                     logger.info("dropped %s", p.raw)
+            elif p.arm == DUET_TAG:
+                if name := self._book.resolve_duet(p.name):
+                    self._play(DUET_TAG, name, self._book.duets[name])
+                else:
+                    logger.info("dropped %s: unknown duet", p.raw)
             elif p.arm not in ARMS:
                 logger.info("dropped %s: unknown arm", p.raw)
             elif (name := self._book.resolve(p.name)) is None:

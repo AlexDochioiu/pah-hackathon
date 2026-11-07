@@ -15,6 +15,10 @@ sim on the station), then run on the real arms (results at the end).
 | `robot/bringup.sh` | One-command bring-up: `home.py` then `stage.py --bringup`. |
 | `robot/record.py` | Record a new gesture by moving a floating arm by hand. |
 | `robot/preview.py` | Renders `robot/previews/<name>.gif` from the audience side. |
+| `robot/duets.py` | Duet format, two-arm contact checker (`DuetChecker`), loader. `python duets.py` prints stats. |
+| `robot/duets/*.json` | The duets. |
+| `robot/make_duets.py` | Builds the duets from Cartesian targets (IK) and checks them. |
+| `robot/preview_duets.py` | Renders `robot/previews/duet_<name>.gif` with a close-up inset and the live gap. |
 | `robot/check_gestures.py` | Assert-based self-check (library, checker, HTTP API in sim). |
 
 ## Frames and poses
@@ -138,6 +142,36 @@ from the other arm, and they already look at each other). `stage`/`rest` always 
 props point at each other, so two big moves at once come too close. Larger yaws were tried: j1 −0.35 or j5 +0.55
 lose most gestures to the 15 cm gap. The agent uses `[face:each_other]` / `[face:audience]` tags
 ([storyteller.md](storyteller.md)). Bring-up adds a turn to `each_other` and back at 30 %.
+
+## Duets (`robot/duets.py`)
+Two-arm moves where the arms come close and touch, with synchronized keyframes for both arms (absolute joints,
+solved by IK at build time). They start and end at the audience stage pose; the server blends in from wherever the
+arms are and back to the current stance pose. Format: `{"name","about","contact":[{"left":[parts],"right":[parts],
+"min":m}],"keys":[{"t","left":[6],"right":[6],"gl","gr"}]}`; parts are `prop`, `fingers`, `gripper`, `wrist`
+(link4+link5). `DuetChecker` checks every 50 Hz frame with both arms at the same instant, with exact
+geom-to-geom distances (`mj_geomDistance`, meshes as convex hulls):
+- each arm passes the usual per-arm rules (limits, speed/accel, table clearance with the prop, lean-back);
+- a declared contact pair stays ≥ its `min` (> 0, never interpenetrating in sim);
+- every other pair of geoms stays ≥ 15 cm (the arm links, link2/link3, can never be contact parts);
+- slow final approach: inside 5 cm a contact pair closes at ≤ 5 cm/s.
+Deviation from the first brief: "contact" may involve the hand parts (fingers, gripper, wrist), not only the props,
+each pair with its own minimum. Hand-to-hand contact (high five, handshake) turned out infeasible with 15 cm props
+held: keeping link3 15 cm apart needs the hands angled in, and then the props cross. So duets touch prop to prop
+(or prop to hand).
+
+| Duet | s | Closest contact | Others | Fastest close (inside 5 cm) |
+|---|---|---|---|---|
+| `cross_swords`: en garde, wind up, swing; the blades lock in an X, shove left and right, spring apart | 9.3 | prop×prop 1.8 cm | 20 cm | 4.3 cm/s |
+| `cheers`: raise, lift, swing in, clink the tips, glasses up high | 9.7 | prop×prop 1.5 cm | 16 cm | 4.3 cm/s |
+
+Server: `GET /duets`, `POST /duet {"name","speed"}` (speed ≤ 1). Refused (409) unless both arms are free (holding
+or idling); while a duet plays everything except `/freeze` is refused. `/freeze` brakes both arms over 0.15 s on the
+duet's own path and holds; the next request then first finishes the duet at half speed on its path (and gets a
+409), since the arms may be touching. Shutdown (Ctrl-C) finishes a duet the same way before folding to rest.
+Agent tag `[duet:name]` ([storyteller.md](storyteller.md)). Real-arm limits: about 1–2 cm of sag and calibration
+error, so contacts at 1.5 cm may touch or miss; the slow approach keeps a touch gentle; fingers close on the 3 cm
+prop at grip 0.31 (`G_ON_PROP`). Rebuild with `make_duets.py`, check with `duets.py`, render with
+`preview_duets.py`.
 
 ## Bring-up (first real run)
 `bash ~/dial/bringup.sh --real` on the station, props removed, someone at the e-stop. It runs `home.py`, then

@@ -35,6 +35,11 @@ fight each other, turn them toward each other with `[face:each_other]` as that s
 then aim at each other (a slash is a slash AT the other one). Turn them back with `[face:audience]` when the
 story talks to the audience again, and always before the final bow. Facing each other, skip look_at_other.
 
+Duets: `[duet:name]` makes BOTH arms act one move together, where they touch (swords clash, glasses clink).
+Use one at the big moment of a scene, at most one per scene, with the narration describing it while it plays.
+Both arms must be free: give no other tag in that sentence, nor in the next sentence or two (a duet is long; its
+seconds are in parentheses). Duets the arms know: {{DUETS}}
+
 # The show
 
 1. Opening: greet the listener in one or two lines and ask what story they want to hear. If they hesitate,
