@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ArmChair Theatre: two robot arms act out any story you ask for</title>
+<meta name="description" content="Ask for any story out loud. An AI narrator improvises it live while two robot arms act it out with tiny props. Heckle anytime and the story bends. Made at MakerMods Physical AI Hacks with LiveKit.">
+<meta name="theme-color" content="#4a0610">
+<!-- Open Graph / X cards. When hosted, make og:image and og:url absolute (https://your.site/v1/og-image.png). -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ArmChair Theatre">
+<meta property="og:title" content="ArmChair Theatre: robot arms that act out any story you ask for">
+<meta property="og:description" content="Say “a knight who’s afraid of the dark”. An AI improvises the tale out loud while two robot arms perform it with a foam sword. Shout “make the dragon friendly!” and the story bends.">
+<meta property="og:image" content="og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Two robot arms on a tiny red-curtained stage, one holding a foam sword, under a spotlight.">
+<meta property="og:url" content="https://example.com/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ArmChair Theatre: robot arms that act out any story you ask for">
+<meta name="twitter:description" content="An AI narrator improvises any story live. Two robot arms act it out. Heckle anytime. Made at MakerMods Physical AI Hacks with LiveKit.">
+<meta name="twitter:image" content="og-image.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%237d0f1e'/%3E%3Cpath d='M14 50 L50 14' stroke='%23e2b04a' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M18 38 l8 8' stroke='%23e2b04a' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=IM+Fell+English:ital@0;1&family=Playfair+Display:ital,wght@0,600;0,800;0,900;1,700;1,900&family=Playfair+Display+SC:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="design.css">
+<style>
+/* page layout only; all look & feel lives in design.css */
+.hero{min-height:100svh;padding:94px 0 32px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.hero__inner{position:relative;z-index:3;width:min(1080px,84vw);display:flex;flex-direction:column;align-items:center;text-align:center}
+.hero .lede{max-width:56ch;margin:.55rem auto 1rem}
+.hero .stage{width:min(860px,100%,calc((100svh - 510px) * 1.78));min-width:min(100%,420px)}
+.row{display:flex;gap:.8rem;flex-wrap:wrap;justify-content:center}
+.acts{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem}
+.acts .card:nth-child(2){transition-delay:.12s}.acts .card:nth-child(3){transition-delay:.24s}
+.encore{max-width:760px;margin:2rem auto 0;display:flex;gap:1.2rem;align-items:center;text-align:left;padding:1.3rem 1.6rem}
+.encore .card__title{margin:0;white-space:nowrap;font-family:var(--font-display);font-style:italic;font-size:1.35rem;letter-spacing:0}
+.tickets{display:grid;grid-template-columns:1.25fr 1fr;gap:1.6rem;max-width:1000px;margin:0 auto}
+.suggest{display:flex;flex-wrap:wrap;gap:.6rem;align-content:start}
+.suggest > *{width:100%}.suggest .field,.suggest .btn{width:auto}
+footer{text-align:center;padding:2.2rem 1rem;font-size:var(--fs-small);color:#cdb98f}
+footer a{color:var(--gilt-light)}
+@media (max-width:860px){.acts,.tickets{grid-template-columns:1fr}.encore{flex-direction:column;text-align:center}.hero__inner{width:90vw}}
+@media (max-width:560px){.hero{padding-top:84px}.hero .stage{width:100%;min-width:0}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero theatre surface-night" id="top">
+  <div class="valance" aria-hidden="true"></div>
+  <div class="curtain curtain--l" aria-hidden="true"></div>
+  <div class="curtain curtain--r" aria-hidden="true"></div>
+  <div class="hero__inner">
+    <p class="eyebrow enter enter--2">Now playing · Improvised nightly</p>
+    <h1 class="display enter enter--2">ArmChair <em>Theatre</em></h1>
+    <p class="lede enter enter--3">Ask for any story. An AI narrator makes it up out loud while two robot arms act it out, and you’re allowed to heckle.</p>
+    <div class="stage enter enter--1" data-stage></div>
+    <div class="row enter enter--4">
+      <a class="btn btn--primary" href="#premiere">▶ Watch the premiere</a>
+      <a class="btn btn--ghost" href="#tickets">Follow the troupe</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="section surface-paper" id="how">
+    <div class="wrap">
+      <header class="section-head">
+        <span class="fleuron" aria-hidden="true">❦</span>
+        <p class="eyebrow">The Programme</p>
+        <h2>A play in <em>three acts</em></h2>
+        <p class="lede">No script, no rehearsal, no two shows alike. Here’s how a performance unfolds.</p>
+      </header>
+      <div class="acts">
+        <article class="card reveal">
+          <svg class="card__icon" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="38" fill="#7d0f1e"/><rect x="32" y="18" width="16" height="28" rx="8" fill="#f6d98a"/><path d="M24 40 a16 16 0 0 0 32 0 M40 56 v8 M30 64 h20" stroke="#f6d98a" stroke-width="4" fill="none" stroke-linecap="round"/></svg>
+          <div class="card__num">I.</div>
+          <h3 class="card__title">You ask</h3>
+          <p>Say any story out loud: “a knight who’s afraid of the dark”, “pirates on Mars”. No menu, no buttons, just your voice.</p>
+        </article>
+        <article class="card reveal">
+          <svg class="card__icon" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="38" fill="#7d0f1e"/><path d="M20 24 h40 M20 34 h34 M20 44 h38 M20 54 h22" stroke="#f6d98a" stroke-width="4" stroke-linecap="round"/><path d="M52 50 l10 -16 4 3 -10 16 -6 3z" fill="#fff3d6"/></svg>
+          <div class="card__num">II.</div>
+          <h3 class="card__title">It improvises</h3>
+          <p>An AI narrator, running on LiveKit’s real-time voice agents, invents the tale on the spot and tells it aloud, beat by beat.</p>
+        </article>
+        <article class="card reveal">
+          <svg class="card__icon" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="38" fill="#7d0f1e"/><path d="M22 64 v-14 l10 -14 10 4" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M58 64 v-14 l-10 -14 -10 4" stroke="#2a140c" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M42 40 l12 -22" stroke="#f6d98a" stroke-width="3" stroke-linecap="round"/></svg>
+          <div class="card__num">III.</div>
+          <h3 class="card__title">The arms perform</h3>
+          <p>Two 6-axis robot arms, one white and one black, act it out with props in their grippers: foam sword, shield, flag, crown.</p>
+        </article>
+      </div>
+      <div class="card card--velvet encore reveal">
+        <h3 class="card__title">Heckle anytime.</h3>
+        <p>Shout “make the dragon friendly!” mid-scene. The arms freeze, react, and the story bends around your idea, live.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section surface-night" id="premiere">
+    <div class="wrap">
+      <header class="section-head">
+        <span class="fleuron" aria-hidden="true">❦</span>
+        <p class="eyebrow">The Premiere</p>
+        <h2>See the <em>first performance</em></h2>
+        <p class="lede">Filmed live at the station. One take, zero rehearsals, one dragon of questionable temperament.</p>
+      </header>
+      <!-- Swap in the demo: set data-youtube="VIDEO_ID" or data-mp4="demo.mp4" -->
+      <div class="video reveal" id="video" data-youtube="" data-mp4="">
+        <button class="video__play" type="button" aria-label="Play the demo video"><span class="video__disc" aria-hidden="true"><svg width="34" height="34" viewBox="0 0 34 34"><path d="M10 6 L29 17 L10 28Z" fill="#3a1a05"/></svg></span><span>Watch the premiere</span><span class="video__note" id="video-note">Curtain up Sunday 8 Nov, 15:00 PT</span></button>
+      </div>
+    </div>
+  </section>
+
+  <div class="credits" role="note">
+    <div class="credits__row">
+      <span>Made at <b>MakerMods Physical AI Hacks</b></span><span class="credits__star" aria-hidden="true">✦</span>
+      <span>Voices by <b>LiveKit</b></span><span class="credits__star" aria-hidden="true">✦</span>
+      <span>Arms: <b>2× i2rt YAM</b></span><span class="credits__star" aria-hidden="true">✦</span>
+      <span>Founders Inc · San Francisco</span><span class="credits__star" aria-hidden="true">✦</span>
+      <span>With thanks to MakerMods, Dream Labs &amp; LiveKit</span>
+    </div>
+  </div>
+
+  <section class="section surface-paper" id="company">
+    <div class="wrap">
+      <header class="section-head">
+        <span class="fleuron" aria-hidden="true">❦</span>
+        <p class="eyebrow">The Company</p>
+        <h2>Cast &amp; <em>crew</em></h2>
+        <p class="lede">In order of appearance.</p>
+      </header>
+      <ul class="cast reveal">
+        <li class="cast__robot"><span class="cast__name">Arm L (white)</span><span class="cast__dots"></span><span class="cast__role">the hero, usually</span></li>
+        <li class="cast__robot"><span class="cast__name">Arm R (black)</span><span class="cast__dots"></span><span class="cast__role">the dragon, reluctantly</span></li>
+        <li><span class="cast__name">Team Member One</span><span class="cast__dots"></span><span class="cast__role">Director of Arms</span> <a href="#">@handle</a></li>
+        <li><span class="cast__name">Team Member Two</span><span class="cast__dots"></span><span class="cast__role">Voice &amp; Story</span> <a href="#">@handle</a></li>
+        <li><span class="cast__name">Team Member Three</span><span class="cast__dots"></span><span class="cast__role">Props &amp; Stagecraft</span> <a href="#">@handle</a></li>
+        <li><span class="cast__name">The Audience</span><span class="cast__dots"></span><span class="cast__role">Hecklers in chief</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section surface-paper" id="tickets" style="padding-top:0">
+    <div class="tickets">
+      <div class="ticket reveal">
+        <span class="ticket__admit">Admit one · Front row</span>
+        <h3 class="ticket__title">Catch the show</h3>
+        <p>Watch the demo, then follow along as the troupe learns new tricks.</p>
+        <div class="row" style="justify-content:flex-start">
+          <a class="btn btn--primary" href="#premiere">▶ Watch the demo</a>
+          <a class="btn btn--secondary" href="#">Follow on X</a>
+          <a class="btn btn--ghost" href="#">GitHub</a>
+        </div>
+      </div>
+      <form class="ticket suggest reveal" id="suggest">
+        <span class="ticket__admit">Request a story</span>
+        <h3 class="ticket__title">What should we perform next?</h3>
+        <label class="sr-only" for="idea">Your story premise</label>
+        <input class="field" id="idea" name="idea" placeholder="a heist at the cheese museum" maxlength="120" autocomplete="off">
+        <button class="btn btn--primary" type="submit">Send to the stage</button>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="surface-night">
+  <p>ArmChair Theatre · built in one weekend, Nov 7–8 2026 · <a href="#top">Back to the stage ↑</a></p>
+  <p style="margin:0;opacity:.8">No foam swords were harmed in the making of this show.</p>
+</footer>
+
+<script src="stage.js"></script>
+<script>
+(() => {
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches, $ = s => document.querySelector(s);
+const hero = $('.theatre'); RM ? hero.classList.add('is-open') : setTimeout(() => hero.classList.add('is-open'), 350);
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); } }), { threshold: .15 });
+document.querySelectorAll('.reveal').forEach(n => RM ? n.classList.add('is-in') : io.observe(n));
+const v = $('#video');
+v.querySelector('.video__play').addEventListener('click', () => {
+  const yt = v.dataset.youtube, mp4 = v.dataset.mp4;
+  if (yt) v.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(yt)}?autoplay=1&rel=0" title="ArmChair Theatre demo" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+  else if (mp4) v.innerHTML = `<video src="${mp4}" controls autoplay playsinline></video>`;
+  else $('#video-note').textContent = 'The premiere drops Sunday 15:00 PT. Check back soon!';
+});
+$('#suggest').addEventListener('submit', e => {
+  e.preventDefault();
+  const idea = $('#idea').value.trim() || $('#idea').placeholder;
+  const text = `Dear ArmChair Theatre, please perform: “${idea}” 🎭🤖 #ArmChairTheatre #PhysicalAIHacks`;
+  const url = location.href.startsWith('http') ? location.href.split('#')[0] : 'https://example.com/';
+  open('https://x.com/intent/post?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url), '_blank', 'noopener');
+});
+})();
+</script>
+</body>
+</html>

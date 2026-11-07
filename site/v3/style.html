@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sword &amp; Servo · Design language v3 “Tungsten &amp; Rim”</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="design.css">
+<script>if (/[?&]card\b/.test(location.search)) document.documentElement.classList.add('card-only');</script>
+<style>
+/* sheet layout only */
+body{padding:26px 30px 36px}
+.sheet-head{display:flex;align-items:baseline;gap:1.2rem;flex-wrap:wrap;margin-bottom:18px}
+.sheet-head h1{font-family:var(--font-title);font-weight:400;font-size:2.4rem;line-height:1;margin:0}
+.sheet-head h1 em{color:var(--tungsten)}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.panel{background:var(--coal);border:1px solid var(--smoke);border-radius:var(--r-sm);padding:16px;min-width:0}
+.panel > h2{font:500 .64rem/1 var(--font-mono);letter-spacing:.2em;text-transform:uppercase;color:var(--tungsten);margin:0 0 14px}
+.span2{grid-column:span 2}
+.swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.sw{border:1px solid var(--smoke);border-radius:var(--r-xs);overflow:hidden;background:var(--void)}
+.sw i{display:block;height:40px}
+.sw span{display:block;padding:5px 7px 0;font:600 .72rem/1.2 var(--font-ui);color:var(--bone)}
+.sw code{display:block;padding:2px 7px 6px;font:400 .62rem/1.35 var(--font-mono);color:var(--ash)}
+.type > div{margin-bottom:10px}
+.type small{display:block;margin-top:3px;font:400 .6rem/1.3 var(--font-mono);color:var(--ash);letter-spacing:.02em;text-transform:none}
+.stack{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.stack .btn{padding:.8rem 1.05rem;font-size:.7rem}
+.cap{width:100%;font:400 .6rem/1 var(--font-mono);color:var(--ash);margin:0 0 8px}
+.mini .card{padding:1.1rem 1.1rem 1.2rem}
+.mini .card__num{font-size:3rem;margin-top:.7rem}
+.mini .card__title{font-size:1.4rem}
+.mini .card p{font-size:.86rem}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* social card 1200x630 */
+.social-row{display:flex;gap:24px;align-items:flex-start}
+.social-notes{flex:1;min-width:0;font:400 .78rem/1.7 var(--font-mono);color:var(--ash)}
+.social-notes b{color:var(--bone);font-weight:500}
+.social-scale{flex:none;width:600px;height:315px;overflow:hidden;border-radius:var(--r-xs);box-shadow:0 0 0 1px var(--smoke)}
+.social-scale .social{transform:scale(.5);transform-origin:0 0}
+.social{--bar:46px;width:1200px;height:630px;position:relative;overflow:hidden;display:grid;grid-template-columns:420px 1fr;gap:40px;align-items:center;padding:calc(var(--bar) + 30px) 48px calc(var(--bar) + 30px) 56px}
+.social .letterbox__bar{transform:none;font-size:.78rem}
+.social__grain{position:absolute;inset:0;background:var(--grain);opacity:.07;pointer-events:none;z-index:9}
+.social__copy{position:relative;z-index:2;display:flex;flex-direction:column;gap:22px;align-items:flex-start}
+.social .hero-title{font-size:120px}
+.social .lede{font-size:22px;color:var(--bone)}
+.social .stage{position:relative;z-index:2}
+.social .stage__hud{font-size:.72rem}
+.social .stage__alert{font-size:.9rem}
+html.card-only body{padding:0;margin:0;overflow:hidden}
+</style>
+</head>
+<body class="surface-void">
+<header class="sheet-head">
+  <h1>Sword <em>&amp;</em> Servo · <em>Tungsten &amp; Rim</em></h1>
+  <p class="lede" style="max-width:none">Design language v3: a dark cinematic trailer. Near-black frames, film grain, letterbox bars, warm key light against a cold rim, editorial serif and screenplay mono.</p>
+</header>
+
+<div class="grid">
+  <section class="panel" aria-label="Palette">
+    <h2>Palette</h2>
+    <div class="swatches" id="swatches"></div>
+  </section>
+
+  <section class="panel type" aria-label="Type scale">
+    <h2>Type scale</h2>
+    <div><div class="hero-title" style="font-size:4.4rem">Sword <em>&amp;</em> Servo</div><small>Hero · Instrument Serif 400 + italic accent · clamp(3.6rem, 8.6vw, 8.4rem) · −0.025em</small></div>
+    <div class="section-head" style="margin:0 0 10px"><h2 style="font-size:2.4rem;margin:0">Three scenes. <em>Zero rehearsals.</em></h2><small>H2 · Instrument Serif · clamp(2.5rem, 5vw, 4.4rem)</small></div>
+    <div><div class="card__title" style="margin:0">It improvises</div><small>H3 / card title · Instrument Serif · 1.75rem</small></div>
+    <div><ul class="titlecards is-in" style="font-size:1.25rem;align-items:flex-start"><li>Two arms. One voice.</li></ul><small>Title card · Inter Tight 600 · uppercase · tracking .32em</small></div>
+    <div><p class="lede">Ask for any story. <strong>Two robot arms act it out.</strong></p><small>Lede / UI · Inter Tight 400–600 · 1.05–1.22rem</small></div>
+    <div><p style="margin:0;font:400 var(--fs-mono)/1.6 var(--font-mono)">Out of the fog rises a dragon.<span class="caret"></span></p><small>Screenplay · IBM Plex Mono 400 · .92rem</small></div>
+    <div><p class="label label--tungsten">01 / How it works</p><small>Label · IBM Plex Mono 500 · .7rem · uppercase · tracking .2em</small></div>
+  </section>
+
+  <section class="panel" aria-label="Buttons, chips, field">
+    <h2>Buttons · chips · field · slate</h2>
+    <p class="cap">primary / secondary / ghost: default · hover · focus · disabled</p>
+    <div class="stack"><a class="btn btn--primary" href="#">▶ Watch</a><a class="btn btn--primary is-hover" href="#">Hover</a><a class="btn btn--primary is-focus" href="#">Focus</a><button class="btn btn--primary" disabled>Disabled</button></div>
+    <div class="stack"><a class="btn btn--secondary" href="#">Follow on X</a><a class="btn btn--secondary is-hover" href="#">Hover</a><a class="btn btn--secondary is-focus" href="#">Focus</a><button class="btn btn--secondary" disabled>Disabled</button></div>
+    <div class="stack"><a class="btn btn--ghost" href="#">GitHub</a><a class="btn btn--ghost is-hover" href="#">Hover</a><a class="btn btn--ghost is-focus" href="#">Focus</a><button class="btn btn--ghost" disabled>Disabled</button></div>
+    <div class="stack"><span class="chip">2× YAM arms</span><span class="chip chip--rim">LiveKit voice</span><span class="chip chip--tungsten">Premiere 15:00</span><span class="chip chip--live">Live</span><span class="chip chip--alarm">● Interrupt</span></div>
+    <div class="stack"><input class="field" placeholder="Pitch the sequel…" aria-label="Sample field"><input class="field is-focus" value="a heist at the royal museum" aria-label="Sample focused field"></div>
+    <div class="stack"><span class="slate"><span>SC 01</span><span>TK 03</span></span><span class="slate slate--dark"><span>SC 02</span><span>INT. The narrator</span></span></div>
+    <div class="wave" aria-hidden="true" id="demo-wave" style="height:28px"></div>
+  </section>
+
+  <section class="panel mini" aria-label="Cards">
+    <h2>Cards (scenes)</h2>
+    <div class="two">
+      <article class="card"><span class="slate slate--dark"><span>SC 02</span><span>INT.</span></span><div class="card__num">02</div><h3 class="card__title">It improvises</h3><p>A voice agent invents the tale, beat by beat.</p></article>
+      <article class="card is-hover"><span class="slate slate--dark"><span>SC 03</span><span>Hover</span></span><div class="card__num">03</div><h3 class="card__title">The arms act</h3><p>Sword, shield, flag, crown.</p></article>
+    </div>
+    <div class="card card--alarm" style="margin-top:10px;padding:1rem 1.1rem"><span class="chip chip--alarm">● Interrupt anytime</span><p style="margin-top:.6rem;font-size:.86rem">The arms freeze and the last line rewrites itself.</p></div>
+  </section>
+
+  <section class="panel" aria-label="Snippets and headings">
+    <h2>Story snippet · quote · section head</h2>
+    <div class="section-head" style="margin:0 0 14px"><p class="label label--tungsten section-head__index">03 / Credits</p><h2 style="font-size:2.2rem;margin:0">The <em>company.</em></h2></div>
+    <div class="snippet" style="margin-bottom:14px">
+      <p class="snippet__line"><span class="snippet__who">Audience ▸</span>“a knight duels a dragon at midnight”</p>
+      <p class="snippet__line">Steel meets scale. She lunges… and the dragon catches the blade, gently, and bows.<span class="snippet__tag">rewritten</span></p>
+    </div>
+    <blockquote class="quote">“It only wanted someone to talk to.”<cite>The narrator, improvising</cite></blockquote>
+  </section>
+
+  <section class="panel" aria-label="Stage centrepiece">
+    <h2>Centrepiece · .stage (live)</h2>
+    <div class="stage" data-stage data-story="1"></div>
+  </section>
+
+  <section class="panel span2 social-host" aria-label="Social card">
+    <h2>Social card · 1200×630 (shown at 50%) · <a href="?card" style="color:var(--bone)">open at full size</a></h2>
+    <div class="social-row">
+    <div class="social-scale">
+      <div class="social letterbox is-rolling surface-haze" id="social">
+        <div class="letterbox__bar letterbox__bar--top" aria-hidden="true"><span>Sword &amp; Servo</span><span>A live-improvised film</span><span>Reel 01</span></div>
+        <div class="vignette"></div>
+        <div class="social__copy">
+          <span class="slate"><span>Made at MakerMods Physical AI Hacks</span></span>
+          <div class="hero-title">Sword <em>&amp;</em><br>Servo</div>
+          <p class="lede">Two robot arms. One AI narrator. No script. <strong>Interrupt anytime.</strong></p>
+          <div class="row" style="display:flex;gap:8px;flex-wrap:wrap"><span class="chip chip--rim">LiveKit voice agents</span><span class="chip">2× i2rt YAM arms</span></div>
+        </div>
+        <div class="stage" data-stage data-beat="2" data-caption="off"></div>
+        <div class="letterbox__bar letterbox__bar--bottom" aria-hidden="true"><span>Founders Inc · San Francisco</span><span>Premiere Sun 8 Nov · 15:00 PT</span></div>
+        <div class="social__grain" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div class="social-notes">
+      <p class="label label--tungsten" style="margin-bottom:.6rem">Built from the system</p>
+      <p style="margin:0 0 .8rem"><b>.letterbox</b> bars carry the HUD copy, <b>.slate</b> tags the event, <b>.hero-title</b> sets the name, <b>.chip</b>s list the stack, and <b>.stage[data-beat]</b> renders a freeze frame of the interrupt moment.</p>
+      <p style="margin:0 0 .8rem">Any story beat can be a card: change <b>data-story</b> / <b>data-beat</b> to render a new still for each post.</p>
+      <p style="margin:0">Exported as <b>og-image.png</b> (open <b>style.html?card</b> at 1200×630).</p>
+    </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Credits, video, countdown">
+    <h2>Credits strip · end credits · video · countdown</h2>
+    <div class="credits" style="padding:.8rem;border:1px solid var(--smoke)"><div class="credits__row" style="gap:.3rem 1.2rem"><span class="credits__item"><span class="label">Made at</span><b style="font-size:1.05rem">MakerMods Physical AI Hacks</b></span><span class="credits__item"><span class="label">Voice</span><b style="font-size:1.05rem">LiveKit</b></span></div></div>
+    <ul class="endcredits" style="margin:14px 0;row-gap:.2rem"><li><span class="endcredits__role">Performed by</span><span class="endcredits__name" style="font-size:1.2rem">Arm L <em>(white)</em></span></li><li><span class="endcredits__role">Written by</span><span class="endcredits__name" style="font-size:1.2rem"><em>an AI, live</em></span></li></ul>
+    <div class="video" style="margin-bottom:14px"><span class="video__play"><span class="video__disc" style="width:58px;height:58px"><svg viewBox="0 0 10 10"><path d="M1.5 0.5 L9.5 5 L1.5 9.5Z"/></svg></span><span>Watch the trailer</span></span><div class="video__hud"><span>Teaser</span><span>00:00:00:00</span></div></div>
+    <div class="countdown" style="transform:scale(.62);transform-origin:50% 0;margin-bottom:-40px"><div><b>01</b><span>Days</span></div><i>:</i><div><b>02</b><span>Hours</span></div><i>:</i><div><b>30</b><span>Min</span></div></div>
+  </section>
+</div>
+
+<script>
+const sw = [
+  ['Void','--void','#07070a'],['Coal','--coal','#0e0e13'],['Graphite','--graphite','#16161d'],['Smoke','--smoke','#2a2a35'],
+  ['Bone','--bone','#ece8df'],['Ash','--ash','#a8a399'],['Dust','--dust','#6f6b64'],['Tungsten','--tungsten','#ffb35c'],
+  ['Tungsten High','--tungsten-hi','#ffc98a'],['Ember','--ember','#ff7a3d'],['Rim','--rim','#6fb7ff'],['Ice','--ice','#cfe6ff'],
+  ['Alarm','--alarm','#ff4d5e']];
+document.getElementById('swatches').innerHTML = sw.map(([n,v,h]) => `<div class="sw"><i style="background:var(${v})"></i><span>${n}</span><code>${h}<br>${v}</code></div>`).join('')
+  + `<div class="sw"><i style="background:var(--haze),var(--void)"></i><span>Haze</span><code>tungsten 20%<br>--haze</code></div>`
+  + `<div class="sw"><i style="background:var(--grain),var(--graphite)"></i><span>Grain</span><code>feTurbulence<br>--grain</code></div>`
+  + `<div class="sw"><i style="background:linear-gradient(90deg,var(--rim),transparent 35%,transparent 65%,var(--tungsten)),var(--void)"></i><span>Rim / Key</span><code>arm rim stroke<br>gradient</code></div>`;
+const w = document.getElementById('demo-wave'); const hs = [4,8,14,20,12,24,18,26,16,22,10,19,13,7,15,9,5,3,3,3];
+w.innerHTML = hs.map(h => `<i style="height:${h}px"></i>`).join('');
+// ?card: render only the social card at full size (used for og-image.png)
+if (document.documentElement.classList.contains('card-only')) document.body.replaceChildren(document.getElementById('social'));
+</script>
+<script src="stage.js"></script>
+</body>
+</html>

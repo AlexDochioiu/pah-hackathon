@@ -13,4 +13,5 @@ folder). One topic per page; keep pages short and factual.
 | [dream-1.md](dream-1.md) | What we tried with Dream Labs' Dream-1 model and why we stopped. |
 | [gestures.md](gestures.md) | The gesture library and stage server the storyteller drives. |
 | [storyteller.md](storyteller.md) | The LiveKit voice agent. |
+| [site.md](site.md) | The launch site: three design candidates, preview, deploy, swapping in the demo video. |
 | [log.md](log.md) | Dated progress log. |

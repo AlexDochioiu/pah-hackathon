@@ -26,3 +26,6 @@
   `stage.py` HTTP API on :8770 matches `agent/fake_stage.py` (`GET /gestures` = list with `duration_s`).
   Bring-up passes in i2rt's MuJoCo sim on the station (41 steps, ~0.01 rad tracking). Not yet run on real arms:
   next is `bash ~/dial/bringup.sh --real` once the arms are free. GIF previews in `robot/previews/`.
+- Launch site: 3 candidate designs in `site/v1-3/` (ArmChair Theatre / Once Upon a Bot / Sword & Servo), each with
+  its own `design.css` design language, `stage.js` animated arms, `style.html` design sheet and `og-image.png`;
+  screenshots in `site/shots/` for the team to pick ([site.md](site.md)).

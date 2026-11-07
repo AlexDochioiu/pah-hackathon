@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Once Upon a Bot · Design language v2 “Toy Box”</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="design.css">
+<style>
+/* sheet layout only */
+body{padding:26px 30px 40px}
+.sheet-head{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:22px}
+.sheet-head .display{font-size:2.6rem}
+.sheet-head .display .w{-webkit-text-stroke-width:2px;text-shadow:3px 3px 0 var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:start}
+.panel{min-width:0;background:rgba(255,255,255,.6);border:2px dashed rgba(27,21,48,.35);border-radius:var(--r-md);padding:16px}
+.panel > h2{margin:0 0 14px;font-weight:800;font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+.span2{grid-column:span 2}
+.swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.sw{border:2px solid var(--ink);border-radius:12px;overflow:hidden;background:var(--paper);box-shadow:var(--sh-1);font-size:.7rem;line-height:1.25}
+.sw i{display:block;height:42px;border-bottom:2px solid var(--ink)}
+.sw span{display:block;padding:4px 6px 0;font-weight:800}
+.sw code{display:block;padding:0 6px 5px;color:var(--ink-soft);font-size:.64rem}
+.type > *{margin:0 0 10px}
+.type small{display:block;font-family:ui-monospace,monospace;font-size:.62rem;font-weight:400;color:var(--ink-soft);letter-spacing:0;text-transform:none;-webkit-text-stroke:0;text-shadow:none}
+.stack{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.stack .btn{font-size:.85rem;padding:.6rem 1rem}
+.cap{font-family:ui-monospace,monospace;font-size:.62rem;color:var(--ink-soft);width:100%;margin:0 0 -4px}
+.twocol{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+/* social card */
+.social-scale{width:600px;height:315px;overflow:hidden;border:2px solid var(--ink);border-radius:12px}
+.social-scale .social{transform:scale(.5);transform-origin:0 0}
+.social{position:relative;width:1200px;height:630px;overflow:hidden;display:grid;grid-template-columns:500px 1fr;gap:40px;align-items:center;padding:40px 56px 40px 64px;background:radial-gradient(var(--cream-deep) 2px,transparent 2.2px) 0 0/28px 28px,var(--cream)}
+.social .display{font-size:104px;margin:18px 0 0}
+.social .lede{font-size:27px;margin:24px 0 26px;color:var(--ink)}
+.social .chip{font-size:17px;padding:.55rem .95rem}
+.social .stage{box-shadow:var(--sh-2)}
+.social .stage__now{font-size:1.2rem}
+.social__sticker{position:absolute;right:38px;bottom:30px;font-size:1.4rem}
+.social__top{position:absolute;left:64px;top:36px}
+body.card-only{padding:0;margin:0;overflow:hidden}
+</style>
+</head>
+<body>
+<header class="sheet-head">
+  <h1 class="display"><span class="w w--sun">Once</span> <span class="w w--sky">Upon</span> <span class="w w--mint">a</span> <span class="w w--tomato">Bot</span></h1>
+  <p class="lede" style="max-width:40rem">Design language v2 “Toy Box”: cream dotted grid, 3px ink outlines, hard offset shadows, bright primaries, tilted stickers and squash-and-stretch pops.</p>
+</header>
+
+<div class="grid">
+  <section class="panel" aria-label="Palette">
+    <h2>Palette</h2>
+    <div class="swatches" id="swatches"></div>
+    <p class="cap" style="margin-top:12px">Text on brights is always Ink (#1b1530): AA on every bright. White text only on Ink.</p>
+  </section>
+
+  <section class="panel type" aria-label="Type scale">
+    <h2>Type scale</h2>
+    <div><div class="display" style="font-size:3.6rem"><span class="w w--tomato" style="--r:0deg">Bot</span></div><small style="margin-top:6px">Display · Bagel Fat One · clamp(3.1rem, 7.6vw, 6.4rem) · colour fill + 3px ink stroke + 5px offset shadow</small></div>
+    <div><div class="h2" style="font-size:2.1rem">Three steps. <mark>Zero scripts.</mark></div><small style="margin-top:4px">H2 · Bagel Fat One · clamp(2.2rem, 5vw, 3.8rem) · mark = tomato highlight</small></div>
+    <div class="h3">It improvises<small>H3 · Bagel Fat One · 1.45rem</small></div>
+    <p class="lede">Shout out any story. Change the plot whenever you like!<small>Lede · Rubik 500 · 1.1–1.3rem</small></p>
+    <p>Two 6-axis robot arms act it out with props.<small>Body · Rubik 400 · 1.05rem / 1.55</small></p>
+    <p class="label">AI narrator<small>Label · Rubik 800 · .8rem · caps · tracking .12em</small></p>
+  </section>
+
+  <section class="panel" aria-label="Buttons, chips, field">
+    <h2>Buttons · chips · field</h2>
+    <p class="cap">default / hover / pressed / focus / disabled</p>
+    <div class="stack"><a class="btn btn--primary" href="#">▶ Watch</a><a class="btn btn--primary is-hover" href="#">Hover</a><a class="btn btn--primary is-active" href="#">Pressed</a><a class="btn btn--primary is-focus" href="#">Focus</a></div>
+    <div class="stack"><a class="btn btn--secondary" href="#">Follow on X</a><a class="btn btn--secondary is-hover" href="#">Hover</a><a class="btn btn--ghost" href="#">GitHub</a><a class="btn btn--ghost is-hover" href="#">Hover</a></div>
+    <div class="stack"><button class="btn btn--tomato" type="button">🎰 Spin</button><button class="btn btn--primary" type="button" disabled>Disabled</button><a class="btn btn--primary btn--sm" href="#">Small</a></div>
+    <div class="stack"><span class="chip">Chip</span><span class="chip chip--sky">LiveKit voice agent</span><span class="chip chip--mint">2 robot arms</span><span class="chip chip--dot">Live</span><button class="chip chip--sun" type="button">❚❚ Pause</button></div>
+    <div class="stack"><input class="field" style="flex:1" placeholder="a heist at the cheese museum" aria-label="Sample field"></div>
+  </section>
+
+  <section class="panel" aria-label="Stickers">
+    <h2>Stickers · burst · polaroid</h2>
+    <div class="stack" style="gap:16px;margin-bottom:18px"><span class="sticker">Sunshine</span><span class="sticker sticker--sky">Sky</span><span class="sticker sticker--mint">Mint</span><span class="sticker sticker--gum">Gum</span><span class="sticker sticker--tomato is-hover">Wobble</span><span class="sticker sticker--paper sticker--round">Paper</span></div>
+    <div class="twocol">
+      <div class="burst" style="--size:170px;margin:4px auto"><span><b>HEY!</b>make the captain a cat!</span></div>
+      <figure class="polaroid" style="margin:12px 6px 0;--tilt:3deg"><div class="polaroid__pic" style="--pic:var(--sky);font-size:2.4rem" aria-hidden="true">AB</div><figcaption><p class="polaroid__name">Team Member</p><p class="polaroid__role">Robot wrangler</p></figcaption></figure>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Cards and story snippets">
+    <h2>Cards · story snippet (chat + quote)</h2>
+    <div class="twocol" style="margin-top:26px">
+      <article class="card card--sun card--tilt-l" style="padding-top:2rem"><div class="card__num">2</div><h3 class="h3" style="font-size:1.2rem">It improvises</h3><p style="font-size:.9rem">The AI invents the story on the spot.</p></article>
+      <article class="card card--lift is-hover" style="padding-top:2rem"><div class="card__num">✦</div><h3 class="h3" style="font-size:1.2rem">Card · hover</h3><p style="font-size:.9rem">Lifts and straightens.</p></article>
+    </div>
+    <div class="chat" style="margin:22px 0 26px">
+      <div class="bubble bubble--you"><span class="bubble__who">You</span>Pirates on Mars, please!</div>
+      <div class="bubble bubble--bot"><span class="bubble__who">AI narrator</span>Captain Zip planted her flag<span class="caret"></span></div>
+      <div class="bubble bubble--shout"><span class="bubble__who">You, mid-story</span>Make the captain a cat!</div>
+    </div>
+    <blockquote class="quote" style="font-size:1rem">The arms freeze, react, and the story bends.<cite>Quote block</cite></blockquote>
+  </section>
+
+  <section class="panel" aria-label="Stage centrepiece">
+    <h2>Centrepiece · .stage (live)</h2>
+    <div class="stage" data-stage data-story="1"></div>
+  </section>
+
+  <section class="panel span2" aria-label="Social card">
+    <h2>Social card · 1200×630 (shown at 50%) · <a href="?card">open at full size</a></h2>
+    <div class="social-scale">
+      <div class="social" id="social">
+        <div>
+          <span class="chip chip--sun">Made at MakerMods Physical AI Hacks</span>
+          <div class="display"><span class="w w--sun">Once</span> <span class="w w--sky">Upon</span><br><span class="w w--mint">a</span> <span class="w w--tomato">Bot</span></div>
+          <p class="lede">Shout any story. An AI makes it up out loud. Two robot arms act it out. Shout a plot twist anytime!</p>
+          <div class="row" style="display:flex;gap:10px"><span class="chip chip--sky">LiveKit voice agent</span><span class="chip chip--mint">2× YAM robot arms</span></div>
+        </div>
+        <div class="stage" data-stage data-beat="3" data-caption="off"></div>
+        <span class="sticker sticker--tomato social__sticker">100% improvised!</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Ticker, credits, video">
+    <h2>Ticker · credits · video slot</h2>
+    <div style="overflow:hidden;padding:10px 0;margin:-6px -16px 8px"><div class="ticker" style="margin:0"><div class="ticker__track"><span>pirates on Mars</span><span>a heist at the cheese museum</span><span>pirates on Mars</span><span>a heist at the cheese museum</span></div></div></div>
+    <div class="credits" style="padding:14px;border-radius:12px;border:var(--line)"><div class="credits__row" style="gap:10px"><span class="sticker sticker--sun" style="font-size:.85rem">Made at MakerMods</span><span class="sticker sticker--sky" style="font-size:.85rem">Talks via LiveKit</span></div></div>
+    <div class="tv" style="margin-top:42px;padding:10px 60px 10px 10px;box-shadow:var(--sh-2)"><div class="video"><span class="video__play"><span class="video__disc" style="width:58px"><svg width="24" height="24" viewBox="0 0 20 20"><path d="M6 3.5 L17 10 L6 16.5Z" fill="#1b1530"/></svg></span></span></div><div class="tv__knobs" style="right:12px;gap:8px"><i style="width:30px"></i><i style="width:30px"></i></div></div>
+  </section>
+</div>
+
+<script>
+const sw = [
+  ['Cream','--cream','#fff6e5'],['Cream Deep','--cream-deep','#f3e2bf'],['Paper','--paper','#ffffff'],['Lilac','--lilac','#c9b8ff'],
+  ['Tomato','--tomato','#ff5a36'],['Sunshine','--sunshine','#ffc93c'],['Sky','--sky','#4cc3ff'],['Mint','--mint','#3ddc97'],
+  ['Bubblegum','--bubblegum','#ff8fcf'],['Ink','--ink','#1b1530'],['Ink Soft','--ink-soft','#4a4360'],['Arm White','--arm-white','#f6f5fb'],
+  ['Arm Black','--arm-black','#2c2840']];
+document.getElementById('swatches').innerHTML = sw.map(([n,v,h]) => `<div class="sw"><i style="background:var(${v})"></i><span>${n}</span><code>${h}<br>${v}</code></div>`).join('');
+// ?card renders the social card alone at 1200x630 (used to make og-image.png)
+if (/[?&]card\b/.test(location.search)) { const c = document.getElementById('social'); document.body.className = 'card-only'; document.body.replaceChildren(c); }
+</script>
+<script src="stage.js"></script>
+</body>
+</html>

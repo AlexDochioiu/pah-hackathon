@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sword &amp; Servo: an improvised film for two robot arms</title>
+<meta name="description" content="Ask for any story out loud. An AI narrator improvises it live while two robot arms act it out with a foam sword, shield, flag and crown. Interrupt mid-scene and the story rewrites itself. Made at MakerMods Physical AI Hacks with LiveKit.">
+<meta name="theme-color" content="#07070a">
+<!-- Open Graph / X cards. When hosted, make og:image and og:url absolute (https://your.site/v3/og-image.png). -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Sword &amp; Servo">
+<meta property="og:title" content="Sword &amp; Servo: two robot arms, one AI narrator, no script">
+<meta property="og:description" content="Say “a knight duels a dragon at midnight”. An AI improvises the story out loud while two robot arms perform it. Shout “make the dragon friendly!” and the arms freeze and the scene rewrites itself.">
+<meta property="og:image" content="og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Two rim-lit robot arms in a dark, hazy spotlight. One holds a sword; an on-screen alert reads: Interrupt, make the dragon friendly.">
+<meta property="og:url" content="https://example.com/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Sword &amp; Servo: two robot arms, one AI narrator, no script">
+<meta name="twitter:description" content="An AI narrator improvises any story live. Two robot arms act it out. Interrupt anytime. Made at MakerMods Physical AI Hacks with LiveKit.">
+<meta name="twitter:image" content="og-image.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%2307070a'/%3E%3Cpath d='M16 50 L48 14' stroke='%23ffb35c' stroke-width='5' stroke-linecap='round'/%3E%3Cpath d='M20 38 l7 7' stroke='%236fb7ff' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="design.css">
+<style>
+/* page layout only; all look & feel lives in design.css */
+.hero{--bar:52px;min-height:100svh;display:flex;align-items:center;padding:calc(var(--bar) + 2rem) clamp(1.1rem,4vw,3rem)}
+.hero__grid{position:relative;z-index:2;width:100%;max-width:1360px;margin:0 auto;display:grid;grid-template-columns:minmax(0,.72fr) minmax(0,1.28fr);gap:clamp(2rem,4vw,4rem);align-items:center}
+.hero__copy{display:flex;flex-direction:column;gap:1.4rem;align-items:flex-start}
+.row{display:flex;flex-wrap:wrap;gap:.8rem 1.2rem;align-items:center}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem}
+.cards .card:nth-child(2){transition-delay:.12s}.cards .card:nth-child(3){transition-delay:.24s}
+.interrupt-note{margin-top:1.2rem;display:grid;grid-template-columns:auto 1fr;gap:1.6rem;align-items:center}
+.interrupt-note .card__title{margin:0}
+.titles{padding-block:clamp(5rem,12vw,9rem);text-align:center}
+.titles .lede{margin:2.2rem auto 0;text-align:center}
+.cta{text-align:center}
+.cta .row{justify-content:center;margin-top:2.4rem}
+.sequel{display:flex;flex-wrap:wrap;gap:.6rem;max-width:620px;margin:2.6rem auto 0}
+footer{padding:2rem 1.25rem 2.6rem;text-align:center}
+footer .label{line-height:2}
+footer a{color:var(--bone)}
+@media (max-width:980px){
+  .hero__grid{grid-template-columns:1fr}
+  .cards{grid-template-columns:1fr}
+}
+@media (max-width:640px){
+  .hero{--bar:40px;padding-top:calc(var(--bar) + 1.6rem);padding-bottom:calc(var(--bar) + 1.6rem)}
+  .letterbox__bar .hide-sm{display:none}
+  .interrupt-note{grid-template-columns:1fr;gap:.6rem}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="hero letterbox surface-haze" id="top">
+  <div class="letterbox__bar letterbox__bar--top" aria-hidden="true"><span>Sword &amp; Servo</span><span class="hide-sm">Founders Inc · San Francisco</span><span>Reel 01</span></div>
+  <div class="vignette"></div>
+  <div class="hero__grid">
+    <div class="hero__copy">
+      <span class="slate enter enter--1"><span>A live-improvised film</span><span>Nov 2026</span></span>
+      <h1 class="hero-title enter enter--2">Sword <em>&amp;</em> Servo</h1>
+      <p class="lede enter enter--3">Ask for any story. An AI narrator makes it up out loud while <strong>two robot arms act it out</strong>, with a foam sword in hand. Interrupt mid-scene and the story rewrites itself.</p>
+      <div class="row enter enter--4">
+        <a class="btn btn--primary" href="#trailer"><svg class="btn__icon" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 1 L9 5 L2 9Z"/></svg>Watch the trailer</a>
+        <a class="btn btn--ghost" href="#premiere">Premiere countdown</a>
+      </div>
+      <div class="row enter enter--4"><span class="chip chip--rim">LiveKit voice agents</span><span class="chip">2× i2rt YAM arms</span><span class="chip chip--live">Improvised live</span></div>
+    </div>
+    <div class="stage enter enter--3" data-stage></div>
+  </div>
+  <div class="letterbox__bar letterbox__bar--bottom" aria-hidden="true"><span>MakerMods Physical AI Hacks</span><span class="hide-sm">Tungsten / Rim · 24 fps</span><span>Scroll ↓</span></div>
+</header>
+
+<main id="main">
+  <section class="section surface-void titles" aria-label="Tagline">
+    <ul class="titlecards reveal-titles">
+      <li>Two arms.</li>
+      <li>One voice.</li>
+      <li>No script.</li>
+    </ul>
+    <p class="lede">Every performance is written in real time by an AI narrator, acted by two six-axis robot arms, and bent by whoever is in the room.</p>
+  </section>
+
+  <section class="section surface-void" id="how">
+    <div class="wrap">
+      <header class="section-head">
+        <p class="label label--tungsten section-head__index">01 / How it works</p>
+        <h2>Three scenes. <em>Zero rehearsals.</em></h2>
+        <p class="lede">From a sentence spoken out loud to a fully acted scene, in seconds.</p>
+      </header>
+      <div class="cards">
+        <article class="card reveal">
+          <span class="slate slate--dark"><span>SC 01</span><span>INT. Your voice</span></span>
+          <div class="card__num">01</div>
+          <h3 class="card__title">You ask</h3>
+          <p>Say any story out loud: “a knight duels a dragon at midnight”, “the last robot on the moon”. No menu, no buttons.</p>
+          <div class="card__art"><div class="wave wave--rim" aria-hidden="true"><i style="height:6px"></i><i style="height:14px"></i><i style="height:22px"></i><i style="height:12px"></i><i style="height:28px"></i><i style="height:18px"></i><i style="height:9px"></i><i style="height:24px"></i><i style="height:15px"></i><i style="height:7px"></i><i style="height:19px"></i><i style="height:11px"></i><i style="height:5px"></i><i style="height:3px"></i><i style="height:3px"></i><i style="height:3px"></i></div></div>
+        </article>
+        <article class="card reveal">
+          <span class="slate slate--dark"><span>SC 02</span><span>INT. The narrator</span></span>
+          <div class="card__num">02</div>
+          <h3 class="card__title">It improvises</h3>
+          <p>A LiveKit real-time voice agent invents the tale on the spot and tells it aloud, deciding beat by beat what each arm should do.</p>
+          <div class="card__art"><p class="snippet__line" style="font:400 .8rem/1.6 var(--font-mono);color:var(--ash)">Out of the fog rises a dragon,<br>eyes like furnaces.<span class="caret"></span></p></div>
+        </article>
+        <article class="card reveal">
+          <span class="slate slate--dark"><span>SC 03</span><span>EXT. The stage</span></span>
+          <div class="card__num">03</div>
+          <h3 class="card__title">The arms act it out</h3>
+          <p>Two 6-axis YAM arms, one white and one black, perform with props in their grippers: foam sword, shield, flag, crown.</p>
+          <div class="card__art"><svg viewBox="0 0 220 64" height="64" aria-hidden="true"><path d="M70 62 V40 L88 22 L112 20" stroke="#ece8df" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M112 20 L150 6" stroke="#ffb35c" stroke-width="2.5" stroke-linecap="round"/><path d="M160 62 V40 L146 26 L128 30" stroke="#6fb7ff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/><path d="M40 63 H190" stroke="#2a2a35"/></svg></div>
+        </article>
+      </div>
+      <div class="card card--alarm interrupt-note reveal">
+        <span class="chip chip--alarm">● Interrupt anytime</span>
+        <p><strong style="color:var(--bone)">Shout “make the dragon friendly!” mid-sentence.</strong> The arms freeze, the narrator deletes the last line, and the scene rewrites itself around your idea, live.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section surface-haze" id="trailer">
+    <div class="wrap">
+      <header class="section-head section-head--center">
+        <p class="label label--tungsten section-head__index">02 / The trailer</p>
+        <h2>Watch it <em>happen.</em></h2>
+        <p class="lede">One take. No cuts. One dragon with unexpected feelings.</p>
+      </header>
+      <!-- Swap in the demo: set data-youtube="VIDEO_ID" or data-mp4="demo.mp4" -->
+      <div class="video reveal" id="video" data-youtube="" data-mp4="">
+        <div class="video__poster stage" data-stage data-story="1" data-beat="3" data-caption="off" aria-hidden="true"></div>
+        <button class="video__play" type="button" aria-label="Play the demo video">
+          <span class="video__disc" aria-hidden="true"><svg viewBox="0 0 10 10"><path d="M1.5 0.5 L9.5 5 L1.5 9.5Z"/></svg></span>
+          <span>Watch the trailer</span>
+          <span class="video__note" id="video-note">Premieres Sunday 8 Nov · 15:00 PT</span>
+        </button>
+        <div class="video__hud" aria-hidden="true"><span>Sword &amp; Servo · Teaser</span><span>00:00:00:00</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="credits" role="note">
+    <div class="credits__row">
+      <span class="credits__item"><span class="label">Made at</span><b>MakerMods Physical AI Hacks</b></span>
+      <span class="credits__item"><span class="label">Voice</span><b>LiveKit</b></span>
+      <span class="credits__item"><span class="label">Arms</span><b>2× i2rt YAM</b></span>
+      <span class="credits__item"><span class="label">Shot at</span><b>Founders Inc, San Francisco</b></span>
+    </div>
+  </div>
+
+  <section class="section surface-void" id="credits">
+    <div class="wrap">
+      <header class="section-head section-head--center">
+        <p class="label label--tungsten section-head__index">03 / Credits</p>
+        <h2>The <em>company.</em></h2>
+      </header>
+      <ul class="endcredits reveal">
+        <li><span class="endcredits__role">Directed by</span><span class="endcredits__name">Team Member One <a href="#">@handle</a></span></li>
+        <li><span class="endcredits__role">Voice &amp; story</span><span class="endcredits__name">Team Member Two <a href="#">@handle</a></span></li>
+        <li><span class="endcredits__role">Arms &amp; motion</span><span class="endcredits__name">Team Member Three <a href="#">@handle</a></span></li>
+        <li><span class="endcredits__role">Performed by</span><span class="endcredits__name">Arm L <em>(white)</em> &amp; Arm R <em>(black)</em></span></li>
+        <li><span class="endcredits__role">Written by</span><span class="endcredits__name"><em>an AI, live</em></span></li>
+        <li><span class="endcredits__role">Rewritten by</span><span class="endcredits__name">whoever shouts first</span></li>
+        <li><span class="endcredits__role">Made at</span><span class="endcredits__name">MakerMods Physical AI Hacks</span></li>
+        <li><span class="endcredits__role">Voice agents</span><span class="endcredits__name">LiveKit</span></li>
+        <li><span class="endcredits__role">Special thanks</span><span class="endcredits__name">MakerMods · Dream Labs · LiveKit</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section surface-haze cta" id="premiere">
+    <div class="wrap">
+      <header class="section-head section-head--center" style="margin-bottom:2.4rem">
+        <p class="label label--tungsten section-head__index" id="cd-label">04 / Premiere</p>
+        <h2 id="cd-title">In theatres <em>Sunday,&nbsp;3&nbsp;pm.</em></h2>
+        <p class="lede" id="cd-sub">Sunday 8 November · 15:00 PT · Founders Inc, San Francisco</p>
+      </header>
+      <div class="countdown" id="countdown" role="timer" aria-live="off" aria-label="Time until the premiere">
+        <div><b data-u="d">00</b><span>Days</span></div><i aria-hidden="true">:</i>
+        <div><b data-u="h">00</b><span>Hours</span></div><i aria-hidden="true">:</i>
+        <div><b data-u="m">00</b><span>Min</span></div><i aria-hidden="true">:</i>
+        <div><b data-u="s">00</b><span>Sec</span></div>
+      </div>
+      <div class="row">
+        <a class="btn btn--primary" href="#trailer" id="cd-btn"><svg class="btn__icon" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 1 L9 5 L2 9Z"/></svg>Watch the trailer</a>
+        <a class="btn btn--secondary" href="#">Follow on X</a>
+        <a class="btn btn--ghost" href="#">GitHub</a>
+      </div>
+      <form class="sequel" id="sequel">
+        <label class="sr-only" for="idea">Pitch the sequel</label>
+        <input class="field" id="idea" placeholder="Pitch the sequel…" maxlength="120" autocomplete="off">
+        <button class="btn btn--secondary" type="submit">Post it</button>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="surface-void">
+  <p class="label">Sword &amp; Servo · built in one weekend, Nov 7–8 2026 · <a href="#top">Back to the top ↑</a></p>
+  <p class="label" style="color:#8d887f">No foam swords were harmed in the making of this film.</p>
+</footer>
+
+<script src="stage.js"></script>
+<script>
+(() => {
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches, $ = s => document.querySelector(s);
+const hero = $('.letterbox'); RM ? hero.classList.add('is-rolling') : setTimeout(() => hero.classList.add('is-rolling'), 200);
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); } }), { threshold: .2 });
+document.querySelectorAll('.reveal,.reveal-titles').forEach(n => RM ? n.classList.add('is-in') : io.observe(n));
+
+// video slot
+const v = $('#video');
+v.querySelector('.video__play').addEventListener('click', () => {
+  const yt = v.dataset.youtube, mp4 = v.dataset.mp4;
+  if (yt) v.insertAdjacentHTML('beforeend', `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(yt)}?autoplay=1&rel=0" title="Sword & Servo demo" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`);
+  else if (mp4) v.insertAdjacentHTML('beforeend', `<video src="${mp4}" controls autoplay playsinline></video>`);
+  else $('#video-note').textContent = 'The trailer drops Sunday 15:00 PT. Check back soon.';
+});
+
+// premiere countdown (Sun 8 Nov 2026, 15:00 America/Los_Angeles)
+const T = Date.parse('2026-11-08T15:00:00-08:00'), cd = $('#countdown');
+const pad = x => String(x).padStart(2, '0');
+function tick() {
+  const ms = T - Date.now();
+  if (ms <= 0) {
+    cd.hidden = true;
+    $('#cd-label').textContent = '04 / Out now';
+    $('#cd-title').innerHTML = 'Out now. <em>Watch the demo.</em>';
+    $('#cd-sub').textContent = 'Premiered Sunday 8 November at Founders Inc, San Francisco.';
+    $('#cd-btn').lastChild.textContent = 'Watch the demo';
+    return;
+  }
+  const s = Math.floor(ms / 1000);
+  cd.querySelector('[data-u=d]').textContent = pad(Math.floor(s / 86400));
+  cd.querySelector('[data-u=h]').textContent = pad(Math.floor(s / 3600) % 24);
+  cd.querySelector('[data-u=m]').textContent = pad(Math.floor(s / 60) % 60);
+  cd.querySelector('[data-u=s]').textContent = pad(s % 60);
+  setTimeout(tick, 1000 - (Date.now() % 1000));
+}
+tick();
+
+// pitch the sequel → X intent
+$('#sequel').addEventListener('submit', e => {
+  e.preventDefault();
+  const idea = $('#idea').value.trim() || 'a heist at the royal museum';
+  const text = `Sword & Servo, your next film: “${idea}” 🎬🤖 #SwordAndServo #PhysicalAIHacks`;
+  const url = location.href.startsWith('http') ? location.href.split('#')[0] : 'https://example.com/';
+  open('https://x.com/intent/post?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url), '_blank', 'noopener');
+});
+})();
+</script>
+</body>
+</html>

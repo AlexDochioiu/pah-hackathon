@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Once Upon a Bot: shout any story, two robot arms act it out</title>
+<meta name="description" content="Shout out any story. An AI narrator makes it up on the spot while two real robot arms act it out with tiny props. Change the plot whenever you like. Made at MakerMods Physical AI Hacks with LiveKit.">
+<meta name="theme-color" content="#ffc93c">
+<!-- Open Graph / X cards. When hosted, make og:image and og:url absolute (https://your.site/v2/og-image.png). -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Once Upon a Bot">
+<meta property="og:title" content="Once Upon a Bot: shout any story, two robot arms act it out">
+<meta property="og:description" content="“Pirates on Mars!” An AI improvises the tale out loud while two robot arms with googly eyes perform it. Shout “make the captain a cat!” mid-story and the plot flips.">
+<meta property="og:image" content="og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Two cartoon robot arms with googly eyes on a toy stage, a starburst sticker shouting “HEY! Make the captain a cat!”">
+<meta property="og:url" content="https://example.com/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Once Upon a Bot: shout any story, two robot arms act it out">
+<meta name="twitter:description" content="An AI narrator improvises any story live. Two robot arms act it out. Shout a plot twist anytime. Made at MakerMods Physical AI Hacks with LiveKit.">
+<meta name="twitter:image" content="og-image.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='3' y='3' width='58' height='58' rx='16' fill='%23ffc93c' stroke='%231b1530' stroke-width='5'/%3E%3Ccircle cx='23' cy='30' r='9' fill='%23fff' stroke='%231b1530' stroke-width='4'/%3E%3Ccircle cx='41' cy='30' r='9' fill='%23fff' stroke='%231b1530' stroke-width='4'/%3E%3Ccircle cx='25' cy='33' r='4' fill='%231b1530'/%3E%3Ccircle cx='43' cy='33' r='4' fill='%231b1530'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Rubik:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="design.css">
+<style>
+/* page layout only; all look & feel lives in design.css */
+.hero{padding:clamp(1.4rem,3vw,2.6rem) 1.25rem clamp(3rem,6vw,4.5rem)}
+.hero__grid{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:1fr 1.08fr;gap:clamp(1.5rem,4vw,3.5rem);align-items:center}
+.hero__top{display:flex;flex-wrap:wrap;gap:.7rem;align-items:center;margin-bottom:1.4rem}
+.hero .lede{margin:1.4rem 0 1.6rem;max-width:34rem}
+.row{display:flex;flex-wrap:wrap;gap:.9rem;align-items:center}
+.facts{margin-top:1.6rem;gap:.5rem}
+.hero__stage{position:relative}
+.hero__stage > .sticker{position:absolute;z-index:4;left:-18px;top:-22px}
+.hero__stage > .sticker--tomato{left:auto;top:auto;right:-14px;bottom:-20px}
+.tickers{position:relative;padding:2.4rem 0;overflow:hidden}
+.tickers .ticker + .ticker{margin-top:.6rem}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:2rem;margin-top:1rem}
+.steps .card{padding-top:2.2rem}
+.twist{display:flex;align-items:center;gap:clamp(1rem,3vw,2.5rem);max-width:880px;margin:3.4rem auto 0}
+.twist .quote{flex:1}
+.machine-wrap{max-width:900px;margin:0 auto}
+.machine .row{justify-content:center}
+.team{display:grid;grid-template-columns:repeat(4,1fr);gap:2rem;max-width:1040px;margin:0 auto}
+.team .polaroid:nth-child(2){--tilt:2.5deg}.team .polaroid:nth-child(3){--tilt:-1.5deg}.team .polaroid:nth-child(4){--tilt:3deg}
+.cta{max-width:980px;margin:0 auto;text-align:center;padding:clamp(2rem,5vw,3.4rem)}
+.cta .row{justify-content:center;margin-top:1.6rem}
+footer{text-align:center;padding:2rem 1rem 2.6rem;font-weight:500;color:var(--ink-soft)}
+@media (max-width:980px){
+  .hero__grid{grid-template-columns:1fr}
+  .hero__copy{text-align:center}.hero__top,.hero .row{justify-content:center}.hero .lede{margin-inline:auto}
+  .steps{grid-template-columns:1fr;max-width:520px;margin-inline:auto;gap:2.6rem}
+  .team{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:640px){
+  .hero__stage > .sticker{left:-6px;top:-30px}.hero__stage > .sticker--tomato{left:auto;top:auto;right:-4px;bottom:-16px}
+  :root{--fs-display:13.5vw}
+  .twist{flex-direction:column}
+  .team{gap:1.4rem}
+}
+@media (prefers-reduced-motion:reduce){.ticker [aria-hidden="true"]{display:none}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="hero" id="top">
+  <div class="hero__grid">
+    <div class="hero__copy">
+      <div class="hero__top">
+        <span class="sticker sticker--gum pop-in" style="--d:.05s">★ Live robot theatre</span>
+        <span class="chip pop-in" style="--d:.15s">Made at MakerMods Physical AI Hacks</span>
+      </div>
+      <h1 class="display"><span class="w w--sun pop-in" style="--d:.2s">Once</span> <span class="w w--sky pop-in" style="--d:.32s">Upon</span> <span class="w w--mint pop-in" style="--d:.44s">a</span> <span class="w w--tomato pop-in" style="--d:.56s">Bot</span></h1>
+      <p class="lede pop-in" style="--d:.7s">Shout out any story. An AI narrator makes it up on the spot, and two real robot arms act it out with tiny props. Change the plot whenever you like!</p>
+      <div class="row pop-in" style="--d:.8s">
+        <a class="btn btn--primary" href="#demo"><svg class="btn__ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3 L17 10 L5 17Z" fill="currentColor"/></svg>Watch the demo</a>
+        <a class="btn btn--ghost" href="#machine">Spin a story</a>
+      </div>
+      <div class="row facts pop-in" style="--d:.9s">
+        <span class="chip chip--sky">LiveKit voice agent</span><span class="chip chip--mint">2 robot arms</span><span class="chip chip--sun">0 scripts</span>
+      </div>
+    </div>
+    <div class="hero__stage pop-in" style="--d:.35s">
+      <span class="sticker sticker--sun">100% improvised</span>
+      <div class="stage" data-stage></div>
+      <span class="sticker sticker--tomato">Interrupt anytime!</span>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <div class="tickers" aria-label="Stories people have asked for">
+    <div class="ticker"><div class="ticker__track">
+      <span>pirates on Mars</span><span>a knight who’s afraid of the dark</span><span>a heist at the cheese museum</span><span>a dragon who runs a bakery</span><span>the robot who wanted a crown</span><span>a wizard who lost his hat</span>
+      <span aria-hidden="true">pirates on Mars</span><span aria-hidden="true">a knight who’s afraid of the dark</span><span aria-hidden="true">a heist at the cheese museum</span><span aria-hidden="true">a dragon who runs a bakery</span><span aria-hidden="true">the robot who wanted a crown</span><span aria-hidden="true">a wizard who lost his hat</span>
+    </div></div>
+    <div class="ticker ticker--gum" aria-hidden="true"><div class="ticker__track">
+      <span>make the dragon friendly!</span><span>now it’s raining cheese!</span><span>make the captain a cat!</span><span>plot twist: they’re twins!</span><span>everybody dance!</span><span>the king is a frog now!</span>
+      <span>make the dragon friendly!</span><span>now it’s raining cheese!</span><span>make the captain a cat!</span><span>plot twist: they’re twins!</span><span>everybody dance!</span><span>the king is a frog now!</span>
+    </div></div>
+  </div>
+
+  <section class="section" id="how">
+    <div class="wrap">
+      <header class="section-head">
+        <span class="sticker sticker--sky">How it works</span>
+        <h2 class="h2">Three steps. <mark>Zero scripts.</mark></h2>
+        <p class="lede">It’s improv theatre, but the actors are robot arms and the writer is an AI that never says no.</p>
+      </header>
+      <div class="steps">
+        <article class="card card--sun card--tilt-l card--lift reveal">
+          <div class="card__num">1</div>
+          <h3 class="h3">You ask</h3>
+          <p>Say any story out loud: “a knight who’s afraid of the dark”, “pirates on Mars”. No buttons, no menus. Just your voice.</p>
+        </article>
+        <article class="card card--sky card--lift reveal" style="transition-delay:.1s">
+          <div class="card__num">2</div>
+          <h3 class="h3">It improvises</h3>
+          <p>A LiveKit real-time voice agent invents the story on the spot and narrates it out loud, deciding every move as it goes.</p>
+        </article>
+        <article class="card card--mint card--tilt-r card--lift reveal" style="transition-delay:.2s">
+          <div class="card__num">3</div>
+          <h3 class="h3">The arms act it out</h3>
+          <p>Two 6-axis robot arms, one white and one black, perform every beat with props in their grippers: sword, shield, flag, crown.</p>
+        </article>
+      </div>
+      <div class="twist reveal">
+        <div class="burst" style="--size:190px;flex:none"><span><b>PLOT TWIST!</b>shout it anytime</span></div>
+        <blockquote class="quote">“Make the dragon friendly!” The arms freeze, react, and the story bends around your idea, live, mid-sentence.<cite>Interrupt anytime</cite></blockquote>
+      </div>
+    </div>
+  </section>
+
+  <section class="section surface-ink" id="machine" style="padding-top:clamp(3.5rem,7vw,5.5rem)">
+    <div class="machine-wrap">
+      <header class="section-head">
+        <span class="sticker sticker--gum">Story machine</span>
+        <h2 class="h2" style="color:var(--cream)">Stuck? <mark>Pull the lever.</mark></h2>
+        <p class="lede">Spin up a premise and tweet it at us. We’ll perform the best ones live at the demo.</p>
+      </header>
+      <div class="machine reveal">
+        <div class="reels" aria-hidden="true">
+          <div class="reel"><span class="reel__label">Who</span><div class="reel__window"><ul class="reel__strip"><li>a shy dragon</li></ul></div></div>
+          <div class="reel"><span class="reel__label">Wants to</span><div class="reel__window"><ul class="reel__strip"><li>open a bakery</li></ul></div></div>
+          <div class="reel"><span class="reel__label">Where</span><div class="reel__window"><ul class="reel__strip"><li>on Mars</li></ul></div></div>
+        </div>
+        <p class="machine__out" id="premise" aria-live="polite">A shy dragon who wants to open a bakery on Mars.</p>
+        <div class="row">
+          <button class="btn btn--tomato" type="button" id="spin">🎰 Spin a story</button>
+          <a class="btn btn--secondary" id="tweet" href="#" target="_blank" rel="noopener">Tweet it at us</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="demo">
+    <div class="wrap">
+      <header class="section-head">
+        <span class="sticker sticker--mint">The demo</span>
+        <h2 class="h2">Watch it <mark>go off-script</mark></h2>
+        <p class="lede">Filmed live at the robot station. One take, no rehearsal, at least one cat captain.</p>
+      </header>
+      <div class="tv reveal">
+        <!-- Swap in the demo: set data-youtube="VIDEO_ID" or data-mp4="demo.mp4" -->
+        <div class="video" id="video" data-youtube="" data-mp4="">
+          <button class="video__play" type="button" aria-label="Play the demo video"><span class="video__disc" aria-hidden="true"><svg width="40" height="40" viewBox="0 0 20 20"><path d="M6 3.5 L17 10 L6 16.5Z" fill="#1b1530"/></svg></span><span>Play the demo</span><span class="video__note" id="video-note">Premieres Sunday 8 Nov, 15:00 PT</span></button>
+        </div>
+        <div class="tv__knobs" aria-hidden="true"><i></i><i></i><b></b><b></b></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="credits" role="note" aria-label="Credits">
+    <div class="credits__row">
+      <span class="sticker sticker--sun">Made at MakerMods Physical AI Hacks</span>
+      <span class="sticker sticker--sky">Talks via LiveKit</span>
+      <span class="sticker sticker--mint">2× i2rt YAM arms</span>
+      <span class="sticker sticker--gum">Founders Inc · SF</span>
+      <span class="sticker sticker--paper">Thanks MakerMods, Dream Labs &amp; LiveKit!</span>
+    </div>
+  </div>
+
+  <section class="section" id="team">
+    <div class="wrap">
+      <header class="section-head">
+        <span class="sticker sticker--paper">The crew</span>
+        <h2 class="h2">Who built <mark>this?</mark></h2>
+      </header>
+      <div class="team">
+        <figure class="polaroid reveal" style="margin:0"><div class="polaroid__pic" style="--pic:var(--sky)" aria-hidden="true">AB</div><figcaption><p class="polaroid__name">Team Member</p><p class="polaroid__role">Robot wrangler</p><a href="#">@handle</a></figcaption></figure>
+        <figure class="polaroid reveal" style="margin:0"><div class="polaroid__pic" style="--pic:var(--tomato)" aria-hidden="true">CD</div><figcaption><p class="polaroid__name">Team Member</p><p class="polaroid__role">Voice &amp; story brain</p><a href="#">@handle</a></figcaption></figure>
+        <figure class="polaroid reveal" style="margin:0"><div class="polaroid__pic" style="--pic:var(--mint)" aria-hidden="true">EF</div><figcaption><p class="polaroid__name">Team Member</p><p class="polaroid__role">Props &amp; glue gun</p><a href="#">@handle</a></figcaption></figure>
+        <figure class="polaroid reveal" style="margin:0"><div class="polaroid__pic" style="--pic:var(--bubblegum)" aria-hidden="true">L+R</div><figcaption><p class="polaroid__name">Lefty &amp; Righty</p><p class="polaroid__role">The talent (white &amp; black arm)</p><span class="chip chip--sun" style="margin-top:.3rem">no agent</span></figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:0">
+    <div class="card card--sun cta reveal">
+      <h2 class="h2">Your story <mark>could be next</mark></h2>
+      <p class="lede" style="margin-top:1rem;color:var(--ink)">Watch the demo, follow along, and send us the weirdest premise you can think of.</p>
+      <div class="row">
+        <a class="btn btn--secondary" href="#demo">▶ Watch the demo</a>
+        <a class="btn btn--ghost" href="#">Follow on X</a>
+        <a class="btn btn--ghost" href="#">GitHub</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>Once Upon a Bot · built in one weekend, Nov 7–8 2026 · <a href="#top">Back to the top ↑</a></footer>
+
+<script src="stage.js"></script>
+<script>
+(() => {
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches, $ = s => document.querySelector(s);
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); } }), { threshold: .15 });
+document.querySelectorAll('.reveal').forEach(n => RM ? n.classList.add('is-in') : io.observe(n));
+
+/* video slot */
+const v = $('#video');
+v.querySelector('.video__play').addEventListener('click', () => {
+  const yt = v.dataset.youtube, mp4 = v.dataset.mp4;
+  if (yt) v.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(yt)}?autoplay=1&rel=0" title="Once Upon a Bot demo" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+  else if (mp4) v.innerHTML = `<video src="${mp4}" controls autoplay playsinline></video>`;
+  else $('#video-note').textContent = 'Coming Sunday 15:00 PT. Pinky promise!';
+});
+
+/* story machine */
+const WHO = ['a shy dragon', 'a pirate cat', 'a robot chef', 'a tiny knight', 'a sleepy wizard', 'a Martian queen', 'a runaway toaster', 'two rival snails', 'a grumpy ghost', 'a very small giant'];
+const WANT = ['open a bakery', 'steal the moon', 'win a dance-off', 'find a lost hat', 'learn to whistle', 'become king', 'escape a maze', 'make one friend', 'fly a kite', 'win the science fair'];
+const WHERE = ['on Mars', 'under the sea', 'in a haunted castle', 'at the cheese museum', 'inside a volcano', 'on a pirate ship', 'at a royal wedding', 'in a snow globe', 'on the last train', 'in San Francisco'];
+const lists = [WHO, WANT, WHERE], strips = [...document.querySelectorAll('.reel__strip')];
+const pick = a => a[Math.floor(Math.random() * a.length)];
+let current = ['a shy dragon', 'open a bakery', 'on Mars'], spinning = false;
+const premise = () => { const s = `${current[0]} who wants to ${current[1]} ${current[2]}`; return s[0].toUpperCase() + s.slice(1) + '.'; };
+function setTweet() {
+  const text = `Dear Once Upon a Bot, please act this out: “${premise()}” 🤖🎭 #OnceUponABot #PhysicalAIHacks`;
+  const url = location.href.startsWith('http') ? location.href.split('#')[0] : 'https://example.com/';
+  $('#tweet').href = 'https://x.com/intent/post?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url);
+}
+setTweet();
+$('#spin').addEventListener('click', () => {
+  if (spinning) return; spinning = true;
+  const next = lists.map(pick);
+  const h = strips[0].parentElement.clientHeight;
+  strips.forEach((ul, i) => {
+    const n = RM ? 1 : 12 + i * 5, items = [current[i]];
+    for (let k = 0; k < n - 1; k++) items.push(pick(lists[i]));
+    items.push(next[i]);
+    ul.style.transition = 'none'; ul.style.transform = 'translateY(0)';
+    ul.innerHTML = items.map(x => `<li>${x}</li>`).join('');
+    void ul.offsetHeight;
+    ul.style.transition = RM ? 'none' : `transform ${1 + i * .35}s cubic-bezier(.2,.75,.25,1.08)`;
+    ul.style.transform = `translateY(${-(items.length - 1) * h}px)`;
+  });
+  current = next;
+  setTimeout(() => {
+    strips.forEach((ul, i) => { ul.style.transition = 'none'; ul.style.transform = 'none'; ul.innerHTML = `<li>${next[i]}</li>`; });
+    $('#premise').textContent = premise(); setTweet(); spinning = false;
+  }, RM ? 0 : 1800);
+});
+})();
+</script>
+</body>
+</html>
