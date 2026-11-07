@@ -1,4 +1,4 @@
-# Notes / progress log
+# Progress log
 
 ## 2026-11-07 (Sat)
 - Idea brainstorm: Dial-a-Robot (public phone line → LiveKit voice agent → robot, asks callers for help when stuck); Snack Thief as idle gag.
@@ -13,3 +13,6 @@
 - `pick.py` written: colour blob → centre + rotation → top-down IK plan (raise → above → down → grip → lift → place),
   every waypoint solved in sim, path checked against the table floor, refuses unless arm at rest. Dry run OK.
 - After a script ends the motors switch off and blink red (normal idle).
+- **Pivot to robot story theatre** (see [decisions.md](decisions.md)). Started in parallel: gesture library + stage
+  server (sim only, arms busy with another team), LiveKit storyteller agent, 3 website versions.
+- Knowledge base set up in `kb/` (this folder) plus `AGENTS.md` for anyone's AI agents.
