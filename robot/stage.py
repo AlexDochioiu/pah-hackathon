@@ -117,16 +117,17 @@ class Stage:
         return Plan(name, q[None].copy(), np.array([self.cmd_g[side]]), self.ck.pose_sweep(side, q), hold=True)
 
     def _build(self, side, name, Q, G, gesture=None, speed=1.0, base_sweep=None, loop=False, hold=False):
-        """Plan = blend from the current command into (Q, G) then (Q, G). Checks limits and table clearance."""
+        """Plan = blend from the current command into (Q, G) then (Q, G). Checks limits, table clearance and lean-back.
+        The blend and pose targets (stage, rest) are folds: they may lean back as far as rest or their start pose."""
         q0, g0 = self.cmd_q[side], self.cmd_g[side]
         G = np.full(len(Q), g0) if G is None else G
         BQ, BG = show.blend(q0, Q[0], speed, g0, G[0])
-        probs, bsweep = self.ck.check_samples(side, np.vstack([q0[None], BQ, Q[:1]]))
+        probs, bsweep = self.ck.check_samples(side, np.vstack([q0[None], BQ, Q[:1]]), fold=True)
         if base_sweep is None:
-            p2, base_sweep = self.ck.check_samples(side, Q)
+            p2, base_sweep = self.ck.check_samples(side, Q, fold=gesture is None)
             probs += p2
         else:
-            probs += show.motion_problems(Q)
+            probs += show.motion_problems(Q) + self.ck.lean_problems(side, Q)  # at the requested speed
         if probs:
             raise StageError(f"{side} {name}: " + "; ".join(probs))
         return Plan(name, np.vstack([q0[None], BQ, Q]), np.concatenate([[g0], BG, G]),
@@ -150,7 +151,7 @@ class Stage:
         except StageError:  # straight down is blocked: go through the stage pose
             p1 = self._pose_plan(side, "rest", show.stage_pose(side), speed)
             BQ, BG = show.blend(p1.Q[-1], show.HOME[side], speed, p1.G[-1], p1.G[-1])
-            probs, sw = self.ck.check_samples(side, BQ)
+            probs, sw = self.ck.check_samples(side, BQ, fold=True)
             if probs:
                 raise
             return Plan("rest", np.vstack([p1.Q, BQ]), np.concatenate([p1.G, BG]), show.join(p1.sweep, sw), hold=True)
@@ -209,7 +210,7 @@ class Stage:
                 v = (p.Q[p.i] - p.Q[max(p.i - 1, 0)]) * show.HZ if not p.done else np.zeros(6)
                 t = np.arange(1, int(FREEZE_S * show.HZ) + 1) / show.HZ
                 Q = np.clip(self.cmd_q[s] + np.outer(t - t * t / (2 * FREEZE_S), v), show.SAFE_LO, show.SAFE_HI)
-                probs, sw = self.ck.check_samples(s, Q)
+                probs, sw = self.ck.check_samples(s, Q, fold=True)
                 probs = [x for x in probs if "speed" not in x and "acceleration" not in x]  # braking may decelerate hard
                 if probs or show.gap(sw, self.plan[SIDES[1 - SIDES.index(s)]].sweep) < show.GAP:
                     Q = self.cmd_q[s][None].copy(); sw = self.ck.pose_sweep(s, Q[0])  # stop dead instead

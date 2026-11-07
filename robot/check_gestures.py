@@ -18,11 +18,13 @@ def fake(name, *keys):
     return show.Gesture({"name": name, "keys": [{"t": t, "q": list(q)} for t, q in keys]})
 
 
-# The checker must refuse: too fast, into the table, past a joint limit, and (online) into the other arm.
+# The checker must refuse: too fast, into the table, past a joint limit, leaning back (tips the table), and
+# (online) into the other arm.
 assert any("speed" in p for p in ck.check(fake("fast", (0, [0] * 6), (0.2, [0.8, 0, 0, 0, 0, 0]))))
 assert any("table" in p for p in ck.check(fake("dive", (0, [0] * 6), (3, [0, 1.3, -0.6, -0.8, 0, 0]))))
 assert any("j4 reaches" in p for p in ck.check(fake("limit", (0, [0] * 6), (3, [0, 0, 0, 1.9, 0, 0]))))
-print("checker rejects fast / table / limit motions")
+assert any("leans back" in p for p in ck.check(fake("lean", (0, [0] * 6), (3, [0, -0.3, 0.4, 0, 0, 0]))))
+print("checker rejects fast / table / limit / lean-back motions")
 
 st = stage.Stage(stage.KinArms(), "kin", warp=4)
 st.thread.start()

@@ -92,7 +92,9 @@ def library():
     s.shake(0, 4.0, pose(j2=0.03, j3=-0.05, j4=0.05, j6=0.04), 0.25, ramp=0)
     add(s, "idle_breathe", "Slow breathing sway; loops while idle.", arms="both", loop=True)
 
-    up = pose(j2=-0.15, j3=0.35, p=0.35)
+    # Don't lean back (show.COM_BACK_MARGIN): the arm's COM x moves ~+24 cm/rad with j2, -10 with j3, -1 with j4 at
+    # stage, so "up" pairs j2+ with j3+ (~1:2.4 keeps the COM in place) instead of j2- (which tips the table).
+    up = pose(j2=0.1, j3=0.3, p=0.35)
     s = Seq().to(up, 0.7)
     s.shake(s.t, s.t + 2 / 0.6, pose(j1=0.1, j5=0.25, j6=0.25), 0.6).wait(2 / 0.6).to(np.zeros(6), 0.7)
     add(s, "wave", "Raise the head and wave it side to side, three times.")
@@ -109,48 +111,49 @@ def library():
     s.shake(0.2, 0.2 + 2 / 0.8, pose(j5=0.2, j6=0.05), 0.8).wait(2 / 0.8)
     add(s.wait(0.2), "shake_head", "Shake the head side to side (no).")
 
-    add(Seq().to(pose(j1=0.3, j2=-0.1, j3=0.35, p=0.9, j6=0.4), 0.8, hold=0.15)
+    add(Seq().to(pose(j1=0.3, j2=0.12, j3=0.3, p=0.9, j6=0.4), 0.8, hold=0.15)
         .to(pose(j1=-0.12, j2=0.3, j3=-0.15, p=-0.45, j6=-0.3), 0.5, hold=0.35).to(np.zeros(6), 1.0),
         "slash", "Wind up high and outside, chop down and across toward the front.")
 
-    add(Seq().to(pose(j2=-0.2, j3=0.15, p=0.1), 0.6, hold=0.15)
+    add(Seq().to(pose(j2=0.05, j3=0.2, p=0.1), 0.6, hold=0.15)
         .to(pose(j1=-0.08, j2=0.4, j3=-0.1, p=0.0), 0.5, hold=0.4).to(np.zeros(6), 0.9),
-        "thrust", "Draw back, then stab straight forward.")
+        "thrust", "Raise the prop, then stab straight forward.")
 
-    add(Seq().to(pose(j1=-0.1, j2=-0.05, j3=0.25, p=1.1, j6=0.8), 0.6, hold=1.2).to(np.zeros(6), 0.8),
+    add(Seq().to(pose(j1=-0.1, j2=0.15, j3=0.25, p=1.1, j6=0.8), 0.6, hold=1.2).to(np.zeros(6), 0.8),
         "block", "Raise the prop upright in front like a guard, hold.")
 
-    hi = pose(j2=-0.15, j3=0.45, p=1.0)
+    hi = pose(j2=0.22, j3=0.5, p=1.0)
     s = Seq().to(hi, 0.7)
-    s.shake(s.t, s.t + 2.4, pose(j3=0.07, j4=-0.08, j6=0.3), 0.75).wait(2.4).to(np.zeros(6), 0.8)
+    s.shake(s.t, s.t + 2.4, pose(j2=0.03, j3=0.07, j4=-0.04, j6=0.3), 0.75).wait(2.4).to(np.zeros(6), 0.8)
     add(s, "celebrate", "Thrust the prop up high and wiggle it in triumph.", arms="both")
 
-    low = pose(j1=0.2, j2=-0.3, j3=-0.35, p=-0.6)
+    low = pose(j1=0.3, j2=-0.15, j3=-0.37, p=-0.5, j5=-0.4)  # down (COM in place), head away
     s = Seq().to(low, 0.8)
     s.shake(s.t, s.t + 2.0, pose(j5=0.03, j6=0.03), 3.0).wait(2.0).to(np.zeros(6), 1.0)
-    add(s, "cower", "Shrink back and away from the other arm, head down, trembling.")
+    add(s, "cower", "Shrink down, turn the head away from the other arm and down, trembling.")
 
     s = Seq().wait(2.5)
-    s.shake(0, 2.5, pose(j1=0.12, j4=0.15, j6=0.2), 0.8)
-    s.to(pose(j1=0.25, j2=-0.4, j3=-0.5, p=-0.8, j6=0.6), 1.4)
-    add(s, "die_dramatically", "Stagger, then slump backwards and stay slumped (play stage or rest after).", hold=True)
+    s.shake(0, 2.5, pose(j1=0.12, j4=0.08, j5=-0.1, j6=0.2), 0.8)
+    s.to(pose(j1=0.45, j2=0.1, j3=-0.35, p=-0.9, j5=-0.3, j6=0.6), 1.4)
+    add(s, "die_dramatically", "Stagger, then slump forward and sideways, drooping, and stay slumped "
+        "(play stage or rest after).", hold=True)
 
     s = Seq().wait(3.0)
     s.shake(0, 3.0, pose(j2=0.04, j3=0.08, j4=-0.12), 1.5).shake(0, 3.0, pose(j1=0.08), 0.5, ramp=0.5)
     add(s, "gallop", "Bounce up and down like riding a horse.")
 
-    s = Seq().to(pose(j2=-0.2, j3=0.3, p=0.6), 0.8, hold=0.1).to(pose(j2=0.35, j3=-0.05, p=0.2), 0.6)
+    s = Seq().to(pose(j2=0.18, j3=0.4, p=0.6), 0.8, hold=0.1).to(pose(j2=0.35, j3=-0.05, p=0.2), 0.6)
     s.shake(s.t, s.t + 1.0, pose(j5=0.08, j6=0.08), 2.2).wait(1.0).to(np.zeros(6), 0.9)
-    add(s, "roar", "Rear back, lunge at the audience and shake the head.")
+    add(s, "roar", "Rise up tall, lunge at the audience and shake the head.")
 
-    crouch = pose(j2=-0.25, j3=-0.35, p=-0.2)
+    crouch = pose(j2=-0.12, j3=-0.3, p=-0.2)
     s = Seq().to(crouch + pose(j1=0.25), 1.0)
     t0 = s.t
     s.to(crouch + pose(j1=-0.12), 2.6)
     s.shake(t0, s.t, pose(j4=0.06), 1.2).to(np.zeros(6), 1.0)
     add(s, "sneak", "Crouch low and creep across, head bobbing.")
 
-    add(Seq().to(pose(j1=-0.25, j2=-0.2, j3=0.1, p=0.0, j5=0.35, j6=0.3), 0.8, hold=1.2).to(np.zeros(6), 0.8),
+    add(Seq().to(pose(j1=-0.22, j2=-0.05, j3=0.0, p=0.0, j5=0.35, j6=0.3), 0.8, hold=1.2).to(np.zeros(6), 0.8),
         "look_at_other", "Turn the head toward the other arm, tilt, hold.", arms="both")
 
     add(Seq().to(pose(j2=0.35, j3=0.05, p=0.0), 0.8, hold=1.2).to(np.zeros(6), 0.8),

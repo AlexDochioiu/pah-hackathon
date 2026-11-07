@@ -28,6 +28,14 @@ AMAX = np.array([8.0, 8.0, 8.0, 15.0, 15.0, 15.0])  # rad/s^2; the wrist joints 
 CLEAR = 0.04                                   # m every moving link, grasp site and prop tip stay above the table
 GAP = 0.15                                     # m the two arms (links + props) stay apart
 VOX = 0.01                                     # swept-volume voxel; the gap check subtracts its error (VOX*sqrt(3))
+# Don't lean back (Nov 7): the bases sit near the table's back edge and the table is light, so moving the arms' mass
+# behind the bases tips it over backward. Each arm's centre of mass (link1 and below, gripper; base frame) must stay
+# ahead of the stage pose's COM minus a margin, in every gesture, idle and blend. Folds (the stage/rest gestures and
+# the server's blends and stage/rest moves, all <= 75 % of the joint limits) may lean back as far as rest or the pose
+# they start from, no further: rest is folded low and the table holds it.
+LEAN_BACK_CHECK = True  # switch: False turns the rule off everywhere (checker, stage server, arm.py)
+COM_BACK_MARGIN = 0.02  # ponytail: calibration knob, m the COM may go behind the stage pose's COM (first guess)
+FOLD = ("stage", "rest")
 
 # Stage pose: lift.py's raised pose (gripper ~0.48 m up, facing the audience) with the "head" (gripper) level.
 # Not turned inward: with 15 cm props the arms have only ~0.22 m of inward room each before the 15 cm gap.
@@ -276,10 +284,36 @@ class Checker:
     def __init__(self):
         self.scene = Scene()
         self.swept = {}  # (name, side) -> sweep tuple
+        m = self.scene.m
+        self._link1 = {s: m.body(p + "link1").id for s, p in (("left", "l_"), ("right", "r_"))}
+        self._base = {s: m.body(p + "base").id for s, p in (("left", "l_"), ("right", "r_"))}
+        self.stage_x = {s: float(self.com(s, [stage_pose(s)])[0, 0]) for s in SIDES}
+        self.rest_x = {s: float(self.com(s, [HOME[s]])[0, 0]) for s in SIDES}
 
-    def check_samples(self, side, Q):
-        """Problems of one arm's absolute joint samples (limits, speed, accel, table clearance); returns (problems, sweep)."""
-        probs = motion_problems(Q)
+    def com(self, side, Q):
+        """(N, 3) centre of mass of the arm's moving links (link1 and below, gripper) per sample, in its base frame."""
+        sc, out = self.scene, []
+        for q in Q:
+            sc.set(side, q); mujoco.mj_kinematics(sc.m, sc.d); mujoco.mj_comPos(sc.m, sc.d)
+            out.append(sc.d.subtree_com[self._link1[side]] - sc.d.xpos[self._base[side]])
+        return np.array(out)
+
+    def lean_problems(self, side, Q, fold=False):
+        """The don't-lean-back rule (LEAN_BACK_CHECK, COM_BACK_MARGIN): problems as strings, empty = ok.
+        fold=True: a fold or blend, which may also lean back as far as rest or its first sample."""
+        if not LEAN_BACK_CHECK or not len(Q):
+            return []
+        x = self.com(side, Q)[:, 0]
+        base = min(self.stage_x[side], self.rest_x[side], float(x[0])) if fold else self.stage_x[side]
+        if x.min() < base - COM_BACK_MARGIN - 1e-6:
+            return [f"leans back (tips the table): centre of mass at x = {x.min()*100:.1f} cm, "
+                    f"limit {(base - COM_BACK_MARGIN)*100:.1f} cm"]
+        return []
+
+    def check_samples(self, side, Q, fold=False):
+        """Problems of one arm's absolute joint samples (limits, speed, accel, table clearance, lean-back); returns
+        (problems, sweep). fold: see lean_problems()."""
+        probs = motion_problems(Q) + self.lean_problems(side, Q, fold=fold)
         sw = self.scene.sweep(side, Q)
         if sw[2] < CLEAR:
             probs.append(f"lowest point (prop included) is {sw[2]*100:.1f} cm above the table, needs {CLEAR*100:.0f} cm")
@@ -290,7 +324,7 @@ class Checker:
         probs = []
         for side in SIDES:
             Q, G = g.samples(side)
-            p, sw = self.check_samples(side, Q)
+            p, sw = self.check_samples(side, Q, fold=g.name in FOLD)
             probs += [f"{side}: {x}" for x in p]
             self.swept[(g.name, side)] = sw
         if G is not None and (G.min() < -1e-6 or G.max() > 1 + 1e-6):
