@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Story Theatre</title>
+<link rel="icon" href="data:,">
+<!-- Served by agent/app.py. Colours are the site/v2/design.css tokens (the design system isn't picked yet). -->
+<style>
+  :root {
+    --cream:#fff6e5; --cream-deep:#f3e2bf; --paper:#ffffff; --ink:#1b1530; --ink-soft:#4a4360;
+    --tomato:#ff5a36; --sunshine:#ffc93c; --sky:#4cc3ff; --mint:#3ddc97; --lilac:#c9b8ff;
+    --line:3px solid var(--ink); --r-md:18px; --r-lg:28px; --r-pill:999px;
+    --font-body:"Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; margin:0; }
+  body { background:var(--cream); color:var(--ink); font-family:var(--font-body); display:flex; flex-direction:column;
+         gap:18px; padding:22px 28px 12px; user-select:none; -webkit-user-select:none; }
+  header { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+  h1 { font-size:34px; margin:0 12px 0 0; letter-spacing:-.5px; }
+  .chip { border:var(--line); border-radius:var(--r-pill); padding:6px 14px; font-size:18px; font-weight:600;
+          background:var(--paper); white-space:nowrap; }
+  .chip::before { content:""; display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:8px;
+                  background:var(--cream-deep); border:2px solid var(--ink); vertical-align:-1px; }
+  .chip.ok::before { background:var(--mint); }
+  .chip.wait::before { background:var(--sunshine); }
+  .chip.bad::before { background:var(--tomato); }
+  #say { font-size:44px; font-weight:700; text-align:center; min-height:56px; margin:4px 0 0; }
+  #talk { display:block; margin:0 auto; width:min(560px, 90vw); height:190px; border:var(--line); border-radius:var(--r-lg);
+          background:var(--sunshine); color:var(--ink); font:800 52px var(--font-body); letter-spacing:1px;
+          box-shadow:0 8px 0 var(--ink); cursor:pointer; touch-action:none; transition:transform .05s; }
+  #talk small { display:block; font-size:20px; font-weight:600; letter-spacing:0; margin-top:6px; }
+  #talk.held { background:var(--tomato); color:var(--paper); transform:translateY(6px); box-shadow:0 2px 0 var(--ink); }
+  #talk:disabled { background:var(--cream-deep); color:var(--ink-soft); cursor:not-allowed; }
+  #talk:focus-visible { outline:4px solid var(--sky); outline-offset:4px; }
+  #transcript { flex:1; overflow-y:auto; border:var(--line); border-radius:var(--r-md); background:var(--paper);
+                padding:16px 22px; font-size:28px; line-height:1.4; user-select:text; -webkit-user-select:text; }
+  #transcript p { margin:0 0 12px; }
+  #transcript hr { border:0; border-top:3px dashed var(--cream-deep); margin:8px 0 14px; }
+  #transcript .who { font-weight:700; margin-right:8px; }
+  #transcript .you { color:#0b6fa3; }
+  #transcript .interim { opacity:.6; }
+  #banner { display:none; position:fixed; inset:0; background:rgba(27,21,48,.55); align-items:center; justify-content:center;
+            font-size:40px; font-weight:800; color:var(--paper); cursor:pointer; }
+  #banner.show { display:flex; }
+  footer { font-size:15px; color:var(--ink-soft); display:flex; gap:18px; justify-content:space-between; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Story Theatre</h1>
+  <span class="chip" id="c-server">server</span>
+  <span class="chip" id="c-room">room</span>
+  <span class="chip" id="c-agent">storyteller</span>
+  <span class="chip" id="c-stage">stage</span>
+</header>
+<div id="say">Starting…</div>
+<button id="talk" disabled>HOLD TO TALK<small>or hold the space bar</small></button>
+<div id="transcript"></div>
+<footer><span id="f-version">version ?</span><span id="f-room"></span><span id="f-stage"></span></footer>
+<div id="banner">Click to turn on the sound</div>
+
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.23.0/dist/livekit-client.umd.js"></script>
+<script>
+const LK = LivekitClient;
+const $ = (id) => document.getElementById(id);
+const talk = $("talk"), say = $("say"), transcript = $("transcript");
+
+let room = null, agent = null, connecting = false, parked = false;
+let boot = null, pageHash = null, serverUp = false, joinedAt = 0;
+let holding = false, holdStart = 0, rpcChain = Promise.resolve();
+const segments = new Map();  // segment id -> <p>
+
+function chip(id, text, cls) { const el = $(id); el.textContent = text; el.className = "chip " + (cls || ""); }
+
+function agentState() { return agent ? (agent.attributes["lk.agent.state"] || "initializing") : null; }
+
+function render() {
+  const ready = room !== null && agent !== null;
+  talk.disabled = !ready;
+  talk.classList.toggle("held", holding);
+  talk.firstChild.textContent = holding ? "LISTENING…" : "HOLD TO TALK";
+  talk.querySelector("small").textContent = holding ? "let go when you're done" : "or hold the space bar";
+  const st = agentState();
+  chip("c-agent", agent ? "storyteller: " + st : (room ? "storyteller: not here yet" : "storyteller"),
+       agent ? "ok" : (room ? "wait" : ""));
+  if (!serverUp) say.textContent = "Server restarting…";
+  else if (!room) say.textContent = parked ? "This story was closed. Click to start a new one." : "Connecting…";
+  else if (!agent) say.textContent = "Waiting for the storyteller…";
+  else if (holding) say.textContent = "Listening to you…";
+  else say.textContent = { speaking: "Telling the story", thinking: "Thinking…", listening: "Hold the button and talk",
+                           initializing: "Getting ready…" }[st] || st;
+}
+
+function stripTags(text) {
+  return text.replace(/\[[^\]]{0,48}\]/g, "").replace(/\[[^\]]{0,48}$/, "").replace(/ {2,}/g, " ")
+             .replace(/ ([,.!?;:])/g, "$1");  // a tag removed before punctuation leaves a gap
+}
+
+function showSegment(id, who, text, final) {
+  let p = segments.get(id);
+  if (!p) {
+    p = document.createElement("p");
+    p.innerHTML = '<span class="who"></span><span class="text"></span>';
+    p.querySelector(".who").textContent = who === "you" ? "You:" : "Sparky:";
+    if (who === "you") p.classList.add("you");
+    segments.set(id, p);
+    transcript.appendChild(p);
+    while (transcript.children.length > 60) { segments.forEach((v, k) => { if (v === transcript.firstChild) segments.delete(k); });
+                                               transcript.firstChild.remove(); }
+  }
+  p.querySelector(".text").textContent = stripTags(text).trim();
+  p.classList.toggle("interim", who === "you" && !final);
+  if (!p.querySelector(".text").textContent) p.remove(), segments.delete(id);
+  transcript.scrollTop = transcript.scrollHeight;
+}
+
+function findAgent() {
+  agent = room ? [...room.remoteParticipants.values()].find((p) => p.isAgent) || null : null;
+  render();
+}
+
+async function connect() {
+  connecting = true;
+  chip("c-room", "room: joining", "wait");
+  try {
+    const t = await (await fetch("/token", { cache: "no-store" })).json();
+    const r = new LK.Room({ audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    r.on(LK.RoomEvent.ParticipantConnected, findAgent)
+     .on(LK.RoomEvent.ParticipantDisconnected, findAgent)
+     .on(LK.RoomEvent.ParticipantAttributesChanged, render)
+     .on(LK.RoomEvent.TrackSubscribed, (track) => {
+        if (track.kind === "audio") { const el = track.attach(); el.style.display = "none"; document.body.appendChild(el); }
+      })
+     .on(LK.RoomEvent.TrackUnsubscribed, (track) => track.detach().forEach((el) => el.remove()))
+     .on(LK.RoomEvent.AudioPlaybackStatusChanged, () => $("banner").classList.toggle("show", !r.canPlaybackAudio))
+     .on(LK.RoomEvent.Disconnected, (reason) => {
+        if (room !== r) return;
+        room = null; agent = null; holding = false;
+        parked = reason === LK.DisconnectReason.ROOM_DELETED;  // another window took the story, or the server stopped
+        chip("c-room", "room: left", "bad");
+        render();
+      });
+    r.registerTextStreamHandler("lk.transcription", async (reader, from) => {
+      const a = reader.info.attributes || {};
+      const id = a["lk.segment_id"] || reader.info.id;
+      const who = from.identity === r.localParticipant.identity ? "you" : "agent";
+      let text = "";
+      for await (const chunk of reader) { text += chunk; showSegment(id, who, text, false); }
+      showSegment(id, who, text, a["lk.transcription_final"] === "true");
+    });
+    await r.connect(t.url, t.token);
+    room = r; parked = false; joinedAt = Date.now();
+    if (transcript.children.length) transcript.appendChild(document.createElement("hr"));  // a new story starts
+    $("f-room").textContent = "room " + t.room;
+    chip("c-room", "room: joined", "ok");
+    findAgent();
+    await r.localParticipant.setMicrophoneEnabled(true);
+    $("banner").classList.toggle("show", !r.canPlaybackAudio);
+  } catch (e) {
+    console.error(e);
+    chip("c-room", "room: failed, retrying", "bad");
+  } finally {
+    connecting = false;
+    render();
+  }
+}
+
+function rpc(method) {
+  const r = room, a = agent;
+  if (!r || !a) return;
+  rpcChain = rpcChain.then(() => r.localParticipant.performRpc({ destinationIdentity: a.identity, method, payload: "" }))
+    .catch((e) => { console.error(method, e); say.textContent = "Couldn't reach the storyteller (" + method + ")"; });
+}
+
+function press() {
+  if (holding || talk.disabled) return;
+  holding = true; holdStart = Date.now();
+  if (room) room.startAudio();
+  rpc("start_turn");
+  render();
+}
+
+function release(cancel) {
+  if (!holding) return;
+  holding = false;
+  rpc(cancel || Date.now() - holdStart < 250 ? "cancel_turn" : "end_turn");  // a tap is not a turn
+  render();
+}
+
+talk.addEventListener("pointerdown", (e) => { talk.setPointerCapture(e.pointerId); press(); });
+talk.addEventListener("pointerup", () => release(false));
+talk.addEventListener("pointercancel", () => release(true));
+talk.addEventListener("contextmenu", (e) => e.preventDefault());
+window.addEventListener("keydown", (e) => { if (e.code === "Space") { e.preventDefault(); if (!e.repeat) press(); } });
+window.addEventListener("keyup", (e) => { if (e.code === "Space") { e.preventDefault(); release(false); } });
+window.addEventListener("blur", () => release(true));
+$("banner").addEventListener("click", () => room && room.startAudio());
+document.addEventListener("click", () => { if (parked && serverUp && !room) { parked = false; render(); } });
+
+async function poll() {
+  try {
+    const ctl = new AbortController(); setTimeout(() => ctl.abort(), 2000);
+    const s = await (await fetch("/status", { cache: "no-store", signal: ctl.signal })).json();
+    serverUp = true;
+    chip("c-server", s.worker === "running" ? "server: up" : "server: worker down", s.worker === "running" ? "ok" : "bad");
+    chip("c-stage", s.stage.ok ? "stage: " + ((s.stage.state && s.stage.state.mode) || "online") : "stage: offline",
+         s.stage.ok ? "ok" : "bad");
+    $("f-version").textContent = "version " + s.version;
+    $("f-stage").textContent = "stage " + s.stage_url;
+    if (boot !== null && s.boot !== boot) {  // the server restarted
+      if (s.page !== pageHash) { location.reload(); return; }
+      parked = false;
+      if (room) { const r = room; room = null; agent = null; await r.disconnect(); }
+    }
+    boot = s.boot; pageHash = s.page;
+    if (room && !agent && Date.now() - joinedAt > 20000) {  // dispatch got lost: start over in a fresh room
+      const r = room; room = null; await r.disconnect();
+    }
+    if (!room && !connecting && !parked) connect();
+  } catch (e) {
+    serverUp = false;
+    chip("c-server", "server: restarting…", "wait");
+    chip("c-stage", "stage: ?", "");
+  }
+  render();
+}
+
+poll();
+setInterval(poll, 1500);
+</script>
+</body>
+</html>

@@ -56,3 +56,9 @@
   15 cm props held. Sim-only so far ([gestures.md](gestures.md#duets-robotduetspy)).
 - Duets 3–7: `poke` (prop to the right's hand), and no-touch `quick_draw`, `tip_hats`, `copycat`, `car_ride`
   (5.6–7.7 s). `cross_swords`/`cheers` trimmed to 8.7/9.0 s. Approach moves now ease their turn in and out.
+- Story Theatre (`agent/app.py`, `uv run app.py` → http://127.0.0.1:8790): a hold-to-talk web page for the loud
+  venue. The worker runs with `PTT=1` (manual turns, mic ignored unless the button or space bar is held). Checked
+  end to end in headless Chrome with a fake mic looping a spoken request against `fake_stage.py`: 15 s of looping
+  speech without the button gets no reaction; a held turn gets a story with gestures, the reply starting ~3.5 s after
+  release. Gotcha: if the STT finalises while the button is still held, `commit_user_turn` waits for a second final
+  until `transcript_timeout`, so it is 2.5 s (it was 13 s with 10 s).

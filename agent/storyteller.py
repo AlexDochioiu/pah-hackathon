@@ -2,6 +2,7 @@
 
     uv run storyteller.py console   # talk to it in this terminal (mic + speaker)
     uv run storyteller.py dev       # serve it to LiveKit Cloud rooms (web playground, phone calls)
+    uv run app.py                   # hold-to-talk web page; runs this worker with PTT=1 (see app.py)
 
 See README.md for setup. The prompt lives in prompt.md; gesture timing in gestures.py; freeze/idle/next-scene
 logic in director.py.
@@ -18,7 +19,7 @@ from livekit.agents import Agent, AgentServer, AgentSession, JobContext, TurnHan
 from livekit.agents.voice.room_io.types import NoiseCancellationParams
 from livekit.plugins import noise_cancellation
 
-from director import Director
+from director import Director, PushToTalk
 from gestures import DEFAULT_GESTURES, GestureBook, GestureSync, Stage, strip_tags_for_tts, tags_first
 
 HERE = Path(__file__).parent
@@ -35,6 +36,9 @@ EXPRESSIVE = os.getenv("EXPRESSIVE", "1") == "1"  # let the LLM steer the voice'
 STAGE_URL = os.getenv("STAGE_URL", "http://127.0.0.1:8770")
 IDLE_AFTER_S = float(os.getenv("IDLE_AFTER_S", "1.5"))  # quiet stage -> POST /idle after this long
 NEXT_SCENE_AFTER_S = float(os.getenv("NEXT_SCENE_AFTER_S", "0.8"))  # pause between scenes for interjections
+# Push-to-talk (app.py sets these): the mic only counts while the page's talk button is held.
+PTT = os.getenv("PTT", "0") == "1"
+AGENT_NAME = os.getenv("AGENT_NAME", "storyteller")
 
 logger = logging.getLogger("storyteller")
 
@@ -56,10 +60,10 @@ def _noise_cancellation(params: NoiseCancellationParams) -> rtc.NoiseCancellatio
     return noise_cancellation.BVC()
 
 
-server = AgentServer()
+server = AgentServer(num_idle_processes=1) if PTT else AgentServer()  # PTT: a warm process, so the greeting is quick
 
 
-@server.rtc_session(agent_name="storyteller")
+@server.rtc_session(agent_name=AGENT_NAME)
 async def entrypoint(ctx: JobContext) -> None:
     stage = Stage(STAGE_URL)
     book = GestureBook(await stage.fetch_gestures() or DEFAULT_GESTURES, await stage.fetch_duets())
@@ -70,7 +74,8 @@ async def entrypoint(ctx: JobContext) -> None:
         llm=inference.LLM(model=LLM_MODEL),
         tts=inference.TTS(model=TTS_MODEL, voice=TTS_VOICE),
         turn_handling=TurnHandlingOptions(
-            turn_detection=inference.TurnDetector(),  # LiveKit's turn detector decides when the listener is done
+            # LiveKit's turn detector decides when the listener is done; in push-to-talk the button release does
+            turn_detection="manual" if PTT else inference.TurnDetector(),
             preemptive_generation={"enabled": True},  # start the reply before the turn is confirmed over
         ),
         expressive=EXPRESSIVE,
@@ -94,7 +99,12 @@ async def entrypoint(ctx: JobContext) -> None:
         room_options=room_io.RoomOptions(audio_input=room_io.AudioInputOptions(noise_cancellation=_noise_cancellation)),
     )
     gestures.install(session.output)  # after start: wraps the outputs start() set up
+    if PTT:
+        session.input.set_audio_enabled(False)  # deaf until the button is held
     await ctx.connect()
+    if PTT:
+        PushToTalk(session, director).register(ctx.room.local_participant)
+        logger.info("push-to-talk: listening only while the talk button is held")
 
     stage.face("audience")  # a new show starts facing the audience (and at the stage pose)
     session.generate_reply(instructions="Greet the listener and ask what story they would like to hear.")

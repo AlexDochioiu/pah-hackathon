@@ -11,6 +11,7 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 | `agent/prompt.md` | The system prompt. `{{GESTURES}}` is replaced at startup with the stage's gesture list. |
 | `agent/gestures.py` | Tag parser, gesture-name mapping, stage HTTP client, the speech-synced gesture hook. |
 | `agent/director.py` | Freeze when the listener talks, idle when the stage is quiet, auto-continue to the next scene. |
+| `agent/app.py`, `agent/web/index.html` | Story Theatre: hold-to-talk web page plus the PTT worker it runs. |
 | `agent/fake_stage.py` | Stdlib stand-in for `robot/stage.py`, same API, prints what the arms would do. |
 | `agent/telephony/dispatch-rule.json` | SIP dispatch rule for a phone number (not applied yet). |
 
@@ -65,6 +66,39 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 - Agent listening and nobody talking: `POST /idle` after `IDLE_AFTER_S` (1.5 s), or later if the last gesture
   (`busy_until`, from the gesture durations) is still playing, so the final bow finishes.
 - Session start: `POST /stage`, then the greeting. Session end: `POST /rest`.
+
+## Story Theatre: hold-to-talk page (for the loud venue)
+`cd agent && uv run app.py`, then open http://127.0.0.1:8790 (Chrome; `127.0.0.1` counts as secure, so the mic
+works). The talk button (or the space bar) is the only way in: the mic is ignored unless it is held.
+- `app.py` (aiohttp) runs `storyteller.py dev --no-reload` with `PTT=1 AGENT_NAME=storyteller-ptt` in its own
+  process group, serves `web/index.html` (read from disk per request, so a browser refresh picks up page edits),
+  `GET /token` and `GET /status`. The worker uses its own agent name so a plain `storyteller.py dev` can't take
+  these rooms (override with `PTT_AGENT_NAME`).
+- `/token` mints a LiveKit token locally (`livekit-api`) for a fresh room, `story-<boot>-<n>`, with the worker
+  dispatched through the token's room config, and deletes the previous room: one story drives the arms at a time.
+  A second window takes the story over; the first says so and waits for a click.
+- `/status` reports the boot id, the git short hash (shown in the page footer, `+dirty` for uncommitted changes),
+  the page hash, the worker and the stage (`GET {STAGE_URL}/state`, 1 s timeout). The page polls it every 1.5 s:
+  server gone means "Server restarting…"; a new boot id means it rejoins a fresh room by itself (and reloads itself
+  if `index.html` changed). No agent 20 s after joining: it starts over in a fresh room.
+- Restarting: run it again. A new launch stops the one already on that port, worker included (pidfile
+  `$TMPDIR/story-theatre-<port>.json`; a worker left over by a `kill -9`'d app is killed too). SIGINT/SIGTERM/SIGHUP
+  close the room (the session ends, so the arms go to `/rest`), then stop the worker's process group. A worker that
+  dies on its own is restarted after 3 s.
+- It only talks to `STAGE_URL` (default `127.0.0.1:8770`, the tunnel to the station); it starts nothing on the
+  station. Stage down shows "stage: offline".
+- Agent side (`PTT=1`): `turn_detection="manual"`, input audio off after `session.start()`, and three RPC methods on
+  the agent's participant (`director.PushToTalk`), which the page calls:
+  - `start_turn`: freeze the arms (same as listener speech, and no idling while held, `Director.hold`), interrupt,
+    clear the user turn, audio on.
+  - `end_turn`: audio off, `commit_user_turn(transcript_timeout=2.5)`. The arms stay frozen until the commit
+    resolves, then the usual idle/next-scene logic resumes. A press shorter than 250 ms is sent as `cancel_turn`.
+  - `cancel_turn`: audio off, clear the user turn (also sent when the window loses focus mid-hold).
+- `[next]` auto-continue works as before; pressing the button cancels a pending next scene, like speech does.
+- Gotcha: if the STT finalises while the button is still held, LiveKit's `commit_user_turn` waits for a second final
+  transcript until `transcript_timeout`, then uses what it has. At 10 s that made replies start 13 s after release;
+  at 2.5 s they start ~3.5 s after.
+- The page loads `livekit-client` 2.23.0 from jsDelivr (the venue needs internet for LiveKit anyway).
 
 ## Gotchas
 - Install the hook after `session.start()`. The console's text/audio toggle resets the session outputs and drops
