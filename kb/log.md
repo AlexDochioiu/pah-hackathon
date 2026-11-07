@@ -45,3 +45,5 @@
   words a bit (fixed: tags move to their sentence start), and the arms both face the audience even when they play
   two characters: they should face and interact with each other (passed to the duets work). Props being printed:
   hat, sword, steering wheel, small gun.
+- Prompt: the story must be told through physical action words that match the gestures (user request), so the
+  arms are busy and the show feels dynamic.
