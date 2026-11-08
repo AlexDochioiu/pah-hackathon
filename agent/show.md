@@ -110,8 +110,9 @@ Come up, hold the big yellow button, and tell me what happens. [right:tremble_ex
 <!-- Works from any state: it stops a story politely. Esc (STOP) afterwards folds the arms and ends the music. -->
 [face:audience]
 One small note for the judges. [right:nod]
-These two worked thirty hours, unpaid. First prize would really help their union negotiations. [left:nod] [sfx:drum_roll]
-[music:victory] We are {SHOW_NAME}: {HOST_NAME}, these two, and {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}!
+My two stage hands worked thirty hours, unpaid. First prize would really help their union negotiations. [left:nod]
+And if first prize goes to someone else... see that big red button? {PANIC_REACH} This hand can end it all. One press. [sfx:drum_roll]
+Kidding! Mostly. [music:victory] We are {SHOW_NAME}: {HOST_NAME}, my two stage hands, and {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}!
 Goodnight! [duet:tip_hats] [sfx:applause]
 
 ## Live context
