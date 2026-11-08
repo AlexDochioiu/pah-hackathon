@@ -278,8 +278,20 @@ def run(a, stage, s, end):
         pre = Preview(a)
         pre.ready()
         pre.ask(cmd)
+        restarts = 0
         for k in range(1, a.chunks + 1):
-            ch = pre.chunk()
+            try:
+                ch = pre.chunk()
+            except RuntimeError as e:  # Nov 8: "DreamSessionExpired ... the episode restarted server-side" mid-pick
+                if "SessionExpired" not in str(e) or restarts >= 2:
+                    raise
+                restarts += 1
+                out(event="info", restart=str(e)[:160])
+                pre.close()
+                pre = Preview(a)
+                pre.ready()
+                pre.ask(cmd)
+                ch = pre.chunk()
             latency.append(ch.get("latency_s"))
             if time.monotonic() > end:
                 reason = f"no pick within {a.pick_s:.0f} s"
