@@ -1,0 +1,16 @@
+{
+  "name": "stage-hands-demo",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render Demo out/stage-hands-demo.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.541",
+    "@types/react": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "remotion": "^4.0.541",
+    "typescript": "^7.0.2"
+  }
+}
