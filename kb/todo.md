@@ -37,7 +37,6 @@ Parked Nov 7 ~20:20: the owner saw no value in it. The code stays in `dimos/` fo
 | Deep facing (67°), talk, props on/off, hand ensembles (hug, clap…) | ⏸ | Watch the wrist cable on the big j5 turn; hand gaps sag 1–2 cm |
 | Death collapse, fist bang, car drive (touch the table) | ⏸ someone at e-stop | Never unattended. Re-solved for the Round 3 table (~6 mm higher in the arm frame, the same depth into the table as before): watch the first knock and the car's wheels |
 | Restart the web app (`cd ~/pah-hackathon/agent && uv run app.py`) | ⏸ owner back | Stopped while the station is unattended |
-| wrist_l camera fails ("Couldn't resolve requests") | ⏸ owner | Reseat its USB. It is on a USB 2.1 link (Nov 7 21:13): 1280x720 at 15 fps max, so dreamcli at 30 fps can't open it. Re-plug it into USB 3, or `fps: 15` in a dreamcli config |
 | Dream-1 real test (dream.check, dry run, real run with dreamcli) | ⏸ owner + stage stopped | Steps in [dream-1.md](dream-1.md#dream-1-real-test-dreamcli-with-the-owner-at-the-e-stop) |
 | Dream-1 through the show path on the real arms | ⏸ someone at e-stop | Needs sync + stage restart for `/trajectory`; steps in [dream-1.md](dream-1.md#real-arm-steps-for-the-show-path-preview--checker--play) |
 
@@ -52,6 +51,7 @@ Parked Nov 7 ~20:20: the owner saw no value in it. The code stays in `dimos/` fo
   reach (~$200, 50+ demos, 7-8 h; [dream-1.md](dream-1.md) has the recipe).
 
 ## Done (recent)
+- wrist_l camera back on USB 3.2 after a reseat (it had linked at USB 2.1, 480 Mbit/s, so 1280x720@30 failed) (Nov 7 ~21:50).
 - fist_bump renamed `kiss` (the owner saw a kiss), sound on the contact; rub_hands and ufo_abduct under 8 s (Nov 7 ~20:30).
 - dimos twin: live mirror, model match (arm ≤ 0.04 mm), ghost endpoint, MCP skills (Nov 7 ~20:10).
 - Checker on the Round 3 calibration: right offset and per-arm table from `calib.json`; table moves re-solved;
