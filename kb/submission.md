@@ -17,7 +17,7 @@ interrupt anytime and the story bends.
 ### Description, 150 words
 Stage Hands turns the MakerMods station into a puppet theatre. You speak a story idea; a LiveKit voice agent
 improvises the story out loud while two i2rt YAM arms act it: each arm plays a character, its gripper is the
-mouth, and every beat is one of 75 solo gestures or 35 duets and ensembles, timed so each move lands on its word.
+mouth, and every beat is one of 78 solo gestures or 35 duets and ensembles, timed so each move lands on its word.
 Interrupt mid-story ("make the dragon vegan") and the arms freeze while the story bends. Lars, a green plush frog,
 hosts the show in a Fish Audio voice.
 
@@ -38,7 +38,7 @@ lands on its word. Tags are removed from speech, each character gets its own Fis
 when playback reaches it. You can talk over the story anytime: hold-to-talk for a loud room, or open-mic live
 chat with LiveKit's turn detector. The arms freeze, the narrator answers, and the story bends.
 
-The library holds 75 solo gestures and 35 two-arm moves (13 duets, 22 ensembles), each with a one-line
+The library holds 78 solo gestures and 35 two-arm moves (13 duets, 22 ensembles), each with a one-line
 description that goes into the LLM's prompt. Nothing reaches the arms unchecked: a MuJoCo checker built on i2rt's
 meshes tests every gesture on both arms for joint limits, speed and acceleration, table clearance, distance to
 the other arm across every pair of gestures, and whether the arm's centre of mass leans back far enough to tip

@@ -57,7 +57,7 @@ More: [kb/system.md](kb/system.md) (how the pieces connect), [kb/storyteller.md]
 [kb/gestures.md](kb/gestures.md).
 
 ### The gesture library
-- 75 solo gestures ([robot/gestures/](robot/gestures/)): roar, slash, shoot, facepalm, double take, eye roll,
+- 78 solo gestures ([robot/gestures/](robot/gestures/)): roar, slash, shoot, facepalm, double take, eye roll,
   mime moves (invisible wall, trapped in a box, ladder), prop moves (a toy car, a UFO), the Lars pick and place,
   plus the poses `stage`, `rest` and `idle_breathe`.
 - 35 two-arm moves ([robot/duets/](robot/duets/)): 13 duets (hug, high five, cross swords, tip hats, …) and 22

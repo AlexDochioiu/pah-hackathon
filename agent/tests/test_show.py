@@ -163,8 +163,10 @@ def test_show_md_is_complete_and_every_tag_exists_on_the_stage():
     # the takeover cuts in hard: the snap to the audience, then the first word at once
     assert s.act(1).split_lead()[0] == "[face:audience]"
     assert "[both:present]" in s.act(1).text  # the stage hands are lifted as they're introduced
-    # pointing gestures don't exist yet: their placeholders fall back
-    assert "[left:look_at_other]" in s.act(2).text and "[right:double_take]" in s.act(1).text
+    # the founder points are real gestures now (Nov 7 night); Lars's point still falls back
+    for tag in ("[left:point_back_left]", "[right:point_back_centre]", "[right:point_back_right]"):
+        assert tag in s.act(2).text, tag
+    assert "[right:double_take]" in s.act(1).text
     assert sum("table" in a.spoken for a in s.acts) == 1  # one table gag, not three
     # the budget (owner, Nov 7; ~5 minutes with the demo): acts 0-3 <= 2:00, the demo intro <= 10 s, the finale <= 20 s
     # (the estimate is the host voice's measured pace plus the tails: within ~2 s of the real audio, Nov 7)

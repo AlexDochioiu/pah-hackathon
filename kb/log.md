@@ -206,3 +206,8 @@
   stale target, so the arms sagged and jumped. Our path keeps the client in `dream_preview.py`; `stage.py --real` sets
   a 1 ms GIL switch interval and `/trajectory` reports `check_ms` ([arm-control.md](arm-control.md#motor-dropouts-nov-7)).
   submission.md's fault fallback and dropout text corrected.
+- Nov 7 night: founder points `point_back_left/centre/right` (laptop sim only). The arm turns round (~100° on j1, the
+  rest on j5), aims the head up at a founder's face ~0.8 m behind, jabs once and turns back: 6.8 s, within 3-8° of the
+  assumed spots. Turning, not leaning: the upper arm tips back over the base only once the turn has swung its back
+  sideways, so the COM stays ≥ −0.3 cm (limit −0.7). check_gestures passes (78 gestures); test_show passes (acts 0-3
+  116.7 s). Act 2's last nod is the left arm's only, so the right arm finishes pointing at Darius.

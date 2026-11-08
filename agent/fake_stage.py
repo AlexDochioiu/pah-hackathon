@@ -19,7 +19,8 @@ GESTURES = {
     "facepalm": 4.4, "flick": 4.1, "gallop": 3.0, "grab": 2.5, "gripper_clap": 2.4, "hop": 4.7, "idle_breathe": 4.0,
     "invisible_wall": 5.2, "italian": 5.9, "italian_exasperated": 6.0, "juggle": 4.7, "knee_slap": 5.9, "knock":
     5.6, "laugh": 4.2, "laugh_hard": 5.7, "lean_on_nothing": 4.9, "lift_heavy": 4.6, "look_around": 3.8,
-    "look_at_other": 2.8, "nod": 2.5, "pick_lars": 15.6, "place_lars": 16.1, "point_at_audience": 2.8, "pounce":
+    "look_at_other": 2.8, "nod": 2.5, "pick_lars": 15.6, "place_lars": 16.1, "point_at_audience": 2.8, "point_back_centre": 6.8,
+    "point_back_left": 6.8, "point_back_right": 6.8, "pounce":
     3.5, "pull": 3.2, "push": 3.4, "rest": 3.0, "revive": 5.5, "roar": 3.6, "shake_head": 2.9, "shoot": 3.4, "sigh":
     4.4, "slash": 3.9, "slow_turn": 5.9, "smell_flower": 5.2, "sneak": 4.6, "sneeze": 3.5, "snore": 5.8, "stage":
     3.0, "startle": 3.0, "stir_frantic": 3.6, "stir_lazy": 4.4, "stomp": 4.6, "ta_da": 4.1, "taste_sour": 3.6,

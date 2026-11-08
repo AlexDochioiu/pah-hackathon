@@ -636,6 +636,37 @@ def library():
     add(Seq().to(pose(j2=0.35, j3=0.05, p=0.0), 0.8, hold=1.2).to(np.zeros(6), 0.8),
         "point_at_audience", "Reach forward and point the prop at the audience.")
 
+    # Founder points (Nov 7 night; the show's SPOT_* config): the founders stand ~0.8 m behind the arms, faces ~0.75 m
+    # above the table, one behind each arm (back_left, back_right) and one between them (back_centre). The arm turns
+    # round (j1, then j5 for the rest of the way) and aims its head up at the face; the upper arm tips back over the
+    # base (j2-), which after a ~100 deg turn keeps the COM over the base (lean-back rule) instead of swinging it
+    # behind. The spots are a guess: retune the poses below.
+    # The right arm plays the mirror image, so "outward" (behind this arm's own shoulder) is one set of keys for both
+    # arms: point_back_left on the left arm = point_back_right on the right arm.
+    def point_back(at, win):
+        """Turn round to `at` and back. win = (j1 ends, the tip starts, the head turn starts) as fractions of the
+        turn time: staged so the COM never passes behind the base. The base turn (j1) leads; the tip back (j2-j4) and
+        the head's extra turn (j5, j6) come in late, once the arm's own back has swung sideways (the head's mass
+        swung round early is what tips it near 90 deg). Each joint's own quintic over its window."""
+        a1, b0, c0 = win
+        w = np.array([a1, 1 - b0, 1 - b0, 1 - b0, 1 - c0, 1 - c0]); d = np.abs(at)
+        T = max(np.max(1.875 * d / (0.9 * show.VMAX * w)), np.max(np.sqrt(5.78 * d / (0.9 * show.AMAX * w * w))))
+        ease = lambda x: np.array([quintic(x / a1), *[quintic((x - b0) / (1 - b0))] * 3,
+                                   *[quintic((x - c0) / (1 - c0))] * 2])
+        s = Seq().drop(at, ease, T).wait(0.2)
+        s.to(at + pose(j2=0.06, j3=0.06, j4=-0.12), 0.35).to(at, 0.35).wait(0.3)  # a little jab: "this one!"
+        return s.drop(np.zeros(6), lambda x: 1 - ease(1 - x), T)  # the same path back
+    # Poses: grid search for the fewest radians within 8 deg of the aim; windows: searched for the shortest turn
+    # (~2.8 s at 90 % of the limits) with the COM at x >= -0.3 cm all the way (limit -0.7).
+    outward = pose(j1=1.8, j2=-0.4, j3=0.2, j4=0.0, j5=-1.0)  # left arm: ~(-0.8, +0.25, 0.75) m, behind its shoulder
+    inward = pose(j1=-1.7, j2=-0.6, j3=0.0, j4=0.2, j5=1.0)   # ~(-0.8, -0.30, 0.75): behind, between the arms
+    for name, at, win, where in (
+            ("point_back_left", outward, (0.9, 0.25, 0.5), "the left arm: behind its left shoulder"),
+            ("point_back_right", outward, (0.9, 0.25, 0.5), "the right arm: behind its right shoulder"),
+            ("point_back_centre", inward, (0.85, 0.3, 0.5), "either arm: behind the middle, between the two arms")):
+        add(point_back(at, win), name, f"Turn right round and point the head up at someone standing behind ({where}), "
+            "a little jab, then back: introduce someone backstage, look behind you!, it's behind you, over there.")
+
     s = Seq().wait(2.4)
     s.shake(0, 2.4, pose(j4=0.06), 1.25)
     s.grips(*[(0.2 + 0.33 * i, 1.0 if i % 2 == 0 else 0.0) for i in range(7)], (2.4, 1.0))

@@ -112,7 +112,7 @@ Every gesture is checked on **both** arms at load (the server and bring-up refus
   folds), and duets are refused. `"table": {..., "prop": true}` lets the held toy touch the table too (drive,
   ufo_land). Sim only, like every table-contact move.
 
-## Library (75 gestures, all pass; durations at speed 1; the `about` texts the storyteller sees)
+## Library (78 gestures, all pass; durations at speed 1; the `about` texts the storyteller sees)
 | Gesture | s | About |
 |---|---|---|
 | `against_the_wind` | 4.2 | Mime: lean hard into a storm and struggle forward, pushed back by every gust: wind, a storm, walk against it, a blizzard, struggle. |
@@ -157,6 +157,9 @@ Every gesture is checked on **both** arms at load (the server and bring-up refus
 | `pick_lars` | 16.8 | Lars the frog joins: the right arm picks him up from his dock and holds him head up. Ends holding him: then any gesture plays with him. **Right arm only** (lars.py bake). |
 | `place_lars` | 17.3 | Lars goes home: the right arm puts him back on his dock, lets go and returns to the stage pose. **Right arm only** (lars.py bake). |
 | `point_at_audience` | 2.8 | Reach forward and point the prop at the audience. |
+| `point_back_centre` | 6.8 | Turn right round and point the head up at someone standing behind (either arm: behind the middle, between the two arms), a little jab, then back: introduce someone backstage, look behind you!, it's behind you, over there. |
+| `point_back_left` | 6.8 | Turn right round and point the head up at someone standing behind (the left arm: behind its left shoulder), a little jab, then back: introduce someone backstage, look behind you!, it's behind you, over there. |
+| `point_back_right` | 6.8 | Turn right round and point the head up at someone standing behind (the right arm: behind its right shoulder), a little jab, then back: introduce someone backstage, look behind you!, it's behind you, over there. |
 | `present` | 2.5 | Rise up tall, head high, hold, then settle: presenting this actor, here I am, introducing a character. The storyteller opens each casting with it; the code adds it if the LLM forgot (Nov 7). |
 | `pounce` | 3.5 | Crouch low, wiggle, then leap forward with the mouth open and snap it shut on the prey: pounce, leap out, lunge, attack, catch. |
 | `pull` | 3.2 | Bite onto something ahead and tug it back, hard, twice: pull, drag, tug, heave a rope. |
@@ -197,6 +200,19 @@ mirrored both-arm gestures double the moment): celebrate −10.3 → −0.4 (bot
 die_dramatically −2.9 → 1.2, cower −2.1 → 0.5, sneak −1.1 → 1.0. Unchanged and within the rule: bow, nod,
 shake_head, point_at_audience, gripper_clap 1.3, gallop 0.8, idle_breathe 0.2; stage/rest −2.7 (folds).
 Previews of the changed gestures re-rendered locally (Mac, `MUJOCO_GL=cgl`).
+
+Founder points (Nov 7 night, `point_back_*`, the show's `SPOT_*` config): the founders stand ~0.8 m behind the
+arms, faces ~0.75 m above the table, one behind each arm and one between them (a guess: retune the two poses in
+`make_gestures.py`). The arm turns round ~100° on j1, the head turns the rest on j5 (~165° in all) and aims up ~20-25°,
+within 3-8° of the spot. Pointing back must turn, not lean: the upper arm tips back over the base (j2 −0.4/−0.6), which
+after the turn keeps the COM over the base, and each joint group has its own time window (j1 leads, the tip and the head
+turn come in late), so the COM stays ≥ −0.3 cm all the way (limit −0.7). 2.8 s each way at 90 % of the speed limit,
+0.2 s hold, a small jab, 0.3 s hold, back: 6.8 s. The right arm mirrors, so `point_back_left` and `point_back_right`
+are the same keys (outward, behind the arm's own shoulder) and `point_back_centre` (inward) points at the middle from
+either arm. The tipped-back elbow sticks out ~26 cm toward the other arm: two points at once, or `point_back_centre`
+with `look_at_other`, `pick_lars` or `place_lars` on the other arm, are unsafe pairs (refused online; 29 pairs in all
+now). `point_back_centre` is not available facing each other (its j5 would pass the limit) or holding props; the show
+faces the audience first. Previews: `previews/point_back_*.gif` (`point_back_right` on the right arm).
 
 Speed limits make gestures slower than a cartoon: a 1.5 rad/s limit allows e.g. a ±0.25 rad wave at 0.6 Hz.
 Shakes in `make_gestures.py` are capped automatically to ~60 % of the limits.

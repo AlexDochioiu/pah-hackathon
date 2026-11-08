@@ -366,8 +366,8 @@ estimates; the table is in [show.md](show.md)). Rehearsal how-to: [show.md](show
   speech handle) and `transcription_node` pins gestures and mouths to them. A replayed act skips `tts_node`, so
   `show.py` synthesizes under a stand-in speech handle, caches the marks next to the WAV (`<key>.json`) and hands
   them to the replayed speech. The cache key includes the palette's voice ids and the cast.
-- Founder points use `SPOT_*` chains in the config: the first gesture the stage knows wins, so the placeholders
-  (`point_back_left` and co., which don't exist yet) fall back to `look_at_other`/`nod` until they do.
+- Founder points use `SPOT_*` chains in the config: the first gesture the stage knows wins (`point_back_left` and
+  co., built Nov 7 night; a stage without them falls back to `look_at_other`/`nod`).
 
 ## Gotchas
 - Install the hook after `session.start()`. The console's text/audio toggle resets the session outputs and drops

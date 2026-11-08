@@ -72,11 +72,11 @@ Stage hands. Because they're hands. That joke cost forty dollars in API credits.
 Please welcome... [sfx:tada] {SHOW_NAME}! [both:ta_da] [sfx:applause] [music:funny]
 
 ## Act 2: The founders
-<!-- The founders stand behind the arms. Each name gets a point (a placeholder look or nod until the point gestures exist). -->
+<!-- The founders stand behind the arms. Each name gets a point: the arm turns round (~2.8 s) and points its head at them. -->
 [face:audience]
 First, {FOUNDER_1}! {POINT_1} Hasn't blinked since Friday. We checked: we have cameras. [right:double_take]
 {FOUNDER_2}! {POINT_2} Keeps telling these two to act natural. They are two arms, bolted to a table, with no legal rights. [left:slow_turn]
-And {FOUNDER_3}! {POINT_3} Calls them the kids. Kids working thirty hours unpaid: that's not parenting, that's a startup. [both:nod]
+And {FOUNDER_3}! {POINT_3} Calls them the kids. Kids working thirty hours unpaid: that's not parenting, that's a startup. [left:nod]
 On day one, the table tipped over. With them on it. [both:cower] Nobody filed a report. [left:shake_head]
 Give it up for {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}! [ensemble:clap] [sfx:applause]
 
