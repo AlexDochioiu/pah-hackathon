@@ -318,7 +318,7 @@ def steps(stage, arm, name, t, q, g, a):
     while time.monotonic() < t_free and str(stage.state()["arms"][arm].get("playing") or "").startswith("dream"):
         time.sleep(0.1)
     reason, r = play(stage, arm, name, t, q, g, a.speed, None, a.raw)
-    reason = reason or wait_done(stage, arm, name, time.monotonic() + r["duration_s"] + 5)
+    reason = reason or wait_done(stage, arm, name, time.monotonic() + 2 * r["duration_s"] + 10)  # Nov 8: a turn to the audience outlasted duration + 5 s
     if reason:
         out(event="info", piece=name, refused=str(reason)[:160])
     return reason
