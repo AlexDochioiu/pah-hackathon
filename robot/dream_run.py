@@ -358,6 +358,7 @@ def run(a, stage, s, end):
     cmd = {side: s["arms"][side]["joints"] for side in ARMS}
     try:
         if a.cam:  # the pen's spot changes between runs: snap and plan now (owner, Nov 8)
+            a.carry = None  # the pen isn't the stage's Lars prop: a stuck "holds lars" refused the next run (Nov 8)
             q = shlex.quote(json.dumps({x: list(s["arms"][x]["joints"])[:6] for x in ARMS}))
             r = subprocess.run(["ssh", "-o", "ControlPath=none", "-o", "BatchMode=yes", a.station,
                                 "cd ~/physical-ai-hacks && .venv/bin/python ~/dial/snap.py > /dev/null && "
