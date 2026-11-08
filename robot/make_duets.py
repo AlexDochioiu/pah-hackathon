@@ -321,6 +321,7 @@ def cross_swords():
         n = unit(np.cross(aL, aR)); n = n if n[0] > 0 else -n  # the left blade passes in front
         pL = np.array([x, MID_Y - along * aL[1], z - along * aL[2]])
         pR, _ = mirror_target(pL, aL)
+        pR[0] = pL[0]  # the same x: the blades are then exactly `sep` apart along n (the bases' x offset would add to it)
         return (pL + n * sep / 2, aL), (pR - n * sep / 2, aR)
 
     def out(z, dy, dz, az):
@@ -455,7 +456,7 @@ def place_hat():
     s.move(hat(0.16, dy=0.08, el=0.15), pose(p=0.15, j5=0.2), T=1.0, mirror=False, hold=0.1, frac=FAST)  # hat held up high;
     # the right looks up at it
     s.move(hat(0.05), duck, T=0.6, mirror=False)                                # over the head; the right ducks
-    s.move(hat(0.012), None, approach=dict(zone=0.04, vc=0.04, vmax=0.25, acc=1.0, taper=0.06),
+    s.move(hat(0.012), None, approach=dict(zone=0.04, vc=0.04, vmax=0.25, acc=0.8, taper=0.06),
            mirror=False, hold=0.3)                                              # lay it on, gently
     s.move(hat(0.07, dy=0.03), None, T=0.3, line=True, mirror=False)           # let go
     s.move(hat(0.16, dy=0.08, el=0.1), proud, T=0.5, mirror=False)             # the right, proud, chin up
@@ -962,7 +963,7 @@ def rub_hands():
     for k in range(5):                                                          # rub: the wrists roll against each other
         a = 0.3 * (1 if k % 2 == 0 else -1)
         s.move(dl + pose(j6=a, j5=0.04 * np.sign(a)), dr + pose(j6=-a, j5=-0.04 * np.sign(a)), T=0.3, mirror=False)
-    s.move(dl, dr, T=0.25, mirror=False, hold=0.1)
+    s.move(dl, dr, T=0.7, mirror=False, hold=0.1)  # settle slowly: the rolled hands close here
     s.move(*meet(1.25, 0.2, 0.47, gap=0.08), T=0.4, line=True)
     return hands("rub_hands", "Two hands rubbed together, scheming: \"Excellent... my plan is working.\"", s)
 
@@ -1065,7 +1066,8 @@ def on_table(p, R, seed):
     p = np.array(p, float)
     for _ in range(4):
         q = Seq()._solve("left", p, R, seed)
-        p[2] += -show.BANG_DEPTH + 0.0005 - SC.lows("left", [q])[0][0]  # 0.5 mm spare: the stored keys are rounded
+        low = SC.lows("left", [q])[0][0] + show.TABLE_Z["left"] - show.TABLE_TOP  # above the higher table: the
+        p[2] += -show.BANG_DEPTH + 0.0005 - low  # mirrored right hand goes that deep; 0.5 mm spare: the keys are rounded
     return q
 
 
@@ -1108,7 +1110,8 @@ def car_frame(h):
     return np.column_stack([np.cross(h, z), h, z])
 
 
-CAR_Z = show.TABLE_Z + 0.028 - 0.002  # grasp site height with the car's wheels 2 mm into the table (as drive)
+CAR_Z = {s: show.TABLE_Z[s] + 0.028 - 0.002 for s in SIDES}  # grasp site height with the car's wheels 2 mm into
+# each arm's own table (as drive); the shared frame's z is each arm's own
 
 
 def car_chase(Y0=-0.02, X=0.36, SW=0.02, D=0.18, T=2.55):
@@ -1119,18 +1122,18 @@ def car_chase(Y0=-0.02, X=0.36, SW=0.02, D=0.18, T=2.55):
     arm; the hands come ~12 cm apart (a declared pair, outside the slow zone). Both cars are gripped with their nose
     along site -y (toward the right arm when they touch down): IK only finds the site-y-toward-+y grip here."""
     s = Seq()
-    road = lambda d: np.array([X + SW * np.sin(2 * np.pi * d / 0.30), Y0 - d, CAR_Z])  # d: metres down the road
+    road = lambda d, s="left": np.array([X + SW * np.sin(2 * np.pi * d / 0.30), Y0 - d, CAR_Z[s]])  # d: m down the road
     head = lambda d: car_frame((-SW * 2 * np.pi / 0.30 * np.cos(2 * np.pi * d / 0.30), 1.0))  # site y back along it
     gap = lambda u: 0.30 - 0.04 * np.sin(np.pi * min(u / 0.7, 1)) ** 2 + 0.03 * show.quintic((u - 0.6) / 0.4)
     up = np.array([0, 0, 0.05])                                                # centre spacing ^: closes in, escapes
-    s.move((road(0) + up, head(0)), (road(gap(0)) + up, head(gap(0))), T=1.0, mirror=False, frac=FAST)
-    s.move((road(0), head(0)), (road(gap(0)), head(gap(0))), mirror=False,
+    s.move((road(0) + up, head(0)), (road(gap(0), "right") + up, head(gap(0))), T=1.0, mirror=False, frac=FAST)
+    s.move((road(0), head(0)), (road(gap(0), "right"), head(gap(0))), mirror=False,
            approach=dict(zone=0.05, vc=0.055, vmax=0.3, acc=1.0, taper=0.1))  # touch down gently (<= 6 cm/s)
     w = glide(0.3)
 
     def at(u):  # the chase: the follower's distance down the road, the leader gap(u) ahead
         d = D * w(u)
-        return (road(d), head(d)), (road(d + gap(u)), head(d + gap(u)))
+        return (road(d), head(d)), (road(d + gap(u), "right"), head(d + gap(u)))
     s.path(lambda u: at(u)[0], lambda u: at(u)[1], T=T, warp=None)
     (pl, rl), (pr, rr) = at(1.0)
     s.move((pl + 0.4 * up, rl), (pr + 0.4 * up, rr), T=0.25, line=True, mirror=False)  # lift off, and home
@@ -1149,7 +1152,7 @@ def ufo_frame(tilt, toward=-np.pi / 4):
     return unit([np.sin(tilt) * np.cos(toward), np.sin(tilt) * np.sin(toward), -np.cos(tilt)])
 
 
-def ufo_abduct(H=(0.32, -0.30, 0.35), TILT=0.7, ZIP=(0.3, -0.3, 0.0, 0.5)):
+def ufo_abduct(H=(0.3256, -0.30, 0.35), TILT=0.7, ZIP=(0.3, -0.3, 0.0, 0.5)):
     """The left flies the UFO in over the middle and hovers it beside and above the right's head, belly (the beam)
     tilted toward it, pulsing and turning. The right cowers, looks up at it, trembles; then its head rises slowly
     toward the saucer, mouth falling open, as if being beamed up, and drops back as the UFO zips off. Why not right
@@ -1157,7 +1160,7 @@ def ufo_abduct(H=(0.32, -0.30, 0.35), TILT=0.7, ZIP=(0.3, -0.3, 0.0, 0.5)):
     only below ~16 cm, and the far side of the stage is ~50 cm off), so it hovers ~17 cm inward of the head and ~5 cm
     above it, tilted 40 deg to aim the beam at it; the right's face comes within a few cm of the saucer (a declared pair)."""
     s = Seq()
-    H = np.array(H, float)
+    H = np.array(H, float) + [2 * MID_X, 0, 0]  # H's x is from the right base (its head is what the saucer hovers at)
     stL = show.stage_pose("left")
     qH = s._solve("left", H, ufo_frame(TILT), stL + np.array([0, 0.89, 0.9, -1.68, 0, 0]))
     dH = qH - stL

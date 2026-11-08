@@ -36,6 +36,21 @@ gestures don't need it.
   worked), so this didn't move the arm's target; only its left-frame/pixel position follows ([props.md](props.md)).
 - After a recalibration: re-grab `robot/lars/facedown_dock_cal3.jpg` with Lars at the dock (the selftest's dock
   check runs on it).
+- Block tops (Round 3): left 0.0185, right 0.019 → table z **left −0.0065, right −0.006** (25 mm blocks). Both arms'
+  table came out ~6 mm higher than the 11:30 fit's −0.012 (the left one too), so moves that touch the table went
+  ~6 mm deeper until they were re-solved (below).
+
+## Who reads calib.json
+- `show.py` (the safety checker, the sim scene, make_gestures/make_duets): `RIGHT_OFFSET` from `right_offset`, and
+  `TABLE_Z[side]` = `block_top_z[side]` − `BLOCK_H` (25 mm) per arm, each arm's parts checked against its own table.
+  `TABLE_TOP` (the higher one) is what mirrored keys that touch the table are solved against: the same keys go
+  deeper on that arm. Missing or unreadable file: a loud stderr warning and the Round 3 values.
+- `lars.py`, `pick.py`: the homography, offset and per-arm block tops (they read it themselves).
+- After a recalibration: regenerate (`make_gestures.py`, `make_duets.py`) and run `check_gestures.py`. Table moves
+  given in joint space (bang_table's `fist`, die_dramatically's `dead`, ufo_crash's drop) are solved against the
+  table of the time: if the checker rejects them, re-solve those numbers (keep each the same height above the table);
+  don't loosen the limits. Duets that place one arm relative to the other in the shared frame (cross_swords' clash,
+  ufo_abduct's hover point) follow the offset.
 
 ## Redo it when
 The cameras or the arms move, or picks start missing by more than ~1 cm. Pixel coordinates refer to 640×360 frames.

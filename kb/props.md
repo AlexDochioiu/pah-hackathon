@@ -98,9 +98,9 @@ is 1.0's time / speed (not baked).
 - `/play {"arm": "right", "gesture": "pick_lars"}`: right arm only, empty hands, facing the audience. In each_other
   (since the lowered stage pose of round 3b) they come 12.2 cm from the left arm, in each_other_props 5.4 cm: the
   stage refuses them with "would come 13 cm from the left arm (stance); needs 15 cm". The same for place_lars, which
-  needs Lars held. **Also refused right after `/stance audience` from each_other** (the left arm's finished stance
-  move still counts its whole sweep, through the each_other pose) until the left arm moves again (any gesture or
-  `/stage`).
+  needs Lars held. Refused while the left arm's `/stance audience` move from each_other still runs (its path goes
+  through the each_other pose); once it holds the audience pose only that pose counts (fixed Nov 7 ~19:40: before,
+  the finished move's whole sweep counted until the left arm moved again).
 - After the pick the right arm is in props mode holding `lars`: unlike the toys (car, ufo), every gesture plays,
   re-checked with Lars's shape (/play ~140 ms). `/grip`, `/talk`, `/props` and duets are refused for that arm.
   The place ends it.
@@ -133,6 +133,6 @@ finish.
   or tilts: `GRIP_Z`, `GRIP_FROM_HEAD`, `HEAD_UP_ROLL`.
 - The real place left Lars ~25° off `DOCK_AXIS` and ~2 cm off the dock (`facedown_dock_cal3.jpg`): inside the
   dock check's 30° / 3 cm, with little margin. Straighten him by hand before a pick if the check is on.
-- show's checker uses one table height (−0.012) for both arms; the 18:45 fit puts the right arm's at −0.006, so its
-  clearances read 6 mm optimistic. lars.py's own bake checks use `calib.json`'s.
+- show's checker uses each arm's table from `calib.json` since Nov 7 ~19:40 (before: −0.012 for both, 6 mm
+  optimistic). The bake already used them: pick_lars keeps the arm 14 mm above the table, place_lars 19 mm.
 - Live planning (`lars.py --dry`, `--go`) stays as a fallback for Lars anywhere on the table.

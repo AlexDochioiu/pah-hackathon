@@ -41,6 +41,8 @@
 
 ## Frames
 - Each arm reports poses in its own base frame. Both arms face +x (across the table), bases parallel.
-- **right-arm frame = left-arm frame + (0.0056, 0.602, 0)** m. So the right arm sits at +y of the left one.
-- Heights (arm-frame z): 25 mm block tops at 0.013 (left) / 0.020 (right), so the table is at ≈ −0.012 / −0.005.
+- **right-arm frame = left-arm frame + (−0.0056, 0.6018, 0)** m (Round 3 fit, `robot/calib.json`). So the right arm
+  sits at +y of the left one.
+- Heights (arm-frame z, Round 3): 25 mm block tops at 0.0185 (left) / 0.019 (right), so the table is at
+  ≈ −0.0065 / −0.006.
   See [calibration.md](calibration.md).

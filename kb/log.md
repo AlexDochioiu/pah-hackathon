@@ -134,3 +134,9 @@
   left-frame and pixel position follow `calib.json` (px (331, 86) now). The head end face-down comes from the yellow
   crown (legs as a second vote); the old width cue picked the feet on every real face-down frame. `retime` now
   caps speed at corners (the new calib's bake broke j3's acceleration limit without it).
+- Nov 7 ~19:40: `show.py` reads the right offset (−0.0056, 0.6018) and a per-arm table (−0.0065 left, −0.006 right) from
+  `calib.json` (was 0.0056 and −0.012 for both: both arms' clearances ~6 mm optimistic). Re-solved what then sat too
+  deep: bang_table, die_dramatically/revive, drive, ufo_land, ufo_crash, car_chase, drum_roll (each ~6 mm higher in
+  the arm frame, the old depth into the table); the offset's 1.1 cm x change needed fixes to cross_swords,
+  place_hat, rub_hands and ufo_abduct. `stage.py`: a finished one-shot plan counts only its held pose against the
+  other arm, so `/stance each_other`, `/stance audience`, `pick_lars` plays (refused only while the stance move runs).

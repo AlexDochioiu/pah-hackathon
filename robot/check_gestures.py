@@ -220,6 +220,29 @@ assert call("/stance", {"stance": "audience"})[0] == 200
 st.wait()
 assert np.allclose(st.cmd_q["left"], show.stage_pose("left"))
 print("stances ok: /stance each_other and back, gestures play relative to it")
+# Out to each_other and back, then pick_lars (Nov 7): while the left arm's stance move still runs its whole path
+# counts (pick_lars refused); once it holds the audience pose only that pose counts (pick_lars plays).
+assert {"pick_lars", "place_lars"} <= set(ok), sorted(ok)
+assert call("/stance", {"stance": "each_other"})[0] == 200
+st.wait()
+with st.lock:  # the 50 Hz loop can't advance meanwhile: the stance move is still running
+    st.set_stance("audience")
+    assert not st.plan["left"].done
+    try:
+        st.play("right", "pick_lars")
+        raise AssertionError("pick_lars started while the left arm's stance move from each_other was running")
+    except stage.StageError as e:
+        assert "from the left arm" in str(e), e
+st.wait()
+assert st.plan["left"].done and not st.plan["left"].loop and st.plan["left"].name == "stance"
+code, r = call("/play", {"arm": "right", "gesture": "pick_lars"})
+assert code == 200, r  # the finished stance move counts only the pose it holds
+st.wait()
+assert st.props["right"] == ok["pick_lars"].carry["name"]
+assert call("/play", {"arm": "right", "gesture": "place_lars"})[0] == 200
+st.wait()
+assert st.props["right"] is False and np.allclose(st.cmd_q["left"], show.stage_pose("left"))
+print("pick_lars after /stance each_other and back: refused while the stance move runs, plays once it holds")
 
 kinds = {d["name"]: d["kind"] for d in call("/duets")[1]}
 assert kinds["cheers"] == "duet" and kinds["storm"] == "ensemble", kinds

@@ -190,7 +190,7 @@ def library():
     # Death (round 3b rework): the power cuts. A short gasp, then every joint gives at once along one straight joint
     # line, as fast as the accel limits allow (no easing, no arc); only the last 5 cm slow to the table impact rule,
     # a small rebound, then dead still: the head flat on the table, the jaw hanging slack. Empty hands only.
-    dead = pose(j1=0.35, j2=0.2, j3=-0.48, p=-0.9, j5=-0.2, j6=0.7)
+    dead = pose(j1=0.35, j2=0.2, j3=-0.452, p=-0.9, j5=-0.2, j6=0.7)  # j3: the head ~8 mm above the cal3 table
     gasp = pose(j2=-0.03, j3=0.12, p=0.35, j6=-0.1)
     s = Seq().to(gasp, 0.35, hold=0.15).grips((0, 0.05), (0.3, 0.75))
     s.drop(dead, *collapse_law(gasp, dead, vz=0.2)).hit()
@@ -214,7 +214,8 @@ def library():
     # Bang the table (Nov 7, round 3): a closed fist (the gripper) knocks the table, aiming show.BANG_DEPTH into it at
     # <= 30 cm/s from a 6-8 cm wind-up; only the gripper touches, the links keep 4 cm. Empty hands only.
     # hand h cm above the table; the wind-up mostly cocks the wrist (j4 may accelerate twice as hard as the elbow)
-    fist = lambda h: pose(j2=0.3, **{-0.4: dict(j3=-0.381, p=-1.25), 6: dict(j3=-0.3, p=-0.909), 8: dict(j3=-0.3, p=-0.798)}[h])
+    # (j3 re-solved for the cal3 table, Nov 7 evening: the hand as high above show.TABLE_TOP as before)
+    fist = lambda h: pose(j2=0.3, **{-0.4: dict(j3=-0.354, p=-1.25), 6: dict(j3=-0.274, p=-0.909), 8: dict(j3=-0.274, p=-0.798)}[h])
     s = Seq().to(fist(8) + pose(j1=0.04, p=0.1, j6=-0.15), 0.7).grips((0, 0.05), (0.4, 0.0))
     for h, rise in ((8, 8),):  # one bang, the snarl, then the big one
         s.fall(fist(-0.4), 0.5 if h == 6 else 0.58).hit().to(fist(rise) + pose(j1=0.03 if rise == 6 else 0.05, p=0.12), 0.32)
@@ -720,7 +721,7 @@ def prop_gestures(stance="audience"):
     # drive: the toy car (show.PROP_SHAPES["car"]) glides down onto the table while rolling, drives inward over two
     # little bumps, turns left toward the audience, lifts it off and holds it there. The wheels press
     # 2 mm into the table.
-    z0 = show.TABLE_Z + 0.028 - 0.002  # grasp site height with the wheels 2 mm into the table
+    z0 = show.TABLE_TOP + 0.028 - 0.002  # grasp site height with the wheels 2 mm into the (higher) table
     seed = S + pose(j2=0.3, j3=-0.38, p=-1.25)
     line = lambda a, b, n: [np.asarray(a) + (np.asarray(b) - np.asarray(a)) * u for u in np.linspace(0, 1, n)[1:]]
     bump = lambda y: 0.004 * sum(np.exp(-((y - c) / 0.012) ** 2) for c in (0.03, -0.03))
@@ -779,7 +780,7 @@ def prop_gestures(stance="audience"):
     out.append(dict(s.gesture("ufo_hover", "The UFO stops in mid-air and hovers, pulsing up and down and slowly "
                               "turning: beam up, abduct, scan, hover, the aliens watch.", hold=True), prop="ufo"))
     # land: a slow, wobbling descent, touch down on the table, sit, take off again
-    zl = show.TABLE_Z + 0.042  # site height with the saucer just on the table (facing each other: ~3 mm in)
+    zl = show.TABLE_TOP + 0.042  # site height with the saucer just on the table (facing each other: ~3 mm in)
     desc = [ufo((0.30, 0.02 * v, zl + (hp[2] - zl) * (1 - v) ** 2), tilt=0.1 * np.sin(np.pi * v), toward=6 * v,
                 spin=0.3 * v, lean=0.12 * (1 - v)) for v in np.linspace(0, 1, 17)]
     qd, pd = fly(desc, S + uhome)
@@ -791,7 +792,7 @@ def prop_gestures(stance="audience"):
                               table=dict(min=-0.004, impact=0.06, prop=True)), prop="ufo"))
     # crash: a widening wobble and a spiral down that stops, tilted, well above the table, and stays there
     r = lambda v: 0.05 * np.sin(np.pi * v / 2)  # the spiral widens as it falls
-    sp = [ufo((0.30 + r(v) * (1 - np.cos(9 * v)), -r(v) * np.sin(9 * v), hp[2] - 0.06 * v ** 2),
+    sp = [ufo((0.30 + r(v) * (1 - np.cos(9 * v)), -r(v) * np.sin(9 * v), hp[2] - 0.054 * v ** 2),
               tilt=0.3 * v, toward=9 * v, spin=0.5 * v, lean=0.12 + 0.1 * v) for v in np.linspace(0, 1, 61)]
     qc, pc = fly(sp, S + uhome)
     s = Seq(uhome).path(qc[1:], 4.9, pts=pc, law=cruise).hit().wait(0.6)

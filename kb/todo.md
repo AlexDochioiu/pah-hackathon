@@ -26,7 +26,7 @@ Status: 🔨 being built · 👀 waiting for owner review · ⏸ waiting for som
 |---|---|---|
 | Lars pick (unattended allowed, slow) | ⏸ ready | Face-up bake picked and placed a face-down Lars on the real arms (Nov 7 evening). Now rebaked face-down (held facing the audience), sim-checked at 0.3/0.5/0.75/1.0, committed at 0.3: sync + stage server restart, then the checklist in [props.md](props.md). `--face-up` rebake for the old profile hold |
 | Deep facing (67°), talk, props on/off, hand ensembles (hug, clap…) | ⏸ | Watch the wrist cable on the big j5 turn; hand gaps sag 1–2 cm |
-| Death collapse, fist bang, car drive (touch the table) | ⏸ someone at e-stop | Never unattended |
+| Death collapse, fist bang, car drive (touch the table) | ⏸ someone at e-stop | Never unattended. Re-solved for the Round 3 table (~6 mm higher in the arm frame, the same depth into the table as before): watch the first knock and the car's wheels |
 | Restart the web app (`cd ~/pah-hackathon/agent && uv run app.py`) | ⏸ owner back | Stopped while the station is unattended |
 | wrist_l camera fails ("Couldn't resolve requests") | ⏸ owner | Reseat its USB |
 
@@ -40,6 +40,8 @@ Status: 🔨 being built · 👀 waiting for owner review · ⏸ waiting for som
 - Dream-1 fine-tune on Lars demos: not needed with the dock/live pick ([dream-1.md](dream-1.md) has the recipe).
 
 ## Done (recent)
+- Checker on the Round 3 calibration: right offset and per-arm table from `calib.json`; table moves re-solved;
+  a finished stance move no longer blocks pick_lars (Nov 7 ~19:40).
 - Show mode: `/show` page, cued acts with pre-synthesized voices, Lars as host.
 - Round 3a verdicts: all 5 hand ensembles kept, facing 67° (beba237).
 - Props explicit, deep facing, hand ensembles (e1b95eb). STOP button (af1d40d). Web hold-to-talk app (af8e2ab).

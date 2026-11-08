@@ -27,6 +27,12 @@ against the lean-back rule before it starts. Joints 4–6 run at a low gain (kp=
   ~25 samples along every segment and abort if the gripper goes below the table floor.
 - Start and end through the raised pose (rest + `[0, 0.8, 1.2, 0, 0, 0]`).
 - `--dry` prints the plan and exits; use it first, always.
+- `show.Checker` takes the right arm's offset and each arm's table height from `robot/calib.json`
+  ([calibration.md](calibration.md#who-reads-calibjson)); every arm is checked against its own table.
+- Stage server, arm against arm (`stage.py` `_commit`): a new plan must clear what the other arm is committed to by
+  15 cm: its whole plan while it runs or loops (idle breathing, stir), only the pose it holds once a one-shot plan
+  (a gesture, `/stance`, `/stage`) has finished. Whatever starts next on that arm (idle, a queued gesture) is checked
+  when it starts.
 
 ## YAM joint geometry (from FK on i2rt's model)
 - At zero the joint axes are j1 +z (base yaw), j2 +y, j3 −y, j4 −y (pitches), j5 −z (wrist yaw), j6 +x (roll).

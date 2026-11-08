@@ -24,7 +24,8 @@ sim on the station), then run on the real arms (results at the end).
 
 ## Frames and poses
 - Shared frame = the left arm's base frame: x toward the audience, y to the left arm's left, z up. The right base
-  is at y = −0.602 (right frame = left frame + (0.0056, 0.602, 0)). Table at z = −0.012.
+  is at y ≈ −0.602 (right frame = left frame + `RIGHT_OFFSET`, (−0.0056, 0.6018, 0) from `calib.json`). Table at
+  z = `TABLE_Z[side]`, per arm (−0.0065 left, −0.006 right; [calibration.md](calibration.md#who-reads-calibjson)).
 - **Stage pose** (left arm) = `[0, 0.8, 0.7, 0.2, 0, 0]` (Nov 7 evening, lowered so the action plays closer to the
   table): gripper ("head") level, facing the audience, ~0.37 m up. The lean-back rule stays anchored at `lift.py`'s
   raised pose `[0, 0.8, 1.2, −0.3, 0, 0]` (`LEAN_REF_LEFT`, ~0.48 m up), where the table was measured not to tip. Not turned inward: with 15 cm props each arm has only ~0.22 m of inward
@@ -296,12 +297,12 @@ held: keeping link3 15 cm apart needs the hands angled in, and then the props cr
 | `heckle`: The left points at the right and laughs at it, head back, bouncing, mouth flapping; the right looks over, then slowly droops, head hanging. | 7.1 | empty hands |
 | `invisible_ball`: Mime: the left throws an invisible ball in a high arc; the right's head follows it across, darts to meet it and catches it in its mouth with a sharp stop and a snap, then lifts its head, proud. | 6.0 | empty hands |
 | `mirror`: Mime, the mirror: hands flat on an invisible glass between them, the right is the left's reflection, up and down in crisp stops; then it slips, going up when the left goes down, both freeze, it snaps back; the left tests it with a sudden jerk and the right is a beat late; the left glares and the right innocently mirrors the glare. | 7.9 | empty hands |
-| `place_hat`: The left raises its prop like a hat and lays it gently on the right's head; the right ducks to take it, then straightens up proudly. | 7.2 | empty hands |
-| `poke`: The left arm sneaks up and pokes the right one on the side of its head with its prop; the right flinches away and shakes its head. | 7.4 | empty hands |
+| `place_hat`: The left raises its prop like a hat and lays it gently on the right's head; the right ducks to take it, then straightens up proudly. | 7.4 | empty hands |
+| `poke`: The left arm sneaks up and pokes the right one on the side of its head with its prop; the right flinches away and shakes its head. | 7.3 | empty hands |
 | `quick_draw`: Western standoff: guns low at the hips, fingers twitch... DRAW! The left is faster: BANG, its gun kicks up; the right, hit mid-draw, jerks back, drops its gun and slumps; the left raises its smoking barrel. Sound: gunshot at 3.64 s. | 7.7 | empty hands |
 | `straight_man`: The left does a silly bit, bouncing and wiggling with its mouth flapping; the right slowly turns to stare at it, deadpan; the left notices and freezes; the right turns back to the audience and the left droops. | 7.5 | empty hands |
 | `tip_hats`: Turn to each other; the left tips its hat, the right answers with a deeper tip. | 5.6 | empty hands |
-| `ufo_abduct`: The left flies the UFO in and hovers it over the right, pulsing and turning, its beam tilted at it; the right cowers, looks up, trembles, then its head rises slowly toward the saucer, mouth falling open, as if being beamed up, and drops back as the UFO zips off: abduction, beam me up, aliens. | 7.9 | left ufo, right empty |
+| `ufo_abduct`: The left flies the UFO in and hovers it over the right, pulsing and turning, its beam tilted at it; the right cowers, looks up, trembles, then its head rises slowly toward the saucer, mouth falling open, as if being beamed up, and drops back as the UFO zips off: abduction, beam me up, aliens. | 8.1 | left ufo, right empty |
 
 "≥ 20 cm" is the distance cap of the check (15 cm + 5). `poke` closes the right gripper on its prop first (grip 0).
 
@@ -339,7 +340,7 @@ arms are given; none touch (all ≥ 20 cm). Previews: `robot/previews/ensemble_<
 | `pull_rope`: Two hands pull a heavy rope: reach, grab, heave back, three times. | 13.7 | empty hands |
 | `rocket`: Crouch for the countdown, rumble, then blast up high together: a rocket lifting off. | 5.9 | empty hands |
 | `row_boat`: Both arms row a boat with the sticks as oars, off-sync: dip in, pull back, lift out and return with the wrist rolled flat, three strokes each. | 7.7 | empty hands |
-| `rub_hands`: Two hands rubbed together, scheming: "Excellent... my plan is working." | 10.0 | empty hands |
+| `rub_hands`: Two hands rubbed together, scheming: "Excellent... my plan is working." | 10.2 | empty hands |
 | `shrug`: "Who knows?": a little dip, then both pop up with the hands thrown open, palms up and out, heads tilted, an "eh" bob, and they drop: oh well. | 4.7 | empty hands |
 | `storm`: Both arms bend and whip together like trees in a howling storm. | 4.9 | empty hands |
 | `the_end`: Arms wide for "THE END!", then a deep bow together. | 4.0 | empty hands |

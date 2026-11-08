@@ -12,8 +12,31 @@ GESTURE_DIR = DIR / "gestures"
 SIDES = ("left", "right")
 HZ = 50
 
-RIGHT_OFFSET = np.array([0.0056, 0.602, 0.0])  # right-arm frame = left-arm frame + this (calib.json)
-TABLE_Z = -0.012                               # table surface, arm frame
+BLOCK_H = 0.025  # m, the calibration blocks' height (calib.json block_top_z is their top, touched by each arm)
+CALIB = DIR / "calib.json"  # the overhead calibration (calib.py), committed copy
+
+
+def _calib():
+    """(RIGHT_OFFSET, TABLE_Z) from calib.json; the Round 3 values (Nov 7 ~18:40) if it can't be read, loudly."""
+    try:
+        cal = json.loads(CALIB.read_text())
+        off = np.array([float(cal["right_offset"][0]), float(cal["right_offset"][1]), 0.0])
+        return off, {s: float(cal["block_top_z"][s]) - BLOCK_H for s in SIDES}
+    except Exception as e:
+        import sys
+        print(f"show.py: WARNING: cannot read {CALIB} ({e!r}); using the Round 3 fallback right offset (-0.0056, "
+              f"0.6018) and table z left -0.0065 / right -0.006. The checker's table clearance and arm gap may be wrong.",
+              file=sys.stderr, flush=True)
+        return np.array([-0.0056, 0.6018, 0.0]), {"left": -0.0065, "right": -0.006}
+
+
+# right-arm frame = left-arm frame + RIGHT_OFFSET (bases at the same height); TABLE_Z[side] = the table surface in that
+# arm's frame. The shared frame is the left arm's and offsets z by 0, so the right arm's parts are checked against
+# TABLE_Z["right"] there too.
+RIGHT_OFFSET, TABLE_Z = _calib()
+# Mirrored keys (a gesture's left-arm keys, a duet's mirrored Cartesian targets) play on both arms: those that touch
+# the table are solved against the higher of the two tables, where the same keys go deeper.
+TABLE_TOP = max(TABLE_Z.values())
 PROP_LEN, PROP_R = 0.15, 0.015                 # a prop sticks out of the fingers along the grasp axis
 # What an arm can hold (Nov 7, round 3b), as checker points (site frame: z out of the fingers, x the finger-closing
 # axis) with a radius each. "stick" (True) = any handed-in prop, a foam sword; "car" and "ufo" only play their own
@@ -122,8 +145,10 @@ def scene_spec():
     s = mujoco.MjSpec()
     s.visual.global_.offwidth, s.visual.global_.offheight = 640, 480
     w = s.worldbody
-    w.add_geom(type=mujoco.mjtGeom.mjGEOM_BOX, pos=[0.15, -0.301, TABLE_Z - 0.01], size=[0.45, 0.65, 0.01],
-               rgba=[0.55, 0.42, 0.3, 1], contype=0, conaffinity=0)
+    mid = -RIGHT_OFFSET[1] / 2  # each arm's half of the table at its own TABLE_Z (looks only: the checker uses TABLE_Z)
+    for y0, y1, side in ((mid, 0.349, "left"), (-0.951, mid, "right")):
+        w.add_geom(type=mujoco.mjtGeom.mjGEOM_BOX, pos=[0.15, (y0 + y1) / 2, TABLE_Z[side] - 0.01],
+                   size=[0.45, (y1 - y0) / 2, 0.01], rgba=[0.55, 0.42, 0.3, 1], contype=0, conaffinity=0)
     w.add_light(pos=[1.2, -0.3, 1.5], dir=[-0.6, 0, -1], diffuse=[0.8, 0.8, 0.8])
     w.add_light(pos=[-0.5, -0.3, 1.5], dir=[0.3, 0, -1], diffuse=[0.3, 0.3, 0.3])
     w.add_geom(type=mujoco.mjtGeom.mjGEOM_BOX, pos=[-0.45, -0.301, 0.4], size=[0.01, 1.2, 0.8],
@@ -228,14 +253,14 @@ class Scene:
             self.set(side, q); self.forward()
             h = o = np.inf
             for g, v, r in self.geoms[side]:
-                z = float(np.min(self.d.geom_xpos[g][2] + v @ self.d.geom_xmat[g].reshape(3, 3)[2])) - r - TABLE_Z
+                z = float(np.min(self.d.geom_xpos[g][2] + v @ self.d.geom_xmat[g].reshape(3, 3)[2])) - r - TABLE_Z[side]
                 if g in self.hand[side]:
                     h = min(h, z)
                 else:
                     o = min(o, z)
             pp, pr = self.prop_cloud(side)
             if len(pp):
-                z = float(np.min(pp[:, 2] - pr)) - TABLE_Z
+                z = float(np.min(pp[:, 2] - pr)) - TABLE_Z[side]
                 h, o = (min(h, z), o) if prop_hand else (h, min(o, z))
             hand.append(h); other.append(o)
         return np.array(hand), np.array(other)
@@ -248,7 +273,7 @@ class Scene:
         for q in Q:
             self.set(side, q); self.forward()
             p, r = self.cloud(side)
-            low = min(low, float(np.min(p[:, 2] - r)) - TABLE_Z)
+            low = min(low, float(np.min(p[:, 2] - r)) - TABLE_Z[side])
             pts.append(p); rad.append(r)
         p, r = np.concatenate(pts), np.concatenate(rad)
         out_p, out_r = [], []
@@ -497,9 +522,9 @@ class Checker:
                 for i in idx:
                     sc.set(side, Q[i]); sc.forward()
                     arm_low = min(float(np.min(sc.d.geom_xpos[k][2] + pts @ sc.d.geom_xmat[k].reshape(3, 3)[2] - r))
-                                  for k, pts, r in sc.geoms[side]) - TABLE_Z
+                                  for k, pts, r in sc.geoms[side]) - TABLE_Z[side]
                     pp, pr = sc.prop_cloud(side)
-                    low = min(arm_low, float(np.min(pp[:, 2] - pr)) - TABLE_Z if len(pp) else np.inf)
+                    low = min(arm_low, float(np.min(pp[:, 2] - pr)) - TABLE_Z[side] if len(pp) else np.inf)
                     if near is None or low >= near:
                         if low < CLEAR:
                             probs.append(f"at {t[i]:.2f} s the lowest point is {low*100:.1f} cm above the table, needs {CLEAR*100:.0f} cm")
