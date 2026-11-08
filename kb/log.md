@@ -98,3 +98,7 @@
   in `show.PROP_SHAPES`. 62 gestures, 32 duets/ensembles, all pass. Table moves and toys are never run on the real
   arms unattended.
 - Names (owner, Nov 7): project **Stage Hands**; the AI host/narrator is **Lars** (the green frog doll is the host's body and a prop); the arms stay unnamed because they play the story's characters.
+- Character voices (Nov 7): narrator stays Laura; each arm's quoted lines get their own Fish Audio voice (palette
+  deep/squeaky/old/child/witch/robot, cast with `[voice:left=NAME]`, default left deep, right squeaky). Runs synthesise
+  in parallel: 0 s stall at 9 switches; mouths pinned to the audio (talk on within ±0.25 s). Host (Lars) voice candidates rendered for the owner.
+  See storyteller.md.

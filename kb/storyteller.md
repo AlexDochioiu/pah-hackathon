@@ -11,6 +11,7 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 | `agent/prompt.md` | The system prompt. `{{GESTURES}}` is replaced at startup with the stage's gesture list, `{{SFX}}`/`{{MUSIC}}` with the sound library. |
 | `agent/gestures.py` | Tag parser, gesture-name mapping, stage HTTP client, the speech-synced gesture hook. |
 | `agent/sounds.py`, `agent/sounds/` | Sound effects and mood music: the library (CC0, `sounds/LICENSES.md`) and its player. |
+| `agent/voices.py` | Character voices: the voice palette, the voice-run splitter, parallel synthesis, run timing. |
 | `agent/director.py` | Freeze when the listener talks, idle when the stage is quiet, auto-continue to the next scene. |
 | `agent/app.py`, `agent/web/index.html` | Story Theatre: hold-to-talk web page plus the PTT worker it runs. |
 | `agent/fake_stage.py` | Stdlib stand-in for `robot/stage.py`, same API, prints what the arms would do. |
@@ -23,7 +24,9 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
   `expressive=True`: LiveKit injects the TTS's markup guide into the prompt, so the LLM can add emotion and
   laughs inline; LiveKit strips that markup from transcripts.
 - Noise cancellation: BVC, or BVCTelephony for SIP callers.
-- Every choice can be overridden in `agent/.env` (`LLM_MODEL`, `TTS_MODEL`, `TTS_VOICE`, `STT_MODEL`, `EXPRESSIVE`).
+- Characters speak in their own voices ([Character voices](#character-voices)); `CHARACTER_VOICES=0` turns that off.
+- Every choice can be overridden in `agent/.env` (`LLM_MODEL`, `TTS_MODEL`, `TTS_VOICE`, `STT_MODEL`, `EXPRESSIVE`,
+  `CHARACTER_VOICES`).
 
 ## Tag protocol (LLM output)
 - `[left:slash]`, `[right:cower]`, `[both:bow]`: arm is `left|right|both`, gesture is a stage gesture name.
@@ -63,8 +66,56 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 - The gesture list comes from `GET {STAGE_URL}/gestures` at session start; if the stage is down, the built-in
   default list in `gestures.py` is used (same names as `fake_stage.py`).
 
+## Character voices
+Narration is spoken by Laura; each arm's quoted lines (from its `[talk:...]` tag's opening quote to the closing
+quote, the span its mouth flaps for) by that character's own voice. A quote without a talk tag stays narration.
+- Palette (`voices.PALETTE`), all public Fish Audio voices on `fishaudio/s2.1-pro` through LiveKit Inference (any
+  public library voice id works; an unknown id fails with "provider returned no audio"):
+
+  | Name | Fish voice id | Sound | Measured pitch |
+  |---|---|---|---|
+  | (narrator) Laura | `e3cd384158934cc9a01029cd7d278634` | confident female narrator | ~160 Hz |
+  | `deep` | `5becb4c89d67471f96137c91b22e02c6` | very deep, raspy male ("Deep voice") | ~110 Hz |
+  | `squeaky` | `d7cdeff76ac94ee6bd23d39e019ad72a` | high, squeaky cartoon ("High Pitched Squeaks") | ~470 Hz |
+  | `old` | `f7af7c05cc6042d8a8f90be8bb233044` | old, crackly, raspy ("Old Goblin") | ~300 Hz, mostly unvoiced |
+  | `child` | `4fcb3a423c61415fb35604eba567d95f` | bright, bouncy child ("Energetic Child") | ~320 Hz |
+  | `witch` | `d056e4cabd094165b66a1acd65e00cc0` | menacing, dramatic British woman ("Witch") | ~190 Hz |
+  | `robot` | `175d7d5358b644d2ad2e8b7e4e13ece3` | flat, distorted robot ("Robot") | ~130 Hz, dull |
+- The narrator is the show's host, Lars the frog. Its voice is the one setting `TTS_VOICE` (default Laura). Host
+  candidates rendered Nov 7 for the owner to pick (`/tmp/pah-voices/host_<name>.mp3`, same welcome line):
+  `frog` `532f7f4adb32420fa4f5c95e9b13be9d` (warm, enthusiastic, friendly male, fairly high), `showman`
+  `58b3344db8b44d6ba27cc67dd908ccb2` (dramatic, playful, confident male), `ringmaster`
+  `75d309f669524e7fbc0324b39e6b94ad` (energetic, theatrical, cheerful female), and `laura` for comparison.
+- Casting: `[voice:left=NAME]` / `[voice:right=NAME]` at the casting (the prompt asks for one per arm, once per
+  story, fitted to the character; `{{VOICES}}` lists the palette). Names are matched loosely (`robotic` -> robot,
+  a word of a description such as `dragon` -> deep); unknown ones are dropped. The cast lasts until recast, also
+  across stories. Default with no casting: left `deep`, right `squeaky`. The tag parses as a `Tag` (so the chat
+  history keeps it); `GestureSink` ignores it.
+- How: the session's `tts_text_transforms` no longer strip tags; `Storyteller.tts_node` gets the LLM text with them
+  and `voices.VoiceSplitter` cuts it into runs of one voice, dropping every tag (quotes inside `<...>` expressive
+  markup don't count). Each run gets its own TTS stream, started with the run's first words, so every run
+  synthesises in parallel and the audio is played in order; narration runs go through the default `tts_node`
+  (session TTS), character runs through one prewarmed `inference.TTS` per palette voice. A failed run is skipped
+  (logged), the rest plays on.
+- Switch gaps (Nov 7, 34 s two-character scene with all six voices, real Inference TTS through the real
+  AgentSession pipeline): 0 s stall at all 9 switches, with the LLM streaming the scene in 2.5 s or in 8 s. The
+  pause heard at a switch is the voices' own trailing + leading silence, 0.17-0.37 s (mean 0.22 s). Without the
+  parallel start each switch would wait a stream's first byte: 0.8-1.5 s on a warm connection, ~3 s cold.
+- Mouth and gesture timing: LiveKit's transcript synchronizer paces words at a fixed syllable rate until a reply's
+  audio is complete; with voices of very different speeds the mouths drifted up to 3.5 s. So the tts node records
+  where each run starts (`voices.RunMarks`: spoken letters, seconds of audio) and the transcription node
+  (`timestamp_runs`, after `tags_first`) sends each run's text as a `TimedString` with that start time, the tags
+  and quote leading into a run as a zero-length span at its start, and the reply's total at the end. The
+  synchronizer then releases each run's text across that run's audio. Measured: talk on within -0.26..+0.23 s of
+  the character's first sound, off 0.1-0.45 s before the line's last sound. The two nodes are paired through the
+  reply's `SpeechHandle` (`_SpeechHandleContextVar`); with no tts node (text-only) the transcript passes through,
+  and it never waits more than 8 s for a mark.
+- Rendering samples: a script must open `livekit.agents.utils.http_context.open()` to use `inference.*` outside a
+  worker. Samples of Nov 7 were rendered to `/tmp/pah-voices/` (scene.mp3 plus one file per voice).
+
 ## How gestures sync to speech
-- `tts_text_transforms=[strip_tags_for_tts, ...]` removes tags from the text sent to the TTS.
+- `Storyteller.tts_node` (via `voices.VoiceSplitter`) removes tags from the text sent to the TTS; the session's
+  `tts_text_transforms` are only `filter_markdown` and `filter_emoji`, which leave the tags alone.
 - The LLM text, tags included, still goes through `transcription_node` to the transcript. `GestureSync.install`
   wraps the session's audio and transcription outputs (after `session.start()`) in a LiveKit
   `TranscriptSynchronizer`, which releases the reply's words in step with audio playout. `GestureSink`, right after

@@ -20,8 +20,9 @@ Update this page when a piece is added or a connection changes. Details live on 
 2. The storyteller (`agent/storyteller.py`) runs STT → LLM. The LLM writes narration with inline tags
    (`[left:roar]`, `[duet:hug]`, `[talk:left] "…"`, `[face:each_other]`, `[props:right]`, and soon `[sfx:x]`,
    `[music:x]`, `[pick:lars]`). The prompt is `agent/prompt.md`; the gesture list in it comes from the stage server.
-3. `tags_first` moves gesture tags to the start of their sentence; `strip_tags_for_tts` removes all tags before
-   speech; `GestureSync` fires each tag when playback reaches it.
+3. `tags_first` moves gesture tags to the start of their sentence; `Storyteller.tts_node` (`agent/voices.py`)
+   removes all tags before speech and gives each character's quoted lines its own TTS voice; `GestureSync` fires
+   each tag when playback reaches it (the transcript is time-stamped at every voice switch).
 4. Fired tags become HTTP calls to the stage server (`agent/gestures.py` `Stage`), through the ssh tunnel.
 5. The stage server (`robot/stage.py`) plays pre-built, pre-checked trajectories from `robot/gestures/` and
    `robot/duets/` on the arms. Anything that fails the checker is refused, not played.

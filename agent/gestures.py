@@ -8,7 +8,7 @@ a two-arm duet (the stage server's /duet: both arms together, they touch). `[ens
 thing, action or mood for a beat (also /duet; the stage blends in from either stance and back). `[talk:left]` right before a character's
 quoted line flaps that arm's gripper like a talking mouth (/talk) from the opening quote's line to its closing quote. Tags flow through the reply untouched except for two places:
 
-- `strip_tags_for_tts`, a TTS text transform: the voice never sees a tag.
+- the TTS: `voices.VoiceSplitter` (in `Storyteller.tts_node`) drops every tag, like `strip_tags_for_tts` does.
 - `GestureSync`, a TranscriptSynchronizer wrapped around the session's outputs: it releases the reply's
   text in step with audio playout, and `GestureSink` downstream of it fires each tag as the playout
   reaches it. An interruption stops the release, so tags after the cut never fire.
@@ -102,7 +102,7 @@ PROPS_TAG = "props"  # [props:left|right|both] -> POST /props on for that arm ([
 FACINGS = {"each_other": "each_other", "other": "each_other", "eachother": "each_other", "together": "each_other",
            "audience": "audience", "front": "audience", "us": "audience", "out": "audience", "forward": "audience"}
 MAX_TAG_LEN = 48  # a "[" left open longer than this is prose, not a tag
-_TAG_BODY = re.compile(r"^\s*([A-Za-z]+)\s*(?::\s*([A-Za-z][A-Za-z _-]*?)\s*)?$")
+_TAG_BODY = re.compile(r"^\s*([A-Za-z]+)\s*(?::\s*([A-Za-z][A-Za-z _=-]*?)\s*)?$")  # "=": [voice:left=deep]
 
 
 @dataclass(frozen=True)
@@ -450,6 +450,8 @@ class GestureSink(io.TextOutput):
                     self._on_face(facing)
                 else:
                     logger.info("dropped %s", p.raw)
+            elif p.arm == "voice":
+                pass  # [voice:left=deep] casts a character voice: handled before the TTS (voices.py)
             elif p.arm == PROPS_TAG:
                 who = p.name.strip().lower()  # "left", or "left_car" ([props:left car]): a toy the stage knows
                 if who.partition("_")[0] in ARMS or who in ("none", "off", "no"):
