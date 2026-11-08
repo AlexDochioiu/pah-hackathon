@@ -97,3 +97,4 @@
   is now a steering-wheel ensemble. Toys: `/props` kinds `car` (drive) and `ufo` (ufo_fly/hover/land/crash), modelled
   in `show.PROP_SHAPES`. 62 gestures, 32 duets/ensembles, all pass. Table moves and toys are never run on the real
   arms unattended.
+- Names (owner, Nov 7): project **Stage Hands**; the AI host/narrator is **Lars** (the green frog doll is the host's body and a prop); the arms stay unnamed because they play the story's characters.

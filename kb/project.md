@@ -4,7 +4,10 @@
 **Submissions due Sun Nov 8 2026, 15:00.** Sponsors and judges are heavy on MakerMods, Dream Labs and LiveKit, so
 the project should show off LiveKit's real-time voice and the robot hardware.
 
-## The idea: robot story theatre (working title)
+## The idea: Stage Hands (robot story theatre)
+**Names:** the project is **Stage Hands**. The AI host and narrator is **Lars**, whose body is the green frog doll on
+the table. The two arms have no fixed names: they play whatever characters the story needs.
+
 A listener asks for any story by voice ("a knight who's afraid of the dark"). An LLM improvises it live and a
 narrator voice tells it through a LiveKit voice agent. The two robot arms are the actors: each plays a character,
 holds a prop (foam sword, shield, flag, crown) and performs gestures in sync with the narration. Anyone can
