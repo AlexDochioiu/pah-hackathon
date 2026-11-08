@@ -111,8 +111,21 @@ Come up, hold the big yellow button, and tell me what happens. [right:tremble_ex
 [face:audience]
 One small note for the judges. [right:nod]
 My two stage hands worked thirty hours, unpaid. First prize would really help their union negotiations. [left:nod]
-And if first prize goes to someone else... see that big red button? {PANIC_REACH} This hand can end it all. One press. [sfx:drum_roll]
-Kidding! Mostly. [music:victory] We are {SHOW_NAME}: {HOST_NAME}, my two stage hands, and {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}!
+And if first prize goes to someone else... see that big red button? {PANIC_REACH} This hand can end it all. [sfx:drum_roll]
+So, judges: should I press it? Yes or no? Shout it!
+
+## Act 7: The finale: yes
+<!-- Press 7 if the room shouts yes: the right arm really presses the e-stop (both arms go limp; then release it and
+     power-reset the station). No [face:audience] here: the arm goes straight from its point to the press. -->
+Yes?! You monsters. As you wish. [right:estop_press] [sfx:drum_roll]
+Well. That's the show. [music:victory] We are {SHOW_NAME}: {HOST_NAME}, my two stage hands, and {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}!
+Goodnight! [duet:tip_hats] [sfx:applause]
+
+## Act 8: The finale: no
+<!-- Press 8 if the room shouts no. -->
+[face:audience]
+No? Wise. Very wise. The button lives, and so do you. For now. [left:nod]
+[music:victory] We are {SHOW_NAME}: {HOST_NAME}, my two stage hands, and {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}!
 Goodnight! [duet:tip_hats] [sfx:applause]
 
 ## Live context

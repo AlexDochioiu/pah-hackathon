@@ -126,7 +126,8 @@ PROPS_TAG = "props"  # [props:left|right|both] -> POST /props on for that arm ([
 # own gestures); [props:none] -> off for both
 # [right:estop_point]: the finale's point at the red e-stop, a pose the owner taught by hand (robot/teach.py)
 ESTOP_POINT, ESTOP_S = "estop_point", 6.0
-ESTOP_FILE = __import__("pathlib").Path(__file__).with_name("estop_point.json")  # {"right": {"t", "q", "g"}}
+ESTOP_TAGS = (ESTOP_POINT, "estop_press")  # [right:estop_press]: act 7 ("yes") really presses it
+ESTOP_FILE = __import__("pathlib").Path(__file__).with_name("estop_point.json")  # {"right": {tag: {"t", "q", "g"}}}
 PICK_TAG, PLACE_TAG = "pick", "place"  # [pick:lars] / [place:lars] -> POST /play pick_lars / place_lars (its arm)
 DREAM_TAG = "dream"  # [dream:pick_lars] -> robot/dream_run.py: Dream-1 picks Lars through our checker, else pick_lars
 DREAM_TASKS = {"pick_lars": "pick up the green pen and hold it up"}  # Nov 8: the wand, not Lars (owner)
@@ -800,19 +801,27 @@ class Stage:
         if arm == DREAM_TAG:
             self.dream(gesture)
             return
-        if gesture == ESTOP_POINT:  # the owner's hand-taught pose (robot/teach.py, Nov 8): raw joints, not a gesture
-            keys = (json.loads(ESTOP_FILE.read_text()) if ESTOP_FILE.exists() else {}).get(arm)
+        if gesture in ESTOP_TAGS:  # the owner's hand-taught pose (robot/teach.py, Nov 8): raw joints, not a gesture
+            keys = (json.loads(ESTOP_FILE.read_text()) if ESTOP_FILE.exists() else {}).get(arm, {}).get(gesture)
             if not keys:
                 logger.info("dropped %s:%s: no taught pose in %s", arm, gesture, ESTOP_FILE.name)
                 if on_start:
                     on_start(None, 1.0)
                 return
+            body = {"arm": arm, "raw": True, "name": gesture, "speed": 1.0, **keys}  # g 0: the claw closed
+            tries = [16]  # the stage refuses while the arm finishes a move: retry every 0.5 s for 8 s
+
             def pointed(r: dict | None) -> None:  # hold it, then back to the arm's stance
+                if r is None and tries[0] > 0:
+                    tries[0] -= 1
+                    self.send("/trajectory", body, delay=0.5, on_reply=pointed)
+                    return
                 if r is not None:
                     self.send("/stage", {"arm": arm}, delay=float(r.get("duration_s") or 5.0) + 0.3)
+                logger.info("%s:%s %s", arm, gesture, "playing" if r is not None else "refused")
                 if on_start:
                     on_start(None if r is None else time.monotonic(), 1.0)
-            self.send("/trajectory", {"arm": arm, "raw": True, "name": ESTOP_POINT, "speed": 1.0, **keys}, on_reply=pointed)
+            self.send("/trajectory", body, on_reply=pointed)
             return
         if speed is None:  # STAGE_SPEED: every gesture and duet (read per call: .env loads after this import)
             speed = float(os.getenv("STAGE_SPEED", "1.0"))
@@ -1083,8 +1092,8 @@ class GestureSink(io.TextOutput):
                     self._hit.sfx(p.name)  # lands on the gesture's hit, not when its words are spoken
                 elif self._on_sound:
                     self._on_sound(p.arm, p.name)
-            elif p.arm in ("left", "right") and p.name.strip().lower() == ESTOP_POINT:
-                self._fire(p.arm, ESTOP_POINT, ESTOP_S)
+            elif p.arm in ("left", "right") and p.name.strip().lower() in ESTOP_TAGS:
+                self._fire(p.arm, p.name.strip().lower(), ESTOP_S)
             elif p.arm not in ARMS:
                 logger.info("dropped %s: unknown arm", p.raw)
             elif (name := self._book.resolve(p.name)) is None:
