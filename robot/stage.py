@@ -637,6 +637,10 @@ class Stage:
                     q, _ = self.arms.read()
                 except Exception as e:
                     self.fault = f"arm I/O failed: {e}"; print(self.fault, flush=True); self.stop.set(); break
+                dead = dead_motors(self.arms)
+                if dead:
+                    self.fault = f"{'+'.join(dead)} arm motors stopped answering (e-stop, power or cable?): restart needed"
+                    print(self.fault, flush=True); self.stop.set(); break
                 for s in SIDES:
                     self.meas[s] = np.asarray(q[s], float)
                     p = self.plan[s]
@@ -650,6 +654,14 @@ class Stage:
             time.sleep(max(0.0, nxt - time.monotonic()))
             if time.monotonic() - nxt > 0.2:
                 nxt = time.monotonic()  # fell behind (debugger, load): don't race to catch up
+
+
+def dead_motors(a):
+    """Sides whose i2rt motor chain has stopped (motor lost: e-stop, power, cable). read() keeps returning the last
+    pose after that, so without this the server looks healthy while the arm is not listening."""
+    # ponytail: reads i2rt's private YamArms._robots; sim robots have no motor_chain and count as alive
+    return [s for s, r in getattr(a, "_robots", {}).items()
+            if getattr(getattr(r, "motor_chain", None), "running", True) is False]
 
 
 def shutdown(st, close, lock):
@@ -828,6 +840,9 @@ def main(argv=None):
                 if why:
                     raise StageError(f"{g.name}: {why}")
         st = Stage(a, backend, warp=args.warp, dock_check=dock_check)
+        time.sleep(1.0)  # a motor that doesn't answer drops its chain within ~0.5 s of start
+        if dead_motors(a):
+            raise SystemExit(f"{'+'.join(dead_motors(a))} arm motors not answering: check the e-stop, power and cables")
         q, _ = a.read()
         far = {s: round(float(np.max(np.abs(q[s] - show.HOME[s]))), 3) for s in SIDES}
         if args.real and max(far.values()) > REST_TOL:

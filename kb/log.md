@@ -108,3 +108,4 @@
   through the stage server on the right arm, facing the audience; `[pick:lars]` / `[place:lars]` agent tags.
   Sim-checked on the stage server at speeds 0.3, 0.5, 0.75 and 1.0; baked at 0.3 for the first real runs
   ([props.md](props.md)).
+- 2026-11-07 17:55: stage server started with both arms' motors not answering ("loss communication") and served anyway; added `dead_motors()` check at start and per tick ([arm-control.md](arm-control.md)).

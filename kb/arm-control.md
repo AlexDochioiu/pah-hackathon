@@ -56,6 +56,11 @@ against the lean-back rule before it starts. Joints 4–6 run at a low gain (kp=
    `sudo ip link set can_follower_X up type can bitrate 1000000` (after an e-stop they sit in ERROR-PASSIVE).
 4. Run `home.py` (or `home.py left|right` for one arm).
 
+- **Motors that stop answering at start** ("loss communication" on one motor id, then "motor chain is not
+  running"): i2rt's control thread exits but `read()` keeps returning the last pose, so a script looks healthy while
+  the arm ignores it. `stage.py` checks `dead_motors()` at start and every tick and stops. Usual cause: e-stop
+  pressed or arm power off; release it, do the power reset, reset the CAN links (above).
+
 ## Harmless noise
 - "DM Error in control loop: file descriptor -1" and "motor failed with info" at shutdown: an i2rt race when
   closing. Ignore.
