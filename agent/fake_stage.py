@@ -32,9 +32,9 @@ DUETS = {
     "straight_man": 7.5, "tip_hats": 5.6, "ufo_abduct": 7.9
 }
 ENSEMBLES = {
-    "car_ride": 7.7, "cauldron": 8.0, "chomp": 7.7, "clap": 8.2, "drum_roll": 7.8, "explosion": 7.4, "fist_bump":
+    "car_ride": 7.7, "cauldron": 8.0, "chomp": 7.7, "clap": 8.2, "drum_roll": 7.8, "explosion": 7.4, "kiss":
     7.2, "gate_opening": 7.6, "heart": 8.1, "high_five": 7.4, "hug": 7.6, "once_upon_a_time": 7.3, "pull_rope":
-    13.7, "rocket": 5.9, "row_boat": 7.7, "rub_hands": 10.0, "shrug": 4.7, "storm": 4.9, "the_end": 4.0, "this_big":
+    13.7, "rocket": 5.9, "row_boat": 7.7, "rub_hands": 7.9, "shrug": 4.7, "storm": 4.9, "the_end": 4.0, "this_big":
     3.5, "waves": 3.7, "wings": 7.1
 }
 # name -> the stage's "sound" ({"name", "at"}), copied from robot/gestures and robot/duets
@@ -47,7 +47,8 @@ SOUNDS: dict[str, dict] = {
     "stomp": {'name': None, 'at': [1.554, 3.738]}, "ta_da": {'name': 'tada', 'at': 1.992}, "throw": {'name':
     'whoosh', 'at': 1.317}, "ufo_crash": {'name': 'crash', 'at': 4.9}, "chomp": {'name': 'chomp', 'at': [2.7, 4.01,
     5.6]}, "cross_swords": {'name': 'sword_clash', 'at': 3.94}, "drum_roll": {'name': 'drum_roll', 'at': 1.38},
-    "explosion": {'name': 'explosion', 'at': 3.1}, "quick_draw": {'name': 'gunshot', 'at': 3.64}
+    "explosion": {'name': 'explosion', 'at': 3.1}, "quick_draw": {'name': 'gunshot', 'at': 3.64},
+    "kiss": {'name': 'kiss', 'at': 3.3}
 }
 T0 = time.monotonic()
 state = {"mode": "rest", "stance": "audience", "props": {"left": False, "right": False}, "arms": {"left": None, "right": None}}  # arm -> {"gesture", "until"} while playing

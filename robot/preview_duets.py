@@ -2,6 +2,7 @@
 inset of the middle, where the arms meet, and the live gap between the declared contact parts.
 
   preview_duets.py [name ...]        default: every duet in duets/
+  preview_duets.py --sound name ...  previews/sound/<name>.mp4 at 25 fps with the duet's "sound" mixed in on its hits
 Off-screen MuJoCo: MUJOCO_GL=cgl on a Mac (the default there), egl on the station.
 """
 import os, sys
@@ -15,7 +16,7 @@ IW, IH = 150, 100  # inset
 OUT = show.DIR / "previews"
 
 
-def main(names):
+def main(names, sound=False):
     dc = duets.DuetChecker()
     ok, bad = duets.load_duets(dc, verbose=False)
     sc = dc.ck.scene
@@ -25,7 +26,7 @@ def main(names):
     OUT.mkdir(exist_ok=True)
     for f in sorted(duets.DUET_DIR.glob("*.json")):
         du = duets.load(f)
-        if names and du.name not in names:
+        if names and du.name not in names or sound and not du.d.get("sound"):
             continue
         good = du.name in ok
         tq, cd, od, _ = dc.frames(du)
@@ -39,7 +40,8 @@ def main(names):
         look = (d.site_xpos[sc.site["left"]] + d.site_xpos[sc.site["right"]]) / 2
         cam = mujoco.MjvCamera(); cam.lookat[:] = look; cam.distance = 0.42; cam.azimuth = 180; cam.elevation = -12
         frames = []
-        step = max(int(show.HZ / FPS), int(np.ceil(len(tq) / 90)))  # long ones: fewer fps, GIFs stay < ~1.5 MB
+        step = 2 if sound else max(int(show.HZ / FPS), int(np.ceil(len(tq) / 90)))  # long ones: fewer fps, GIFs < ~1.5 MB
+        ats = (du.d["sound"]["at"] if isinstance(du.d["sound"]["at"], list) else [du.d["sound"]["at"]]) if sound else []
         for i in list(range(0, len(tq), step)) + [len(tq) - 1] * 5:
             for s in show.SIDES:
                 Q, G = smp[s]
@@ -65,13 +67,20 @@ def main(names):
                     dr.text((6, 32), f"gap {gapcm:4.1f} cm", fill=(255, 230, 120) if gapcm < 5 else (220, 220, 220))
             dr.text((6, H - 14), "right arm", fill=(200, 200, 200)); dr.text((W - IW - 60, H - 14), "left arm", fill=(200, 200, 200))
             dr.text((W - 44, 4), f"{tq[i]:4.1f} s", fill=(200, 200, 200))
+            if any(0 <= tq[i] - a < 0.2 for a in ats):
+                dr.text((W // 2 - 20, 20), "HIT", fill=(255, 220, 60))
             frames.append(im.quantize(64, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE))
         for s in show.SIDES:
             sc.show_prop(s, True)
+        if sound:
+            import preview
+            preview.mux(frames, show.HZ // step, du.d["sound"]["name"], ats, OUT / "sound" / f"{du.name}.mp4")
+            continue
         path = OUT / f"{du.kind}_{du.name}.gif"
         frames[0].save(path, save_all=True, append_images=frames[1:], duration=int(1000 * step / show.HZ), loop=0, optimize=True)
         print(f"{path}  {len(frames)} frames  {path.stat().st_size // 1024} KB")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    a = sys.argv[1:]
+    main(a[1:], sound=True) if a[:1] == ["--sound"] else main(a)

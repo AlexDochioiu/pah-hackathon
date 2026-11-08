@@ -79,7 +79,7 @@ fast = duets.Duet(dict(base, keys=[dict(k, t=k["t"] * 0.5) for k in base["keys"]
 assert any("closes at" in p for p in dc.check(fast)), dc.check(fast)
 ens = {n for n, d in dok.items() if d.kind == "ensemble"}
 assert {"chomp", "wings", "this_big", "shrug", "rocket", "waves", "storm", "gate_opening", "explosion", "row_boat",
-        "once_upon_a_time", "the_end", "car_ride", "high_five", "fist_bump", "cauldron", "drum_roll"} <= ens, sorted(ens)
+        "once_upon_a_time", "the_end", "car_ride", "high_five", "kiss", "cauldron", "drum_roll"} <= ens, sorted(ens)
 print(f"{len(dok)} duets pass ({len(ens)} of them ensembles); undeclared contact and fast approach refused")
 
 st = stage.Stage(stage.KinArms(), "kin", warp=4)

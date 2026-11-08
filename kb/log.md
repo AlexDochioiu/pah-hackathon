@@ -143,3 +143,7 @@
 - Nov 7 ~20:00: ufo_abduct back under 8 s (7.9): the hover is 2.1 s (was 2.3), trembling 0.2 s less; the rise into
   the beam keeps its 1.0 s and the saucer's bob its phase against it (a faster rise closed at 5.5–6.4 cm/s). Previews
   re-rendered for every move the Round 3 table/offset changed (gifs, each_other(_props) gifs, sound mp4s).
+- Nov 7 ~20:30: rub_hands under 8 s (7.9: three rubs, the big moves at FAST). The owner saw fist_bump as a kiss
+  (two heads meeting mouth to mouth): renamed `kiss`, same trajectory, `sound` kiss at 3.3 s (its closest contact
+  3.32 s); agent synonyms kiss/smooch/kissed/true love's kiss (the fist bump words deal/partners/bro dropped).
+  `preview_duets.py --sound` renders a duet's sound mp4 (`previews/sound/kiss.mp4`).

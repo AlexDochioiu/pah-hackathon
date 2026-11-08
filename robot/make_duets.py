@@ -1037,12 +1037,15 @@ def high_five():
                  "middle, bounce back, then celebrate with heads up and wiggling, flapping hands.", s, frac=FAST)
 
 
-def fist_bump():
+def kiss():
+    """Built as a fist bump (round 3b); the owner saw a kiss (Nov 7): two heads meeting face to face, closed mouths
+    touching. Kept as it was, documented as the kiss."""
     s = Seq()
     s.grip("left", 0.0, 0.4).grip("right", 0.0, 0.4)                           # make fists
     s.move(*meet(0.95, 0.25, 0.46, x=0.33, gap=0.25, grip=0.0), T=0.8, hold=0.25)  # wind-up: cock back and out
     s.move(*meet(1.3, 0.0, 0.42, x=0.37, gap=0.052, grip=0.0), T=0.35)          # punch in
-    s.move(*meet(1.3, 0.0, 0.42, x=0.37, gap=0.01, grip=0.0), approach=TOUCH, hold=0.15)  # knuckles meet
+    s.move(*meet(1.3, 0.0, 0.42, x=0.37, gap=0.01, grip=0.0), approach=TOUCH)  # the mouths meet
+    s.hit("kiss").wait(0.15)                                                    # mwah: the contact frame
     both_grip(s, 1.0, 0.3, after=0.1)                                           # EXPLODE: fingers spring open...
     s.move(*meet(1.3, 0.0, 0.42, x=0.37, gap=0.08, grip=0.0), T=0.2, line=True)  # ...as the hands fly apart
     boom = pose(j1=0.4, j2=0.2, j3=0.3, p=0.45, j6=0.3)
@@ -1051,8 +1054,8 @@ def fist_bump():
     s.move(boom + pose(j6=-0.15, p=-0.08), T=0.3)
     both_grip(s, 1.0, 0.15)
     s.move(boom, T=0.3, hold=0.3)
-    return hands("fist_bump", "Fist bump: make fists, cock back, punch in until the knuckles meet in the middle, then "
-                 "EXPLODE: the fists spring open as the hands fly apart, fingers flickering.", s)
+    return hands("kiss", "A kiss: the two heads lean in and their closed mouths meet in the middle, then they spring "
+                 "apart, mouths flapping open, giddy: love, romance, making up, a happy ending, \"and they kissed\".", s)
 
 
 def law(U):
@@ -1293,7 +1296,7 @@ def hand_through_wall(XW=0.40, Z=0.46):
                   "tries again, and BONK, its head snaps back.", [], props=False)
 
 
-HANDS = [clap, rub_hands, hug, pull_rope, heart, high_five, fist_bump]
+HANDS = [clap, rub_hands, hug, pull_rope, heart, high_five, kiss]
 ENSEMBLES = [chomp, wings, this_big, shrug, rocket, waves, storm, gate_opening, explosion, row_boat, once_upon_a_time,
              the_end, cauldron, drum_roll, car_ride]
 TOYS = [car_chase, ufo_abduct]

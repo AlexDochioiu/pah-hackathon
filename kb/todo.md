@@ -40,6 +40,7 @@ Status: 🔨 being built · 👀 waiting for owner review · ⏸ waiting for som
 - Dream-1 fine-tune on Lars demos: not needed with the dock/live pick ([dream-1.md](dream-1.md) has the recipe).
 
 ## Done (recent)
+- fist_bump renamed `kiss` (the owner saw a kiss), sound on the contact; rub_hands and ufo_abduct under 8 s (Nov 7 ~20:30).
 - Checker on the Round 3 calibration: right offset and per-arm table from `calib.json`; table moves re-solved;
   a finished stance move no longer blocks pick_lars (Nov 7 ~19:40).
 - Show mode: `/show` page, cued acts with pre-synthesized voices, Lars as host.

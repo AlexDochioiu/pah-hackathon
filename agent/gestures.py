@@ -77,8 +77,9 @@ SYNONYMS = {
     "lift": "lift_heavy", "heave": "lift_heavy", "carry": "lift_heavy", "throw": "throw", "toss": "throw",
     "hurl": "throw", "punch": "slash", "win": "celebrate",
     # duets and ensembles (resolve_duet)
-    "high_five": "high_five", "celebrate_together": "high_five", "team_up": "high_five", "deal": "fist_bump",
-    "partners": "fist_bump", "bro": "fist_bump", "cauldron": "cauldron", "witches": "cauldron",
+    "high_five": "high_five", "celebrate_together": "high_five", "team_up": "high_five", "kiss": "kiss",
+    "smooch": "kiss", "kissed": "kiss", "true_loves_kiss": "kiss", "true_love's_kiss": "kiss",
+    "cauldron": "cauldron", "witches": "cauldron",
     "drum": "drum_roll", "drum_roll": "drum_roll", "hat": "place_hat", "crown": "place_hat",
     # stand-up comedy (round 3b)
     "joke": "ta_da", "punchline": "ta_da", "nailed_it": "ta_da",

@@ -331,11 +331,11 @@ arms are given; none touch (all ≥ 20 cm). Previews: `robot/previews/ensemble_<
 | `clap`: Both arms are two hands clapping softly together in the middle, three times. | 8.2 | empty hands |
 | `drum_roll`: A drum roll on the table: two fists knock in turn, faster and faster, wind up together and BANG at once, then heads up: ta-da! Sound: drum_roll at 1.38 s. | 7.8 | empty hands |
 | `explosion`: Both fists huddle into one bomb in the middle, the fuse fizzes and trembles, a held breath, then BOOM: both fling up and out, heads thrown back, hands bursting open, and the debris flutters down. Sound: explosion at 3.1 s. | 7.4 | empty hands |
-| `fist_bump`: Fist bump: make fists, cock back, punch in until the knuckles meet in the middle, then EXPLODE: the fists spring open as the hands fly apart, fingers flickering. | 7.2 | empty hands |
 | `gate_opening`: A castle gate: the arms swing shut until the sticks meet in the middle, it rattles, then the doors creak open on their hinges, stop and start, and swing wide. | 7.6 | empty hands |
 | `heart`: Both arms make a big heart: elbows up for the lobes, the hands meet at the tip, it beats. | 8.1 | empty hands |
 | `high_five`: High five: dip, hands rise and spring open, swing in and slap palm to palm in the middle, bounce back, then celebrate with heads up and wiggling, flapping hands. | 7.4 | empty hands |
 | `hug`: Arms open wide, then wrap around in a big hug and rock side to side. | 7.6 | empty hands |
+| `kiss`: A kiss: the two heads lean in and their closed mouths meet in the middle, then they spring apart, mouths flapping open, giddy: love, romance, making up, a happy ending, "and they kissed". Sound: kiss at 3.3 s. | 7.2 | empty hands |
 | `once_upon_a_time`: The narrator's storybook: the hands press together in the middle like a closed book, it opens to the audience, a beat to read it, then a slow, grand sweep up and out. | 7.3 | empty hands |
 | `pull_rope`: Two hands pull a heavy rope: reach, grab, heave back, three times. | 13.7 | empty hands |
 | `rocket`: Crouch for the countdown, rumble, then blast up high together: a rocket lifting off. | 5.9 | empty hands |

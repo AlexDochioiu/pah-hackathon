@@ -73,31 +73,36 @@ def main(names, stance="audience"):
 
 def sound(names, fps=25):
     """previews/sound/<name>.mp4: the gesture with its default sound mixed in at each hit, frame-exact."""
-    import subprocess, tempfile
     ok, _, _ = show.load_library(show.Checker(), verbose=False)
     sc = show.Scene()
     sc.m.vis.global_.offwidth, sc.m.vis.global_.offheight = W, H
     renderer = mujoco.Renderer(sc.m, H, W)
-    sfx, out = show.DIR.parent / "agent" / "sounds" / "sfx", OUT / "sound"
-    out.mkdir(parents=True, exist_ok=True)
+    out = OUT / "sound"
     for name in names:
         g = ok[name]
         ats = g.sound["at"] if isinstance(g.sound["at"], list) else [g.sound["at"]]
         frames = render(sc, renderer, g, True, "", fps=fps, hits=ats)
-        with tempfile.TemporaryDirectory() as d:
-            for k, f in enumerate(frames):
-                f.convert("RGB").save(f"{d}/{k:04d}.png")
-            ins = sum((["-i", str(next(sfx.glob(f"*/{g.sound['name']}.ogg")))] for _ in ats), [])
-            lead = float(subprocess.run(["uv", "run", "python", "-c", f"import gestures; print(gestures.sfx_lead("
-                                         f"{g.sound['name']!r}))"], cwd=sfx.parent.parent, check=True,
-                                        capture_output=True, text=True).stdout)  # started early, as the agent does
-            mix = "".join(f"[{k + 1}:a]adelay={max(0, round((a - lead) * 1000))}:all=1[a{k}];" for k, a in enumerate(ats))
-            mix += "".join(f"[a{k}]" for k in range(len(ats))) + f"amix=inputs={len(ats)}:normalize=0[aout]"
-            path = out / f"{name}.mp4"
-            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-i", f"{d}/%04d.png", *ins,
-                            "-filter_complex", mix, "-map", "0:v", "-map", "[aout]", "-t", f"{len(frames) / fps:.2f}",
-                            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(path)], check=True)
-        print(f"{path}  hits {ats}  lead {lead}  {path.stat().st_size // 1024} KB")
+        mux(frames, fps, g.sound["name"], ats, out / f"{name}.mp4")
+
+
+def mux(frames, fps, name, ats, path):
+    """frames + the sfx `name` mixed in at each hit time in ats (s), started its lead early as the agent does ->
+    an mp4 at path (preview_duets.py --sound uses it too)."""
+    import subprocess, tempfile
+    sfx = show.DIR.parent / "agent" / "sounds" / "sfx"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as d:
+        for k, f in enumerate(frames):
+            f.convert("RGB").save(f"{d}/{k:04d}.png")
+        ins = sum((["-i", str(next(sfx.glob(f"*/{name}.ogg")))] for _ in ats), [])
+        lead = float(subprocess.run(["uv", "run", "python", "-c", f"import gestures; print(gestures.sfx_lead({name!r}))"],
+                                    cwd=sfx.parent.parent, check=True, capture_output=True, text=True).stdout)
+        mix = "".join(f"[{k + 1}:a]adelay={max(0, round((a - lead) * 1000))}:all=1[a{k}];" for k, a in enumerate(ats))
+        mix += "".join(f"[a{k}]" for k in range(len(ats))) + f"amix=inputs={len(ats)}:normalize=0[aout]"
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps), "-i", f"{d}/%04d.png", *ins,
+                        "-filter_complex", mix, "-map", "0:v", "-map", "[aout]", "-t", f"{len(frames) / fps:.2f}",
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(path)], check=True)
+    print(f"{path}  hits {ats}  lead {lead}  {path.stat().st_size // 1024} KB")
 
 
 def talk(stance="each_other"):
