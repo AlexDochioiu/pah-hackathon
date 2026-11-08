@@ -67,7 +67,7 @@ REACTION = "facepalm"   # the arm's "ah, damn it" after a miss: an existing gest
 OOPS_SFX = "sad_trombone"   # agent/sounds/sfx/crowd, CC0
 OOPS_LINES = {"empty_grip": "Ah, frog-nabbit. It grabbed thin air. Very magical.", "dropped": "And it dropped my wand. Typical.",
               "not_lifted": "Close. The wand stays put. It's shy.", "timeout": "Dream-1 ran out of time. So did my patience."}
-PATTER = ["It's looking at me through three cameras. I've never felt so seen.",
+PATTER = ["Three cameras, one wand, zero rehearsal.",
           "No script, no rehearsal. Dream-1 is figuring this out right now.",
           "Robots think slowly when they're being careful. Like me before coffee.",
           "This is the part where a real roboticist would sweat.",
@@ -272,7 +272,7 @@ def main():
         out(event="done", ok=False, held=False, dream_chunks=0, fallback=False,
             reason=f"stage not ready: fault {s.get('fault')}, busy {busy}, props {s['props']}")
         return
-    say("Let me ask Dream-1 how to pick me up.")
+    say("Dream-1 is looking for it with three cameras.")
     stop = threading.Event()
     if a.patter > 0:
         threading.Thread(target=patter, args=(a.patter, stop), daemon=True).start()
@@ -451,7 +451,7 @@ def run(a, stage, s, end):
             missed=None, latency_s=latency)
         return
     if lifted and not reason:
-        say("Up I go! That was all Dream-1's own idea.")
+        say("Got it! That was all Dream-1's own idea.")
         out(event="done", ok=True, held=True, arm=arm, dream_chunks=n_played, fallback=False, reason=None,
             missed=None, latency_s=latency)
         return
