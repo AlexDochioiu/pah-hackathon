@@ -377,11 +377,10 @@ class Stage:
             if isinstance(du.props, dict):  # per-arm props (toys): exactly these in hand
                 if any(self.props[s] != du.props[s] for s in SIDES):
                     raise StageError(f"duet {name} needs the props {du.props} in hand (now {self.props}); POST /props")
-            elif not du.props and any(self.props.values()):
-                raise StageError(f"duet {name} needs empty hands; POST /props off first")
-            elif any(v not in (False, True) for v in self.props.values()):
-                raise StageError(f"duet {name}: a toy is in hand; " + ("put it back first" if set(self.props.values()) & self.carried
-                                                                      else "POST /props off first"))
+            elif not du.props and (held := [s for s in SIDES if self.props[s]]):
+                raise StageError(f"duet {name} needs empty hands; {self._let_go(held[0])}")
+            elif toy := [s for s in SIDES if self.props[s] not in (False, True)]:
+                raise StageError(f"duet {name}: the {toy[0]} arm holds {self._what(toy[0])}; {self._let_go(toy[0])}")
             busy = [s for s in SIDES if not (self.plan[s].done or self.plan[s].loop) or self.queue[s]]
             if busy:
                 raise StageError(f"duet {name} needs both arms free; {busy[0]} is playing {self.plan[busy[0]].name}")
@@ -427,13 +426,23 @@ class Stage:
             return {"ok": True, "duet": name, "speed": round(speed, 2), "duration_s": round(len(Q) / show.HZ, 2),
                     "starts_in": round((len(parts["left"][0][0]) - 1) / show.HZ, 2)}
 
+    def _what(self, side):
+        held = self.props[side]
+        return held.capitalize() if held in self.carried else "a prop" if held is True else f"the {held}"
+
+    def _let_go(self, side):
+        """How the arm's hand gets empty: a carried prop (Lars) only through its place gesture, else POST /props."""
+        held = self.props[side]
+        return f"only place_{held} puts {held.capitalize()} back" if held in self.carried else "POST /props off first"
+
     def talk(self, arm, on=True):
         with self.lock:
             p = self.plan["left"]
             if on and p.duet and not p.done:
                 raise StageError(f"duet {p.duet} is playing: no talking during a duet")
             if on and (held := [s for s in self.sides(arm) if self.props[s]]):
-                raise StageError(f"the {held[0]} arm holds a prop: its mouth is full (POST /props off first)")
+                raise StageError(f"the {held[0]} arm holds {self._what(held[0])}: its mouth is full "
+                                 f"({self._let_go(held[0])})")
             for s in self.sides(arm):
                 self.mouth[s].on = bool(on)
                 self.talk_ticks[s] = int(TALK_MAX_S * show.HZ) if on else 0

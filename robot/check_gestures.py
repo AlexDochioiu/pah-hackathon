@@ -360,7 +360,7 @@ st.wait()
 held_g = st.cmd_g["right"]
 assert held_g <= 1e-6, held_g
 code, r = call("/talk", {"arm": "right"})
-assert code == 409, r  # no mouth flaps while holding
+assert code == 409 and "only place_lars puts Lars back" in r["error"], r  # no mouth flaps while holding
 assert call("/grip", {"arm": "right", "value": 1.0})[0] == 409  # opening would drop him
 assert call("/play", {"arm": "right", "gesture": "pick_lars"})[0] == 409  # already holding
 assert traj(reach[::-1][:2], [1.0, 2.0], g=[0.9, 0.1])[0] == 200  # the gripper wobbles but ends closed: grip kept
@@ -387,6 +387,7 @@ st.wait()
 assert traj([q0], [4.0])[0] == 200; st.wait()
 code, r = traj([P + [0, 0.037, 0, 0, 0, 0]], [4.0])
 assert code == 409 and "table" in r["error"], r
+assert "fingertips went below the allowed 3 mm brush" in r["error"], r
 print("trajectories ok: slowed to 0.3 rad/s, played like a pick; table dive, limit, other arm, bad input refused; freeze;"
       " carry: held from a trajectory closing from open (grip kept by gestures and trajectories, /talk and /grip refused), "
       "put down by an opening one; joints just past a stop clamped; a -2 mm fingertip brush passes, a -10 mm dive is "

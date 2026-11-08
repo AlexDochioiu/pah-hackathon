@@ -223,3 +223,7 @@
   Freesound #242244 by ehohnke, CC0, levelled to the crowd files: max momentary -18.5 LUFS) after punchlines in
   comedy, laugh_track/laugh_big map to it; rifle, gallop and debris offered again; all 23 borderline sfx kept; sounds
   on the visible hit unchanged.
+- Nov 7 night: clearer stage refusals. A `/trajectory` dive now says "the fingertips went below the allowed 3 mm
+  brush (N mm into the table)" instead of "-3 mm above the table (needs -3)". `/talk`, a duet or a toy duet while
+  the right arm holds Lars say "only place_lars puts Lars back" (not "POST /props off", which never releases him).
+  `check_gestures.py` asserts both wordings.

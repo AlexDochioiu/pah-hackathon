@@ -533,7 +533,10 @@ class Checker:
                         probs.append(f"at {t[i]:.2f} s: {v[i]:.2f} rad/s within {near*100:.0f} cm of the table (max {TABLE_VMAX})")
                         break
                     elif arm_low < TABLE_FLOOR:
-                        probs.append(f"at {t[i]:.2f} s the arm is {arm_low*1000:.0f} mm above the table (needs {TABLE_FLOOR*1000:.0f})")
+                        where = f"{abs(arm_low)*1000:.1f} mm {'into' if arm_low < 0 else 'above'} the table"
+                        probs.append(f"at {t[i]:.2f} s the fingertips went below the allowed "
+                                     f"{-TABLE_FLOOR*1000:.0f} mm brush ({where})" if TABLE_FLOOR < 0 else
+                                     f"at {t[i]:.2f} s the arm is {where} (needs {TABLE_FLOOR*1000:.0f} mm)")
                         break
         finally:
             sc.props = before
