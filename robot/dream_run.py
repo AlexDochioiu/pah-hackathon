@@ -228,7 +228,7 @@ def wait_done(stage, arm, name, end, on_tick=None):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--task", default="pick up the green frog and hold it up")
+    ap.add_argument("--task", default="pick up the soft green plush toy frog and hold it up")
     ap.add_argument("--stage", default="http://127.0.0.1:8770")
     ap.add_argument("--station", default="nuck9")
     ap.add_argument("--remote-dir", default="~/dream-ghost")
