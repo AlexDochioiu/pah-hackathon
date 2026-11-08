@@ -49,7 +49,8 @@ an external joint trajectory on one arm. `robot/dream_run.py` sends Dream-1's ch
   trajectory's lowest fingertip and other-part clearance; the reply has `clamped`, `tip_mm` and `tip_end_mm`.
 - The arm must be free (done or idling). Like a pick it runs to its end; `/freeze` brakes it on its path and it is
   never resumed. Answers `{"ok", "name", "duration_s", "peak_rad_s", "slowed", "props", "clamped", "tip_mm",
-  "tip_end_mm"}`; `GET /state` shows it as
+  "tip_end_mm", "check_ms"}` (`check_ms`: the check's CPU time, see [Motor dropouts](#motor-dropouts-nov-7));
+  `GET /state` shows it as
   the arm's `playing`.
 - Props: with `carry`, a trajectory that closes the gripper from ≥ 0.6 to ≤ 0.35 at its end takes the prop, as
   `pick_lars` does: from then on gestures keep the grip, `/talk` and opening `/grip` are refused, and later
@@ -91,6 +92,86 @@ an external joint trajectory on one arm. `robot/dream_run.py` sends Dream-1's ch
 - **Heavy CPU work with the real arms open drops motors.** The stage server's ~30 s library check, run after
   `open_arms`, starved i2rt's motor thread: a different motor "lost communication" on each start. `stage.py --real`
   now checks the library first and opens the arms after. Do the same in any script: compute first, then open.
+  The same thing hit dreamcli mid-run on Nov 7 night: see [Motor dropouts](#motor-dropouts-nov-7).
+
+## Motor dropouts (Nov 7)
+Two `dreamcli robot run`s lost motors mid-run on both buses at once, then i2rt re-enabled them and the arms jumped:
+the hand-over (`~/drun4.log`, 21:57:02) and the hat onto the other gripper (`~/drun5.log`, 22:01:23). The pen pick
+(`drun3`), the two Lars picks (`drun1`, `drun2`) and `dream.check` ran to their end; their only motor errors are
+the known shutdown race. Read from copies of the station logs and i2rt/dreamcli source; no CAN or motor registers
+were read.
+
+**Cause (high confidence): the dreamcli process stalled for ~0.7 s and sent the motors nothing.** It is not power and
+not the CAN bus:
+- "loss communication" is not a host timeout. It is status 0xD, which the **motor itself** reports in its reply
+  (i2rt `motor_drivers/utils.py` `MotorErrorCode`, read from the reply's first byte in `dm_driver.parse_recv_message`).
+  The motor's watchdog fired: no command reached it for its CAN timeout. That's register 9 in 50 µs steps; i2rt's
+  `motor_config_tool/set_timeout.py` writes 8000 = 400 ms. Our motors evidently have it on, though dreamcli's
+  `robots/yam.py` assumes it's 0 on a YAM. Every reply arrived: no "Failed to receive" or "CAN Error … Retrying"
+  lines, so the bus and adapters worked. A sag would show as 0x9 (undervoltage), and a reset motor comes back
+  0x0 (disabled), not 0xD.
+- Both buses faulted within 72 ms (drun4) and 200 ms (drun5). Each bus has its own adapter and its own i2rt
+  thread, so only something process-wide hits both. The camera encode threads "fell a capture behind" in the same
+  millisecond.
+- The process was frozen, not busy: right after the loss, consecutive log lines from one i2rt function (its
+  WARNING, then its ERROR) came 70–250 ms apart, while the load average was ~0.7 of 16 cores. One thread held the
+  Python GIL and the rest waited.
+- drun5's trace (`last-run.csv`, the copy at 22:02) puts it at ~22:01:23.1. The 20 Hz tick due then took 2 s,
+  ~0.7 s before i2rt saw the 0xD. That's when chunk 9's answer was due, and with the `eef` head the dream client
+  solves the chunk's IK on its refill thread, inside the same process. All four other tick overruns that night
+  (160–200 ms: drun1, drun3, drun5, dream.check) came 40–100 ms before a chunk installed, i.e. the client's
+  per-chunk work routinely freezes the process ~150 ms. The fatal two were the same freeze running past 400 ms.
+  dreamcli's own `robots/run.py` notes that its IK compile "starved the arm thread past a Metal gripper's 500 ms
+  CAN timeout (fault 0xD)". Not verified: which call inside `dream` stalls (IK solve, a recompile, GC). The
+  `dream` package wasn't copied.
+- Same signature as the afternoon's stage start (`~/dial/stage_story3..6.out`): CPU work in the arm process, both
+  buses, a different motor id each time (tonight L2+R7, L3+R1, then L1+R1 during recovery). The motor that reports
+  is just the next one in i2rt's loop when the thread wakes up, not the most loaded joint.
+- Long reach and the grip force cap are bystanders: the cap only backs the gripper command off, and drun5's arm
+  was at a moderate pose (left j2 1.33, j3 1.1). TX dropped 10 on `can_follower_l` counts since 14:30 (e-stops,
+  recovery bursts). Temperatures at start were 30–31 °C. i2rt reads no voltage (`voltage=-1`).
+
+**Why the arms jumped.** dreamcli's i2rt (`dm_driver._try_recover_motors`) catches the 0xD and "recovers" every
+motor on the chain, healthy ones included: `clean_error` disables each motor ("motor 1 error: disabled"), then
+`motor_on` re-enables it, one motor at a time over ~1 s. Meanwhile the arm hangs limp and falls; drun5's left arm
+went from j2 1.33 to 2.11 and j4 −0.61 to −1.49. Each motor then gets the **stale** pre-fault target at full kp
+and snaps back: j2 2.11 → 1.35 at up to ~4 rad/s.
+
+**Red LEDs** mean the motor's driver has power but isn't driving: disabled or faulted. That's what a 0xD fault,
+or i2rt's `clean_error`, leaves. Off would mean no power. They confirm the power stayed up.
+
+**Our show path's exposure.** Dream-1's client (and its IK) runs in `dream_preview.py`, a separate process, so its
+stalls can't starve the stage's motor threads. That's the design; keep it. The stage process still does CPU work
+next to i2rt's threads: a `/trajectory` check takes 100–370 ms on the laptop (the station is slower; the stage log
+now prints `checked in N ms` and the reply has `check_ms`), and a `/play` runs a clearance check. The stage sets
+`sys.setswitchinterval(0.001)` with `--real`, so the motor threads get the GIL back within 1 ms instead of 5 after
+each CAN call. The kit's i2rt (the stage's, in `~/physical-ai-hacks/.venv`, not copied tonight) behaved
+differently in the afternoon logs: its motor thread exited on the first 0xD, with no recovery and no jump. The
+stage then sees `dead_motors()` and stops; that arm goes limp where it is. Confirm with
+`grep -n _try_recover_motors ~/physical-ai-hacks/.venv/lib/python3.13/site-packages/i2rt/motor_drivers/dm_driver.py`:
+no match means no auto-recovery.
+
+**Mitigations, ranked.**
+1. Done by design: in the show, Dream-1 runs only through `dream_preview.py` → `/trajectory`, never through
+   `dreamcli robot run`. Its IK lives in another process.
+2. Done: `--real` lowers the GIL switch interval; `/trajectory` logs its check time. On the first real run, a check
+   over ~300 ms on the station is the warning sign. Then move the check off the arm process.
+3. For any further `dreamcli robot run`: try `--action-space joint` (no client IK; the model's own joints) or
+   `ik_solve: tick` in the config, and watch for `tick overrun` lines. They're the precursor. Any overrun near
+   400 ms means stop.
+4. dreamcli's i2rt recovery is unsafe as written (stale target, healthy motors disabled). Report it to Dream Labs /
+   i2rt. A fix would re-enable at the measured pose with kp ramped from 0, or not auto-recover at all. Don't patch
+   the station's site-packages without the owner.
+5. Not recommended: raising or disabling the motors' CAN timeout (register 9). It would ride out the stalls, but
+   then a hung or crashed program leaves an arm stiff on its last target instead of going limp. Owner's call, a
+   CAN register write with the arms supported.
+6. Not supported by the evidence: a reach limit or a lower grip force cap. Neither causes the stall; a reach limit
+   would only shorten the fall.
+
+**What the owner can check physically** (cheap, though the evidence points away from it): both CAN cables seated
+at the adapters and the arms, and termination on each bus. If the arms share a PSU, its rating against two arms
+at peak (both shoulders loaded plus a grip). Whether any motor LED ever went **off**, not red, during a run: off
+would reopen the power hypothesis.
 
 ## Harmless noise
 - "DM Error in control loop: file descriptor -1" and "motor failed with info" at shutdown: an i2rt race when

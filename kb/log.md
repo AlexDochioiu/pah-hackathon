@@ -200,3 +200,9 @@
 - Nov 7 night: round-4 review page `/Users/alexandrudochioiu/.review-pages/pah-round-4/index.html` (13 cards: voice
   gains, sfx level, laugh, borderline/dropped sfx, present, kiss, mime solos and duets, chef_kiss/flick, hit sounds,
   show roles, Dream-1 miss reaction placeholder).
+- Nov 7 night: motor dropouts in dreamcli's hand-over and hat runs explained from log copies: status 0xD is the motor's
+  own 400 ms CAN watchdog. dreamcli's process froze ~0.7 s while handling a chunk (eef client IK in-process), so both
+  buses faulted at once; not power, not CAN. Its i2rt auto-recovery disables every motor, then re-enables it at the
+  stale target, so the arms sagged and jumped. Our path keeps the client in `dream_preview.py`; `stage.py --real` sets
+  a 1 ms GIL switch interval and `/trajectory` reports `check_ms` ([arm-control.md](arm-control.md#motor-dropouts-nov-7)).
+  submission.md's fault fallback and dropout text corrected.

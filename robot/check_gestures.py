@@ -303,6 +303,7 @@ def traj(Qs, ts, **kw):
 
 code, r = traj(reach, [0.05, 0.1, 0.15, 0.2, 0.25], g=[0.9, 0.7, 0.5, 0.3, 0.2])  # asked far too fast
 assert code == 200 and r["peak_rad_s"] <= stage.TRAJ_VMAX + 1e-6 and r["slowed"] > 1.5 and r["name"] == "dream", r
+assert r["check_ms"] > 0, r  # the check's CPU time, next to i2rt's motor threads on the real stage (kb/arm-control.md)
 time.sleep(0.2)
 assert call("/state")[1]["arms"]["right"]["playing"] == "dream"
 assert traj(reach, [1, 2, 3, 4, 5])[0] == 409  # one at a time

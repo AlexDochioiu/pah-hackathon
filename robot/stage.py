@@ -645,6 +645,7 @@ class Stage:
                 raise StageError("g must be one gripper value in 0..1 per time")
         if carry is not None and carry not in self.carried:
             raise StageError(f"carry must be a carried prop ({sorted(self.carried)}), not {carry!r}")
+        started = time.perf_counter()  # the check's CPU runs next to i2rt's motor threads (kb/arm-control.md#motor-dropouts-nov-7)
         lo, hi = show.SAFE_LO, show.SAFE_HI
         clamped = int(np.sum((q < lo) & (q >= lo - TRAJ_CLAMP)) + np.sum((q > hi) & (q <= hi + TRAJ_CLAMP)))
         q = np.where((q < lo) & (q >= lo - TRAJ_CLAMP), lo, np.where((q > hi) & (q <= hi + TRAJ_CLAMP), hi, q))
@@ -715,8 +716,9 @@ class Stage:
                 probs.append(f"{arm}: a part other than the fingertips is {body*1000:.0f} mm above the table "
                              f"(needs {floor*1000:.0f})")
             probs += self.ck.lean_problems(arm, Q, fold=True)  # as far back as rest or where it starts, like a fold
-            print(f"{arm} {name}: lowest fingertip {tip*1000:.1f} mm, other parts {body*1000:.1f} mm above the table"
-                  + (" (refused)" if probs else ""), flush=True)
+            check_ms = (time.perf_counter() - started) * 1000
+            print(f"{arm} {name}: lowest fingertip {tip*1000:.1f} mm, other parts {body*1000:.1f} mm above the table, "
+                  f"checked in {check_ms:.0f} ms" + (" (refused)" if probs else ""), flush=True)
             if probs:
                 raise StageError(f"{arm} {name}: " + "; ".join(probs))
             plan = Plan(name, Q, G, self.ck.swept[show.key(name, arm)], gest, hold=True)
@@ -731,7 +733,8 @@ class Stage:
             return {"ok": True, "arm": arm, "name": name, "speed": round(speed, 2),
                     "duration_s": round((len(Q) - 1) / show.HZ, 2), "peak_rad_s": round(float(v.max()), 3),
                     "slowed": round(gest.duration / asked, 2), "props": dict(self.props), "clamped": clamped,
-                    "tip_mm": round(tip * 1000, 1), "tip_end_mm": round(self._lowest(arm, Q[-1:])[0] * 1000, 1)}
+                    "tip_mm": round(tip * 1000, 1), "tip_end_mm": round(self._lowest(arm, Q[-1:])[0] * 1000, 1),
+                    "check_ms": round(check_ms)}
 
     def _lowest(self, arm, Q):
         """(fingertips, every other moving part): the lowest point above the arm's table over Q, m."""
@@ -1023,6 +1026,10 @@ def main(argv=None):
 
     if args.real:
         args.warp = 1.0
+        # i2rt's motor threads give up the GIL on every CAN send and receive; a check running on another thread
+        # (/trajectory, /play) then makes them wait up to the switch interval (5 ms) each time to get it back. A
+        # motor that hears nothing for its CAN timeout (~400 ms) faults with "loss communication". 1 ms cuts that wait.
+        sys.setswitchinterval(0.001)
         # The library check takes ~30 s of CPU. With the real arms already open it starves i2rt's motor thread,
         # motors miss replies and drop out ("loss communication", a different motor each start). Check first.
         a, lock, backend = KinArms(), None, "real"

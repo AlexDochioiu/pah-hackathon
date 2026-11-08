@@ -88,15 +88,19 @@ simulation, the real Dream-1 pick passes; the run on the real arms is next.
   into the table: e-stop). The calibration check (`dream.check`) and moving the left wrist camera off a USB 2 link
   made the evening's Lars pick work. Its grasps brush the table by a fraction of a millimetre in our model and
   its joints jitter just past their stops, so our checker needed a fingertip-only allowance and a small clamp.
-- **Motor dropouts.** On the stage's start, checking the library with the arms open starved the motor thread
-  ("loss communication"); the stage now checks first, then opens the arms. Later Dream-1 tasks with long reaches
-  (picking a green pen, a hand-over) hit the same motor "loss communication" dropouts mid-run; under
-  investigation.
+- **Motor dropouts.** Each motor disables itself when it hears nothing for 400 ms ("loss communication"). On the
+  stage's start, checking the library with the arms open froze the motor threads; the stage now checks first, then
+  opens the arms. Two later `dreamcli` runs (a hand-over, a hat onto the other gripper) hit the same fault
+  mid-run on both arms at once. The cause was not power or the CAN bus: the policy client froze its own process for
+  ~0.7 s while handling a chunk. i2rt then re-enabled the limp arms at their old targets, so they jumped back. Our
+  show path keeps Dream-1's client in a separate process from the arms, and the stage times its own checks
+  ([arm-control.md](arm-control.md#motor-dropouts-nov-7)).
 - **A loud venue.** Hold-to-talk for the room, open-mic live chat for quieter settings.
 
 ### What's next
 - Run Dream-1 through our stage on the real arms, then put `[dream:pick_lars]` in the show.
-- Find the cause of the motor dropouts on Dream-1's long reaches.
+- Report the dropout and the jumpy auto-recovery to Dream Labs and i2rt; try `dreamcli` on the joint head (no
+  client IK).
 - Fine-tune Dream-1 on our own scripted Lars picks (50+ demos in its dataset format) so it picks props from
   anywhere on the table, mid-story.
 - Point gestures for the founders and the finale's reach toward the e-stop, which fall back to stand-ins today.
@@ -133,7 +137,7 @@ for laughs: a click cuts the act playing and takes over, and the chain goes on f
 |---|---|---|
 | No network | The page can't reach LiveKit Cloud (no ✓, no voice) | Switch the laptop to a prepared phone hotspot and reload `/show` (the cached acts prime at once). If still down: Alex pitches in person, Darius plays gestures by hand from the stage API (`/play`, `/duet`; the stage runs on the station, not in the cloud). Untested; rehearse once. |
 | Dream-1 idles or refuses | Dream-1's first chunks sit at rest, or the checker refuses a chunk | Only relevant if the Dream-1 beat is in the show. `dream_run.py` skips still chunks and keeps asking up to its limits, then plays our own `pick_lars`; Lars's lines cover the wait. Nobody acts. |
-| Arm fault | An arm stops, a motor drops out ("loss communication"), or a big tracking error | The stage freezes, folds to rest and switches off by itself; Michael presses the e-stop if anything moves unplanned. The show goes on voice-only (gestures are refused, the voice continues); Lars covers it. Recovery (release e-stop, station power reset, `home.py`, restart the stage) is after the presentation, not during it. |
+| Arm fault | An arm stops, a motor drops out ("loss communication"), or a big tracking error | A tracking error: the stage freezes both arms where they are and refuses further moves. A motor dropout: the stage stops, and the arm whose motors dropped goes limp and sags where it is (it can't fold: its motors are off). An arm still answering holds its last pose (in the dreamcli runs both arms dropped together). On the stage's i2rt this should not auto-recover and jump the way the dreamcli runs did (afternoon logs; recheck the station's version before the show). Michael presses the e-stop at once on a sag or anything unplanned. The show goes on voice-only (gestures are refused, the voice continues); Lars covers it. Recovery (release e-stop, station power reset, `home.py`, restart the stage) is after the presentation, not during it. |
 | TTS slow | A long pause before Lars speaks | Scripted acts are cached, so this hits the live story: give it ~2 s. If the story stalls, the volunteer asks again; if it still stalls, Alex clicks to the finale, which works from any state. |
 | Story goes off the rails | The LLM says something wrong or runs long | Alex clicks to the finale; Esc as a last resort (it stops everything). |
 | Volunteer freezes | No ask | Darius suggests one: "a knight who's afraid of the dark". |
@@ -147,5 +151,5 @@ for laughs: a click cuts the act playing and takes over, and the chain goes on f
 | Our own Lars pick (`pick_lars`) | The face-up bake picked and placed Lars on the real arms; the current face-down bake: sim only. `LARS_PICK = off` in the show. |
 | Dream-1 zero-shot with `dreamcli` | Ran on the real arms: picked Lars and lifted him. |
 | Dream-1 through our stage (`/trajectory`, checker, grip lock) | Passes on the laptop kinematic sim with the real run's chunks. **Real arms: pending.** |
-| Dream-1 long-reach tasks (green pen, hand-over) | Tried on the real arms; motor "loss communication" dropouts on long reaches. Under investigation. |
+| Dream-1 longer tasks with `dreamcli` (green pen, hand-over, hat) | Ran on the real arms. The pen pick ran its full length and gripped (the grip force cap engaged). The hand-over and the hat dropped motors mid-run when dreamcli's process froze (not power, not reach); i2rt's auto-recovery jumped the arms ([arm-control.md](arm-control.md#motor-dropouts-nov-7)). |
 | Dimensional dimos twin | Tried, parked; not in the show path. |
