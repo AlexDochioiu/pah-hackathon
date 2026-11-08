@@ -956,16 +956,16 @@ def clap():
 
 def rub_hands():
     s = Seq()
-    s.move(*meet(1.25, 0.0, 0.44, gap=0.07), T=0.9)
+    s.move(*meet(1.25, 0.0, 0.44, gap=0.07), T=0.9, frac=FAST)
     s.move(*meet(1.25, 0.0, 0.44, gap=0.025), approach=TOUCH, hold=0.1)
     dl = s.q["left"] - show.stage_pose("left")                               # where the hands met, as deltas
     dr = show.mirror(s.q["right"] - show.stage_pose("right"), "right")
-    for k in range(5):                                                          # rub: the wrists roll against each other
+    for k in range(3):                                                          # rub: the wrists roll against each other
         a = 0.3 * (1 if k % 2 == 0 else -1)
         s.move(dl + pose(j6=a, j5=0.04 * np.sign(a)), dr + pose(j6=-a, j5=-0.04 * np.sign(a)), T=0.3, mirror=False)
     s.move(dl, dr, T=0.7, mirror=False, hold=0.1)  # settle slowly: the rolled hands close here
     s.move(*meet(1.25, 0.2, 0.47, gap=0.08), T=0.4, line=True)
-    return hands("rub_hands", "Two hands rubbed together, scheming: \"Excellent... my plan is working.\"", s)
+    return hands("rub_hands", "Two hands rubbed together, scheming: \"Excellent... my plan is working.\"", s, frac=FAST)
 
 
 def hug():

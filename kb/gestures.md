@@ -340,7 +340,7 @@ arms are given; none touch (all ≥ 20 cm). Previews: `robot/previews/ensemble_<
 | `pull_rope`: Two hands pull a heavy rope: reach, grab, heave back, three times. | 13.7 | empty hands |
 | `rocket`: Crouch for the countdown, rumble, then blast up high together: a rocket lifting off. | 5.9 | empty hands |
 | `row_boat`: Both arms row a boat with the sticks as oars, off-sync: dip in, pull back, lift out and return with the wrist rolled flat, three strokes each. | 7.7 | empty hands |
-| `rub_hands`: Two hands rubbed together, scheming: "Excellent... my plan is working." | 10.2 | empty hands |
+| `rub_hands`: Two hands rubbed together, scheming: "Excellent... my plan is working." | 7.9 | empty hands |
 | `shrug`: "Who knows?": a little dip, then both pop up with the hands thrown open, palms up and out, heads tilted, an "eh" bob, and they drop: oh well. | 4.7 | empty hands |
 | `storm`: Both arms bend and whip together like trees in a howling storm. | 4.9 | empty hands |
 | `the_end`: Arms wide for "THE END!", then a deep bow together. | 4.0 | empty hands |
