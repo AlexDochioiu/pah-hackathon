@@ -20,7 +20,7 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 ## Models (LiveKit Inference: one LiveKit API key, billed to the project's credits)
 - STT `assemblyai/universal-3-6-pro`, turn detection `inference.TurnDetector()`, preemptive generation on.
 - LLM `google/gemma-4-31b-it`: LiveKit's documented latency-optimised default for voice agents (Nov 2026).
-- TTS `fishaudio/s2.1-pro`, voice `e3cd384158934cc9a01029cd7d278634` ("Laura", confident narrator), with
+- TTS `fishaudio/s2.1-pro`, voice `532f7f4adb32420fa4f5c95e9b13be9d` ("frog": Lars the host, warm and enthusiastic; owner pick, was Laura `e3cd3841…`), with
   `expressive=True`: LiveKit injects the TTS's markup guide into the prompt, so the LLM can add emotion and
   laughs inline; LiveKit strips that markup from transcripts.
 - Noise cancellation: BVC, or BVCTelephony for SIP callers.
@@ -67,7 +67,7 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
   default list in `gestures.py` is used (same names as `fake_stage.py`).
 
 ## Character voices
-Narration is spoken by Laura; each arm's quoted lines (from its `[talk:...]` tag's opening quote to the closing
+Narration is spoken in the host voice (Lars, "frog"); each arm's quoted lines (from its `[talk:...]` tag's opening quote to the closing
 quote, the span its mouth flaps for) by that character's own voice. A quote without a talk tag stays narration.
 - Palette (`voices.PALETTE`), all public Fish Audio voices on `fishaudio/s2.1-pro` through LiveKit Inference (any
   public library voice id works; an unknown id fails with "provider returned no audio"):
