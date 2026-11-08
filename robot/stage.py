@@ -115,7 +115,7 @@ def _traj_check(ck, ck_props, arm, name, tk, Qk, Gk, span, shape, vcap, raw=Fals
     raw: retimed only, no table/lean/joint-speed checks (owner, Nov 8: play Dream-1's motion as it is, e-stop manned).
     Returns (d, Q, G, probs, tip, body, sweep), or a str: why it can't be retimed."""
     ck.set_props(ck_props)
-    for _ in range(8):  # pchip scales with time, but its 50 Hz samples only roughly: a few stretches
+    for _ in range(1 if raw else 8):  # pchip scales with time, but its 50 Hz samples only roughly: a few stretches
         d = {"name": name, "side": arm, "near": show.TABLE_NEAR, "external": True,
              "about": "an external trajectory (POST /trajectory)",
              "keys": [{"t": float(a), "q": [float(x) for x in r], "g": float(b)} for a, r, b in zip(tk, Qk, Gk)]}
@@ -127,7 +127,7 @@ def _traj_check(ck, ck_props, arm, name, tk, Qk, Gk, span, shape, vcap, raw=Fals
         gv = float(np.abs(np.diff(G)).max()) * show.HZ if len(G) > 1 else 0.0
         sp = vcap / TRAJ_VMAX
         k = max(v.max() / vcap, float(np.sqrt(a.max() / (TRAJ_AMAX * sp * sp))), gv / (TRAJ_GRIP_VMAX * sp))
-        if k <= 1.0 + 1e-6:
+        if raw or k <= 1.0 + 1e-6:
             break
         tk = tk * k * 1.03
     else:
@@ -759,15 +759,19 @@ class Stage:
                 span = (int(opened[-1]) + 1, len(Gk) - 1)
             after = (False if g is not None else held) if held else (carry if span else False)
             shape = next((x.carry for x in self.lib.values() if prop and x.carry and x.carry["name"] == prop), None)
-            tk = np.r_[0.0, TRAJ_HOLD_S, TRAJ_HOLD_S + t + (1.0 / show.HZ if t[0] <= 0 else 0.0)]
-            tk = np.r_[tk, tk[-1] + TRAJ_HOLD_S]
-            dt = np.maximum.reduce([np.diff(tk), np.abs(np.diff(Qk, axis=0)).max(1) / vcap,
-                                    np.abs(np.diff(Gk)) / (TRAJ_GRIP_VMAX * speed)])
-            m = min(len(TRAJ_RAMP), (len(dt) - 2) // 2)  # ease in and out over several keys, not inside one segment
-            if m:
-                dt[1:1 + m] *= TRAJ_RAMP[:m]
-                dt[-1 - m:-1] *= TRAJ_RAMP[:m][::-1]
-            tk = np.r_[0.0, np.cumsum(dt)]
+            hold = 0.02 if raw else TRAJ_HOLD_S  # raw: Dream-1's own timing, no pause around it (owner, Nov 8)
+            if raw:  # its first key can be far from where the arm is (Nov 8: 25 rad/s, tracking fault): get there at <= 1.5 rad/s
+                t = (t - t[0]) / speed + max(1.0 / show.HZ, float(np.abs(q[0] - q0).max()) / 1.5)  # speed 0.5: dreamcli's half-speed config
+            tk = np.r_[0.0, hold, hold + t + (1.0 / show.HZ if t[0] <= 0 else 0.0)]
+            tk = np.r_[tk, tk[-1] + hold]
+            if not raw:  # raw: no slow-down either
+                dt = np.maximum.reduce([np.diff(tk), np.abs(np.diff(Qk, axis=0)).max(1) / vcap,
+                                        np.abs(np.diff(Gk)) / (TRAJ_GRIP_VMAX * speed)])
+                m = min(len(TRAJ_RAMP), (len(dt) - 2) // 2)  # ease in and out over several keys, not inside one segment
+                if m:
+                    dt[1:1 + m] *= TRAJ_RAMP[:m]
+                    dt[-1 - m:-1] *= TRAJ_RAMP[:m][::-1]
+                tk = np.r_[0.0, np.cumsum(dt)]
             asked = TRAJ_HOLD_S * 2 + t[-1]
             job = (self._ck_props(self.props), arm, name, tk, Qk, Gk, span, shape, vcap, raw)
             if self.pool:  # the real arms: off this process, so i2rt's motor threads keep the CPU (see _CK)
