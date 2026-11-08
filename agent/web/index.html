@@ -220,7 +220,7 @@ function render() {
   chip("c-agent", agent ? "storyteller: " + st : (room ? "storyteller: not here yet" : "storyteller"),
        agent ? "ok" : (room ? "wait" : ""));
   if (!serverUp) say.textContent = "Server restarting…";
-  else if (!room) say.textContent = parked ? (stopped ? (SHOW ? "Stopped: arms going to rest. A cue key (or a click) carries on." : "Stopped: arms going to rest. Click to start a new story.") : "This story was closed. Click to start a new one.") : "Connecting…";
+  else if (!room) say.textContent = parked ? (stopped ? (SHOW ? "Stopped: arms going to rest. A cue key carries on." : "Stopped: arms going to rest. Click to start a new story.") : "This story was closed. Click to start a new one.") : "Connecting…";
   else if (!agent) say.textContent = "Waiting for the storyteller…";
   else if (holding) say.textContent = "Listening to you…";
   else if (SHOW && !liveNow() && st === "listening") say.textContent = "Waiting for the next cue";
@@ -435,7 +435,8 @@ window.addEventListener("keydown", (e) => {
 });
 window.addEventListener("blur", () => release(true));
 $("banner").addEventListener("click", () => room && room.startAudio());
-document.addEventListener("click", () => { if (parked && serverUp && !room) { parked = false; stopped = false; render(); } });
+// after STOP only a cue carries on (show) or a click (story mode): a stray click rejoined and raised the arms (Nov 8)
+document.addEventListener("click", () => { if (parked && serverUp && !room && !(SHOW && stopped)) { parked = false; stopped = false; render(); } });
 async function stopAll(e) {
   if (e) e.stopPropagation();
   release(true);
