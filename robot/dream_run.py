@@ -56,10 +56,10 @@ TRACK_LIMIT = 0.2   # rad: stop Dream's run before the stage's own TRACK_STOP (0
 PREFETCH_S = 1.5    # s before a chunk ends that the next one is asked for (a get_action takes ~1 s)
 STILL = 0.15        # rad: a chunk whose arm moves less (and whose gripper changes < 0.3) is Dream-1 idling, not a
                     # move: seen on real frames Nov 7 (jitter of 0.02-0.06 rad at rest): our own pick instead
-LIFT_MM = 40.0      # mm: the fingertips this high above the table at a chunk's end, holding Lars: he's picked up
+LIFT_MM = 80.0      # mm: the fingertips this high above the table at a chunk's end, holding Lars: he's picked up
 MAX_CHUNKS = 60
 ARMS = ("left", "right")
-EMPTY_GRIP = 0.05   # measured gripper (0 closed .. 1 open) below this while "holding": it closed on nothing. Lars
+EMPTY_GRIP = 0.07   # measured gripper (0 closed .. 1 open) below this while "holding": it closed on nothing. Lars
                     # stops the fingers at 0.09-0.3 (the real picks, Nov 7). ponytail: knob, check on the real arms
 REACTION = "facepalm"   # the arm's "ah, damn it" after a miss: an existing gesture (head into the hand, shaking)
 OOPS_SFX = "sad_trombone"   # agent/sounds/sfx/crowd, CC0
@@ -237,7 +237,8 @@ def main():
     ap.add_argument("--chunks", type=int, default=30, help="Dream-1 calls at most (still ones included)")
     ap.add_argument("--pick-s", type=float, default=60.0, help="s for Dream-1's part (asking and playing), the way "
                     "back excluded; our 0.3 rad/s cap plays its chunks ~1.5-2.5x slower than dreamcli")
-    ap.add_argument("--speed", type=float, default=1.0, help="x the stage's 0.3 rad/s cap (0.1..1)")
+    ap.add_argument("--speed", type=float, default=1.0, help="x the stage's 0.3 rad/s cap (0.1..4)")
+    ap.add_argument("--exec", type=int, default=0, help="play only each chunk's first N steps (dreamcli ~16); 0: all")
     ap.add_argument("--replay", help="a JSON list of chunk events (dream_preview.py output) instead of the station")
     ap.add_argument("--fake", action="store_true", help="the station preview makes up a reach (no Dream call)")
     ap.add_argument("--no-fallback", action="store_true")
@@ -298,6 +299,8 @@ def run(a, stage, s, end):
                 break
             side = arm or (a.arm if a.arm != "auto" else max(ARMS, key=lambda x: moves(ch, x)))
             c = {"t": ch["t"], **ch[side]}
+            if a.exec:  # like dreamcli: play only the chunk's first steps, then look again (Nov 8: whole chunks, slowed, missed)
+                c = {key: (v[:a.exec] if isinstance(v, list) else v) for key, v in c.items()}
             if moves(ch, side) < STILL and max(c["g"]) - min(c["g"]) < 0.3:
                 out(event="info", chunk=k, still=round(moves(ch, side), 3))
                 if k < a.chunks:

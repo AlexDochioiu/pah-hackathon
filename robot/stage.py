@@ -74,6 +74,8 @@ TRACK_STOP = 0.35    # rad: tracking error above this freezes everything (someth
 TRAJ_VMAX = show.TABLE_VMAX  # rad/s, any joint, at speed 1
 TRAJ_AMAX = 2.0              # rad/s^2, any joint
 TRAJ_GRIP_VMAX = 1.0         # gripper (0..1) per s
+TRAJ_SPEED_MAX = 4.0         # /trajectory speed (x TRAJ_VMAX, TRAJ_GRIP_VMAX, and TRAJ_AMAX x speed^2): Dream-1 at its
+                             # own pace (Nov 8: slowed 2-4x it touched Lars and never closed); the table rule still holds
 TRAJ_HOLD_S = 0.2            # s of stillness added at both ends, so it starts and stops at zero speed
 TRAJ_MAX_KEYS, TRAJ_MAX_S = 2000, 60.0
 TRAJ_RAMP = np.linspace(4.0, 1.0, 8)  # the first and last keys' segments stretched this much: a gentle start and stop
@@ -122,7 +124,8 @@ def _traj_check(ck, ck_props, arm, name, tk, Qk, Gk, span, shape, vcap):
         Q, G = gest.samples(arm)
         v, a = show.peak_rates(Q)
         gv = float(np.abs(np.diff(G)).max()) * show.HZ if len(G) > 1 else 0.0
-        k = max(v.max() / vcap, float(np.sqrt(a.max() / TRAJ_AMAX)), gv / TRAJ_GRIP_VMAX)
+        sp = vcap / TRAJ_VMAX
+        k = max(v.max() / vcap, float(np.sqrt(a.max() / (TRAJ_AMAX * sp * sp))), gv / (TRAJ_GRIP_VMAX * sp))
         if k <= 1.0 + 1e-6:
             break
         tk = tk * k * 1.03
@@ -725,7 +728,7 @@ class Stage:
         lo, hi = show.SAFE_LO, show.SAFE_HI
         clamped = int(np.sum((q < lo) & (q >= lo - TRAJ_CLAMP)) + np.sum((q > hi) & (q <= hi + TRAJ_CLAMP)))
         q = np.where((q < lo) & (q >= lo - TRAJ_CLAMP), lo, np.where((q > hi) & (q <= hi + TRAJ_CLAMP), hi, q))
-        speed = float(np.clip(speed, 0.1, 1.0))
+        speed = float(np.clip(speed, 0.1, TRAJ_SPEED_MAX))
         vcap = TRAJ_VMAX * speed
         with self.lock:
             self._guard()
@@ -755,7 +758,7 @@ class Stage:
             tk = np.r_[0.0, TRAJ_HOLD_S, TRAJ_HOLD_S + t + (1.0 / show.HZ if t[0] <= 0 else 0.0)]
             tk = np.r_[tk, tk[-1] + TRAJ_HOLD_S]
             dt = np.maximum.reduce([np.diff(tk), np.abs(np.diff(Qk, axis=0)).max(1) / vcap,
-                                    np.abs(np.diff(Gk)) / TRAJ_GRIP_VMAX])
+                                    np.abs(np.diff(Gk)) / (TRAJ_GRIP_VMAX * speed)])
             m = min(len(TRAJ_RAMP), (len(dt) - 2) // 2)  # ease in and out over several keys, not inside one segment
             if m:
                 dt[1:1 + m] *= TRAJ_RAMP[:m]
