@@ -375,7 +375,7 @@ def run(a, stage, s, end):
             if arm is None:
                 arm = side
                 out(event="info", arm=arm, moves={x: round(moves(ch, x), 3) for x in ARMS})
-                say(f"Dream-1 says: the {arm} arm, like this.")
+                say(f"Dream-1 picks the {arm} arm.")
             name = f"dream{k}"
             reason, r = play(stage, arm, name, c["t"], c["q"], c["g"], a.speed, a.carry, a.raw)
             out(event="info", chunk=k, g=[round(min(c["g"]), 2), round(c["g"][-1], 2)], reply=r)  # Dream-1's gripper: lowest, end
