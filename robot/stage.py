@@ -12,7 +12,7 @@ API (JSON in and out; "arm" is left | right | both, default both):
   GET  /gestures                       [{"name","duration_s","arms","about","hold","loop","max_speed","uses_gripper",
                                         "stances","sound"}]  sound: {"name": sfx or null, "at": s or [s]} = its hits
   POST /play answers {"ok","started","speed","starts_in"}: starts_in = s until the gesture's t = 0 (the blend)
-  GET  /state                          per arm: what it plays, progress, queue, joints, tracking error, last error;
+  GET  /state                          per arm: what it plays, progress, queue, joints (+ measured, grip_measured), tracking error, last error;
                                        plus rejected gestures and gesture pairs refused on the two arms at once
   POST /play {"arm","gesture","speed":1.0,"mode":"now"|"queue"}   now = newest wins (default), queue = after current
   POST /freeze {"arm"}                 hold the current pose at once, drop queues
@@ -159,6 +159,7 @@ class Stage:
         self.cmd_q = {s: np.asarray(q[s], float).copy() for s in SIDES}
         self.cmd_g = {s: float(g[s]) for s in SIDES}
         self.meas = {s: self.cmd_q[s].copy() for s in SIDES}
+        self.meas_g = dict(self.cmd_g)  # the gripper as read back (0 closed .. 1 open), mouth flaps included
         self.plan = {s: self._hold_plan(s, "start") for s in SIDES}
 
     # ---------------------------------------------------------------- planning (call with self.lock held)
@@ -615,6 +616,7 @@ class Stage:
                     "progress": round(p.i / max(len(p.Q) - 1, 1), 2), "after": self.after[s],
                     "queue": [g for g, _ in self.queue[s]], "grip": round(self.cmd_g[s], 2),
                     "joints": np.round(self.cmd_q[s], 3).tolist(), "measured": np.round(self.meas[s], 3).tolist(),
+                    "grip_measured": round(self.meas_g[s], 2),
                     "tracking_error": round(p.err, 3), "last_error": self.last_error[s],
                     "talking": self.mouth[s].on}
             return out
@@ -664,7 +666,7 @@ class Stage:
                     out_q[s] = self.cmd_q[s] + self.dq[s]
                 try:
                     self.arms.command(out_q, out_g)
-                    q, _ = self.arms.read()
+                    q, g = self.arms.read()
                 except Exception as e:
                     self.fault = f"arm I/O failed: {e}"; print(self.fault, flush=True); self.stop.set(); break
                 dead = dead_motors(self.arms)
@@ -673,6 +675,7 @@ class Stage:
                     print(self.fault, flush=True); self.stop.set(); break
                 for s in SIDES:
                     self.meas[s] = np.asarray(q[s], float)
+                    self.meas_g[s] = float(g[s])
                     p = self.plan[s]
                     err = float(np.max(np.abs(self.meas[s] - p.Q[max(p.i - 1, 0)] - self.dq[s])))  # vs last tick's
                     p.err = max(p.err, err)

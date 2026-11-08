@@ -160,3 +160,6 @@
 - Nov 7 ~20:30: live chat freezes the arms only when an interruption is real (the heard speech ends interrupted),
   not when LiveKit merely pauses the voice: after a false interruption the voice resumes with the arms still acting
   and its tags in sync (the owner's "always motion" rule). A turn between scenes no longer freezes idling arms.
+- Nov 7 ~20:20: dimos twin parked: the owner saw no value in it ("we don't need the Dimensional thing at all"). The
+  code stays in `dimos/` for reference. `stage.py` `/state` gains `grip_measured` per arm (the gripper as read back,
+  `/talk` flaps included); check_gestures asserts it flaps.

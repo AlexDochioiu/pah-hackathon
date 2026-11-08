@@ -13,8 +13,6 @@ Update this page when a piece is added or a connection changes. Details live on 
           ▲ STOP: freeze → end room → /rest        │ │  two YAM arms + 3 cameras    │
                                                    │ └──────────────────────────────┘
    LiveKit Cloud: STT → LLM → TTS (Inference) ─────┘      ▲ ssh tunnel 8770
-                                                          │ GET /state only, 20 Hz
- laptop: dimos twin (dimos/run.sh) ── Viser :8095 (live mirror) ◄── POST :8796/ghost (Dream-1's next move)
 ```
 
 ## The chain, one sentence at a time
@@ -42,7 +40,7 @@ Update this page when a piece is added or a connection changes. Details live on 
 | Duets and ensembles | `robot/make_duets.py` → `robot/duets/*.json` | `duets.DuetChecker` | [gestures.md](gestures.md) |
 | Previews (GIFs) | `robot/preview*.py` → `robot/previews/` | owner review pages | |
 | Lars pick | `robot/lars.py` (`--bake` from the fixed table dock `DOCK_RIGHT`, in the right arm's frame; live `--dry`/`--go` through `calib.json`) | its own sim checks + checker; the stage's `--dock-check` maps the dock into the camera through `calib.json` | [props.md](props.md) |
-| dimos digital twin (live mirror, ghost, MCP skills) | `dimos/twin.py` (runs dimos from `/tmp/dimos-src`) | `dimos/check_model.sh` (FK vs `show.py`, side-by-side shots) | [dimos.md](dimos.md) |
+| dimos digital twin (parked: the owner saw no value; reference only) | `dimos/twin.py` (runs dimos from `/tmp/dimos-src`) | `dimos/check_model.sh` (FK vs `show.py`, side-by-side shots) | [dimos.md](dimos.md) |
 | Narration, tags, voices, sounds | `agent/` | `agent/tests` (`uv run --group dev pytest -q`), `fake_stage.py` | [storyteller.md](storyteller.md) |
 
 ## Rules that cross pieces
@@ -51,5 +49,5 @@ Update this page when a piece is added or a connection changes. Details live on 
   `sound` with `Seq.hit` times from the trajectory, names from `agent/sounds/sfx/` (check_gestures verifies both).
 - Real arms only through the stage server or `lars.py`, one program at a time (station lock). Safety rules:
   [AGENTS.md](../AGENTS.md), [arm-control.md](arm-control.md).
-- The dimos twin only reads the real stage (`GET /state`); its MCP skills POST only to a sim stage (`:8783`), never 8770.
+- The dimos twin (parked) only reads the real stage (`GET /state`); its MCP skills POST only to a sim stage (`:8783`), never 8770.
 - New code on the station needs `./sync.sh` and a stage server restart (it checks every gesture at start, ~20 s).

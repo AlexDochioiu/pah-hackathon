@@ -141,6 +141,10 @@ G = []
 for _ in range(60):
     G.append(st.mouth["left"].g if st.mouth["left"].g is not None else st.cmd_g["left"]); time.sleep(0.01)
 assert max(G) - min(G) > 0.2 and call("/state")[1]["arms"]["left"]["talking"], G
+GM = []  # /state reports the flapping gripper as read back (the twin shows it)
+for _ in range(30):
+    GM.append(call("/state")[1]["arms"]["left"]["grip_measured"]); time.sleep(0.02)
+assert max(GM) - min(GM) > 0.1, GM
 assert call("/talk", {"arm": "left", "on": False})[0] == 200
 time.sleep(0.5)
 assert st.mouth["left"].g is None and not st.dq["left"].any()  # back to the plan's grip, no head offset

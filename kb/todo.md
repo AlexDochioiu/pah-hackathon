@@ -22,12 +22,8 @@ Status: 🔨 being built · 👀 waiting for owner review · ⏸ waiting for som
 | Lars pick from a fixed dock, saved as `pick_lars` / `place_lars` gestures, `[pick:lars]` tag | ✅ sim (the face-up bake picked for real) | Face-down dock (Lars held facing the audience) since Nov 7 evening, sim-checked at speeds 0.3, 0.5, 0.75 and 1.0 ([props.md](props.md)). Real runs start at speed 0.3, ramp 0.5 → 0.75 → 1.0 only after several clean picks |
 | Live prop pick anywhere on the table, 5 s total (detect < 50 ms, plan < 200 ms, move ~4.5 s) | 🔨 after dock | Colour/shape detector on the overhead camera; one grasp template per prop |
 
-## dimos twin (Creative track)
-| What | Status | Notes |
-|---|---|---|
-| Twin mirrors both arms live in dimos's Viser, model matched to `show.py` | 👀 | `dimos/run.sh --stage http://127.0.0.1:8770`; mirrored the real arms at rest (read-only); [dimos.md](dimos.md) |
-| Ghost input for Dream-1's move (`POST :8796/ghost`) | ✅ built | The Dream-1 agent calls it; JSON in [dimos.md](dimos.md#ghost) |
-| Gripper in the twin shows the commanded `grip`, not the measured one or `/talk` flaps | 🔨 open | Needs a measured or output gripper field in `stage.py` `/state` (station sync + restart) |
+## dimos twin: parked
+Parked Nov 7 ~20:20: the owner saw no value in it. The code stays in `dimos/` for reference ([dimos.md](dimos.md)); don't run it at the demo. `stage.py` `/state` now has `grip_measured` per arm (station sync + restart to use it).
 
 ## Real-arm tests (need the stage server restarted on new code)
 | What | Status | Notes |

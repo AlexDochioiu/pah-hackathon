@@ -1,5 +1,7 @@
 # dimos digital twin
 
+**Parked (Nov 7 ~20:20): the owner saw no value in it.** The code stays in `dimos/` for reference; nothing in the show runs it. `/state` has since gained `grip_measured` (the gripper as read back, mouth flaps included); the twin still shows `grip`.
+
 A Dimensional (dimos) digital twin of our two arms, for the Creative track (a Dimensional engineer judges).
 dimos's own Dual OpenYAM stack (ControlCoordinator + ManipulationModule + its Viser 3D view) runs on the laptop.
 Its two arms mirror ours live, and it can show a "ghost" trajectory (Dream-1's next move) over them. Code, run
