@@ -15,12 +15,14 @@ iks = yam.teleop_ik(station)
 lock = station_lock.acquire("dial-teach")
 a = arms.open_arms(station, energize=False)  # floats: movable by hand
 log = {"left": [], "right": []}
+jlog = {"left": [], "right": []}  # joints too: a taught pose (e.g. beside the e-stop) becomes a gesture keyframe
 try:
     t0 = time.time()
     while time.time() - t0 < SECS:
         js, gs = a.read()
         for s in js:
             log[s].append([time.time() - t0, *iks[s].fk(js[s])[:3, 3]])
+            jlog[s].append([*js[s], gs[s]])
         time.sleep(0.05)
 finally:
     a.close()
@@ -42,4 +44,5 @@ for s, rows in log.items():
     touches = [t for t in touches if np.linalg.norm(t - rest) > 0.05]  # drop holds at the rest pose
     out[s] = np.asarray(touches)
     print(s, "touches (m, arm frame):", np.round(out[s], 3).tolist())
-np.savez(pathlib.Path.home() / "dial/teach.npz", **out, **{f"raw_{s}": np.asarray(r) for s, r in log.items()})
+np.savez(pathlib.Path.home() / "dial/teach.npz", **out, **{f"raw_{s}": np.asarray(r) for s, r in log.items()},
+         **{f"joints_{s}": np.asarray(r) for s, r in jlog.items()})

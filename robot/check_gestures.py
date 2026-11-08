@@ -67,7 +67,7 @@ print(f"sounds ok: {sum(1 for g in ok.values() if g.sound)} gestures hit on thei
 # Duets: all pass; an undeclared close pair (< 15 cm) and a fast final approach (> 5 cm/s inside 5 cm) are refused.
 dc = duets.DuetChecker(ck)
 dok, dbad = duets.load_duets(dc)
-assert not dbad and {"cross_swords", "cheers", "poke", "quick_draw", "tip_hats", "copycat", "place_hat", "elbow_nudge",
+assert not dbad and {"cross_swords", "cheers", "quick_draw", "tip_hats", "copycat", "elbow_nudge",
                      "straight_man", "heckle", "car_chase", "ufo_abduct", "mirror", "invisible_ball",
                      "hand_through_wall"} <= set(dok), \
     (sorted(dok), dbad)

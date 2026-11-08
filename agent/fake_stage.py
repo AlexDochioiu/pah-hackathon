@@ -28,7 +28,7 @@ GESTURES = {
 }
 DUETS = {
     "car_chase": 8.0, "cheers": 7.5, "copycat": 7.3, "cross_swords": 7.7, "elbow_nudge": 7.5, "hand_through_wall":
-    7.6, "heckle": 7.1, "invisible_ball": 6.0, "mirror": 7.9, "place_hat": 7.2, "poke": 7.4, "quick_draw": 7.7,
+    7.6, "heckle": 7.1, "invisible_ball": 6.0, "mirror": 7.9, "quick_draw": 7.7,
     "straight_man": 7.5, "tip_hats": 5.6, "ufo_abduct": 7.9
 }
 ENSEMBLES = {

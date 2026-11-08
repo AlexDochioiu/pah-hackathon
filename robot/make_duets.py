@@ -1301,7 +1301,8 @@ ENSEMBLES = [chomp, wings, this_big, shrug, rocket, waves, storm, gate_opening, 
              the_end, cauldron, drum_roll, car_ride]
 TOYS = [car_chase, ufo_abduct]
 MIME = [mirror, invisible_ball, hand_through_wall]
-LIBRARY = [cross_swords, cheers, poke, place_hat, quick_draw, tip_hats, copycat, elbow_nudge, straight_man, heckle] + ENSEMBLES + HANDS + TOYS + MIME
+# poke, place_hat cut (owner, Nov 7): a prop against the other arm's head can knock its wrist camera
+LIBRARY = [cross_swords, cheers, quick_draw, tip_hats, copycat, elbow_nudge, straight_man, heckle] + ENSEMBLES + HANDS + TOYS + MIME
 
 
 # Sounds on the contact frames (only where they clearly help; none on the hand-contact duets).

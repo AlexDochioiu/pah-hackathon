@@ -83,7 +83,7 @@ SYNONYMS = {
     "high_five": "high_five", "celebrate_together": "high_five", "team_up": "high_five", "kiss": "kiss",
     "smooch": "kiss", "kissed": "kiss", "true_loves_kiss": "kiss", "true_love's_kiss": "kiss",
     "cauldron": "cauldron", "witches": "cauldron",
-    "drum": "drum_roll", "drum_roll": "drum_roll", "hat": "place_hat", "crown": "place_hat",
+    "drum": "drum_roll", "drum_roll": "drum_roll", "hat": "tip_hats",  # place_hat cut (Nov 7): a prop on the other arm's head risks its camera
     # stand-up comedy (round 3b)
     "joke": "ta_da", "punchline": "ta_da", "nailed_it": "ta_da",
     "deadpan": "slow_turn", "awkward": "slow_turn", "slow_turn": "slow_turn", "roll_eyes": "eye_roll",
