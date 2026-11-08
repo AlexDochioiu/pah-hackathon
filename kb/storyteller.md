@@ -1,19 +1,19 @@
 # Storyteller voice agent
 
-`agent/` is a LiveKit Agents (Python, `livekit-agents~=1.8`, locked at 1.8.11) voice agent; its host is Lars, the green plush frog
-on the table (`HOST_NAME` in `agent/show.md`). It asks the
-listener what story they want, improvises it scene by scene, and cues the two arms as puppet actors through the
+`agent/` is a LiveKit Agents (Python, `livekit-agents~=1.8`, locked at 1.8.11) voice agent. In story mode an unnamed
+storyteller narrates ("David - British Storyteller"); Lars, the green plush frog on the table (`HOST_NAME` in `agent/show.md`), only
+hosts the show (owner, Nov 7). It asks the listener what story they want, improvises it scene by scene, and cues the two arms as puppet actors through the
 stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](../agent/README.md).
 
 ## Files
 | File | What |
 |---|---|
 | `agent/storyteller.py` | Entrypoint (`uv run storyteller.py console\|dev`). Model choices and timings at the top. |
-| `agent/prompt.md` | The system prompt. `{{GESTURES}}` is replaced at startup with the stage's gesture list, `{{SFX}}`/`{{MUSIC}}` with the sound library, `{{HOST_NAME}}` from `show.md`. |
+| `agent/prompt.md` | The system prompt. `{{WHO}}` becomes the narrator (story) or Lars (show), `{{GESTURES}}` the stage's gesture list, `{{SFX}}`/`{{MUSIC}}` the sound library. |
 | `agent/gestures.py` | Tag parser, gesture-name mapping, stage HTTP client, the speech-synced gesture hook. |
 | `agent/sounds.py`, `agent/sounds/` | Sound effects and mood music: the library (CC0, `sounds/LICENSES.md`) and its player. |
 | `agent/voices.py` | Character voices: the voice palette, the voice-run splitter, parallel synthesis, run timing. |
-| `agent/director.py` | Freeze when the listener talks, idle when the stage is quiet, auto-continue to the next scene. |
+| `agent/director.py` | Freeze when the listener talks, idle when the stage is quiet, auto-continue to the next scene. `StoryClock` (in storyteller.py) times each story. |
 | `agent/app.py`, `agent/web/index.html` | Story Theatre: hold-to-talk web page plus the PTT worker it runs. |
 | `agent/live.py` | Live chat, the story page's open-mic mode: interruption knobs and the cut-in stage direction. |
 | `agent/show.py`, `agent/show.md` | Show mode: the clicker-cued presentation and its script. |
@@ -23,19 +23,23 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 ## Models (LiveKit Inference: one LiveKit API key, billed to the project's credits)
 - STT `assemblyai/universal-3-6-pro`, turn detection `inference.TurnDetector()`, preemptive generation on.
 - LLM `google/gemma-4-31b-it`: LiveKit's documented latency-optimised default for voice agents (Nov 2026).
-- TTS `fishaudio/s2.1-pro`, voice `532f7f4adb32420fa4f5c95e9b13be9d` ("frog": Lars the host, warm and enthusiastic; owner pick, was Laura `e3cd3841…`), with
+- TTS `fishaudio/s2.1-pro`. Narrator by mode (owner, Nov 7): story mode "David - British Storyteller"
+  `72324f5951924b2eb27faaf5630153b4` (`STORY_VOICE`), show mode "Deadpool better" `d657aa381ad444e393d7f6ff0f8cc2f0`
+  for Lars (`HOST_VOICE`), the show's only voice. Both with
   `expressive=True`: LiveKit injects the TTS's markup guide into the prompt, so the LLM can add emotion and
   laughs inline; LiveKit strips that markup from transcripts.
 - Noise cancellation: BVC, or BVCTelephony for SIP callers.
 - Characters speak in their own voices ([Character voices](#character-voices)); `CHARACTER_VOICES=0` turns that off.
-- Every choice can be overridden in `agent/.env` (`LLM_MODEL`, `TTS_MODEL`, `TTS_VOICE`, `STT_MODEL`, `EXPRESSIVE`,
-  `CHARACTER_VOICES`).
+- Every choice can be overridden in `agent/.env` (`LLM_MODEL`, `TTS_MODEL`, `STORY_VOICE`, `HOST_VOICE`, `STT_MODEL`,
+  `EXPRESSIVE`, `CHARACTER_VOICES`). The old `TTS_VOICE` is ignored: it set one voice for both modes.
 
 ## Tag protocol (LLM output)
 - `[left:slash]`, `[right:cower]`, `[both:bow]`: arm is `left|right|both`, gesture is a stage gesture name.
-  Written at the end of the sentence they act out (the LLM's habit anyway); `tags_first` (the agent's
-  `transcription_node`) moves them to the start of that sentence, so the arm moves as the words begin. At most one or
-  two per sentence. Before this (Nov 7 real run) gestures visibly lagged the speech by about a sentence.
+  Written right after the word they act out (or at the end of the sentence for a whole-sentence move);
+  `tags_first` (the agent's `transcription_node`) moves each one early enough that its hit lands on that word
+  (see "How gestures sync to speech"). One per sentence, every sentence (the prompt; a motionless sentence gets a
+  code fill move). `[left:present]`: the arm rises to introduce its character; the code adds it before a casting
+  that lacks one.
 - `[face:each_other]` / `[face:audience]`: turn both actors toward each other or back to the audience
   (`POST /stance`); the prompt asks for each_other when the two arms play characters who meet or fight, and
   audience before the final bow. Stage requests go out in order, so `[face:audience] [both:bow]` turns, then bows.
@@ -72,29 +76,36 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
   default list in `gestures.py` is used (same names as `fake_stage.py`).
 
 ## Character voices
-Narration is spoken in the host voice (Lars, "frog"); each arm's quoted lines (from its `[talk:...]` tag's opening quote to the closing
+Narration is spoken in the narrator's voice (story mode: David; show mode: Lars, who then reads every line,
+quotes included: `Storyteller.host_only`, set by `ShowRunner`); each arm's quoted lines (from its `[talk:...]` tag's opening quote to the closing
 quote, the span its mouth flaps for) by that character's own voice. A quote without a talk tag stays narration.
 - Palette (`voices.PALETTE`), all public Fish Audio voices on `fishaudio/s2.1-pro` through LiveKit Inference (any
   public library voice id works; an unknown id fails with "provider returned no audio"):
 
   | Name | Fish voice id | Sound | Measured pitch |
   |---|---|---|---|
-  | (narrator) Laura | `e3cd384158934cc9a01029cd7d278634` | confident female narrator | ~160 Hz |
+  | (story narrator) David | `72324f5951924b2eb27faaf5630153b4` | British storyteller ("David - British Storyteller") | |
+  | (show host) Lars | `d657aa381ad444e393d7f6ff0f8cc2f0` | "Deadpool better" | |
   | `deep` | `5becb4c89d67471f96137c91b22e02c6` | very deep, raspy male ("Deep voice") | ~110 Hz |
-  | `squeaky` | `d7cdeff76ac94ee6bd23d39e019ad72a` | high, squeaky cartoon ("High Pitched Squeaks") | ~470 Hz |
+  | `squeaky` | `396be6334bcc41f68af3070e595aee76` | high, squeaky chipmunk ("Simon the chipmunk") | |
   | `old` | `f7af7c05cc6042d8a8f90be8bb233044` | old, crackly, raspy ("Old Goblin") | ~300 Hz, mostly unvoiced |
-  | `child` | `4fcb3a423c61415fb35604eba567d95f` | bright, bouncy child ("Energetic Child") | ~320 Hz |
+  | `child` | `a3d56467a193409984ce245f8f371c9a` | bright, bouncy child ("Noah") | |
   | `witch` | `d056e4cabd094165b66a1acd65e00cc0` | menacing, dramatic British woman ("Witch") | ~190 Hz |
-  | `robot` | `175d7d5358b644d2ad2e8b7e4e13ece3` | flat, distorted robot ("Robot") | ~130 Hz, dull |
-- The narrator is the show's host, Lars the frog. Its voice is the one setting `TTS_VOICE` (default Laura). Host
-  candidates rendered Nov 7 for the owner to pick (`/tmp/pah-voices/host_<name>.mp3`, same welcome line):
-  `frog` `532f7f4adb32420fa4f5c95e9b13be9d` (warm, enthusiastic, friendly male, fairly high), `showman`
-  `58b3344db8b44d6ba27cc67dd908ccb2` (dramatic, playful, confident male), `ringmaster`
-  `75d309f669524e7fbc0324b39e6b94ad` (energetic, theatrical, cheerful female), and `laura` for comparison.
-- Casting: `[voice:left=NAME]` / `[voice:right=NAME]` at the casting (the prompt asks for one per arm, once per
-  story, fitted to the character; `{{VOICES}}` lists the palette). Names are matched loosely (`robotic` -> robot,
-  a word of a description such as `dragon` -> deep); unknown ones are dropped. The cast lasts until recast, also
-  across stories. Default with no casting: left `deep`, right `squeaky`. The tag parses as a `Tag` (so the chat
+  | `pirate` | `4d78f878f023424cb77975a6dea180a6` | gruff sea dog: pirates, sailors, scallywags | |
+- The robot voice is gone (it sounded awful, owner Nov 7): `robot`, `robotic`, `machine`, `alien`, `android`,
+  `cyborg`, `computer` map to `deep` (`voices.ALIASES`).
+- Story mode's narrator is an unnamed storyteller (`STORY_VOICE`, David); Lars hosts only the show (`HOST_VOICE`).
+  Both, and the new squeaky, child and pirate slots, are the owner's picks from the Nov 7 voice review page. A new
+  host voice changes the show cache key (it includes the voice id), so every act is synthesised again.
+- Casting: exactly two characters per story or comedy set, one per arm, cast once at the start, each in its own
+  sentence opening with `[arm:present]` and `[voice:left=NAME]` / `[voice:right=NAME]` (`{{VOICES}}` lists the
+  palette). So three voices: the narrator plus one per character. Nobody else gets an arm, a voice or a quoted line;
+  others are only mentioned by the narrator, and ensembles never speak (owner, Nov 7). Names are matched loosely (a
+  word of a description such as `dragon` -> deep); unknown ones are dropped. Code lock (`voiced_tts(locked=…)`):
+  after an arm's first casting, a later voice tag for it is dropped and logged ("dropped recast") until a new story.
+  A new story starts (`Storyteller.new_story`, from `StoryClock`) at a story's end (its `[both:bow]` or
+  `[ensemble:the_end]`) or on a listener turn asking for a new/another/different story or a comedy. The voices
+  carry over to the next story until it casts. Default with no casting: left `deep`, right `squeaky`. The tag parses as a `Tag` (so the chat
   history keeps it); `GestureSink` ignores it.
 - How: the session's `tts_text_transforms` no longer strip tags; `Storyteller.tts_node` gets the LLM text with them
   and `voices.VoiceSplitter` cuts it into runs of one voice, dropping every tag (quotes inside `<...>` expressive
@@ -114,25 +125,72 @@ quote, the span its mouth flaps for) by that character's own voice. A quote with
   synchronizer then releases each run's text across that run's audio. Measured: talk on within -0.26..+0.23 s of
   the character's first sound, off 0.1-0.45 s before the line's last sound. The two nodes are paired through the
   reply's `SpeechHandle` (`_SpeechHandleContextVar`); with no tts node (text-only) the transcript passes through,
-  and it never waits more than 8 s for a mark.
+  and it never waits more than 30 s for a mark. Each run's start is known as soon as the runs before it are
+  synthesised (not played): the old version learnt it only after playback, so a long run timed the wait out, the
+  rest of the reply went untimed and the comedy set's gestures stalled 72 s then burst (fixed Nov 7; the log says
+  "voice run marks late" if it happens again).
 - Rendering samples: a script must open `livekit.agents.utils.http_context.open()` to use `inference.*` outside a
   worker. Samples of Nov 7 were rendered to `/tmp/pah-voices/` (scene.mp3 plus one file per voice).
 
 ## How gestures sync to speech
-- `Storyteller.tts_node` (via `voices.VoiceSplitter`) removes tags from the text sent to the TTS; the session's
-  `tts_text_transforms` are only `filter_markdown` and `filter_emoji`, which leave the tags alone.
-- The LLM text, tags included, still goes through `transcription_node` to the transcript. `GestureSync.install`
-  wraps the session's audio and transcription outputs (after `session.start()`) in a LiveKit
-  `TranscriptSynchronizer`, which releases the reply's words in step with audio playout. `GestureSink`, right after
-  it, fires each tag as it is released and passes the text on without tags. Tags count as zero syllables for the
-  pacing (`hyphenate_without_tags`).
+The chain, LLM to arm: `Storyteller.llm_node` (`voices.Tidy`: no written laughter, no `*laughs*`, character lines
+capped) → `tts_node` (voice runs, `RunMarks`) and `transcription_node` (`tags_first`: tags moved early, then
+`timestamp_runs`) → LiveKit's `TranscriptSynchronizer` releases words with the audio → `GestureSink` fires each
+tag as it is released → `Stage` (HTTP to the stage server) → the arm. The listener hears the word `audio_s`
+after its release; the arm's hit comes `rtt/2 + starts_in + hit_at/speed + arm_lag` after the POST.
+- Measured causes (Nov 7, from the session-1 logs, the fake stage and the sim):
+  - A tag at its sentence's start reached its hit 1.2-3.4 s later: the gesture's first hit `at` (median 1.55 s,
+    0.87-2.82) plus the stage's `starts_in` blend (median 0.30 s from the stage pose, 0.32 s from idle, 0.54 s when
+    cutting another gesture, p90 1.72 s). That was the main lag.
+  - The listener's playout (WebRTC jitter buffer + network + output): ~0.15-0.3 s; it makes a tag fired on time
+    look ~0.18 s early, so it is subtracted, not added.
+  - Sounds: BackgroundAudioPlayer's own queue (400 ms) plus the mixer block (100 ms) ran ~390 ms ahead with
+    ~491 ms queued: sfx were ~0.5 s late. With a 150 ms queue and 20 ms blocks (`SFX_BUFFER_MS`) it is ~0.1 s.
+  - Queueing: the session-1 gaps of 6-18 s without motion were the Director idling only while listening; an
+    opening duet made the next solos and the face turn fail (409). Now `/idle` breathing is the baseline, solos
+    wait for the duet, and a stance change waits for it to end.
+  - One-word talk tags opened the mouth for 8 ms; now at least 0.4 s, closed half a word after the last word.
+- What the code does (`gestures.Timing`, `_Placer`): a tag right after a word is aimed at that word, one after the
+  sentence's last word `SENTENCE_HIT_S` into the sentence. It fires `gesture_lead = rtt/2 + starts_in + hit_at/speed
+  + ARM_LAG_MS - audio_s` (capped at 3.5 s) earlier, converted to syllables at the voice's rate and snapped to a word
+  boundary, never before a face/props/pick tag or an earlier sentence's tags. `starts_in` and the rtt are EMAs of
+  the stage's replies; the rate is measured per reply (sink); `audio_s` is the page's measured playout (index.html
+  publishes `playout_ms`/`playout_bg_ms` every 2 s from `getStats`: jitter-buffer delay per track + RTT/2 + output
+  latency). An `[sfx]` in a gesture's sentence rides on its hit; elsewhere it moves earlier by the sound track's
+  backlog + its playout minus the voice's + the file's own lead.
+- Sync log: every gesture leaves a `[mark:arm=name]` where it was aimed; when it is released the log says
+  `sync left:slash: sent -1.42 s, word heard +0.25 s, hit +0.31 s (+60 ms)`, i.e. the hit's error against the
+  word. Tune from those lines: hits consistently late → raise `ARM_LAG_MS` (or `HIT_DEFAULT_S` for gestures without
+  hit marks); early → lower it. `GESTURE_LEAD=0` restores the old sentence-start behaviour.
+- Always motion: `/idle` (idle_breathe between gestures) from the session start; a sentence of 4+ words with
+  nothing moving gets `[fill:light]` (a look or nod on a free arm, rotating; `FILL_GESTURES=0` turns it off; never in
+  scripted show acts). One arm's next gesture waits for its previous hit + `HIT_GAP_MS` (at most 1.5 s), so two
+  close tags don't cut each other's hit.
 - `use_tts_aligned_transcript=False` is required: with TTS-aligned transcripts the transcript would be the TTS's
-  words, which contain no tags, and no gesture would ever fire.
+  words, which contain no tags, and no gesture would ever fire. The code's own `[mark:…]`/`[fill:…]` tags are
+  taken out of the history the LLM reads.
 - On an interruption LiveKit stops releasing words, so tags after the cut never fire. The chat history keeps
   only what was heard (tags included), so the LLM continues from the cut.
-- Measured in the fake-session test: a tag on the second word fires ~0.5 s into playout; one near the end of 4 s
-  of audio fires at ~4.0 s. Pacing is LiveKit's speaking-rate estimate, so expect a few hundred ms of slop.
 - Stage calls are fire-and-forget (2 s timeout, errors logged); a dead stage never stalls the voice.
+- Knobs (agent/.env; defaults in `.env.example`): `GESTURE_LEAD` 1, `AUDIO_DELAY_MS` 250 (until the page measures),
+  `ARM_LAG_MS` 70, `HIT_DEFAULT_S` 0.6, `SENTENCE_HIT_S` 0.5, `SPEECH_RATE` 2.8 (until measured; the host ~2.5),
+  `HIT_GAP_MS` 200, `FILL_GESTURES` 1, `SFX_SYNC_MS` 0, `SFX_BUFFER_MS` 150.
+- Not verified without the real arms: the real `arm_lag` (sim commands only; 70 ms is from the 0.1-0.19 rad
+  tracking error at speed), whether the hits now land on their words by eye, and the playout numbers from a real
+  browser on the venue's network.
+
+## Story length
+`StoryClock` (storyteller.py): a story or comedy set should run about 2 minutes in 5-6 beats (prompt). The clock
+starts at its first casting, music or present tag (in the show's live demo at the volunteer's ask), logs
+`story length: m:ss` at its bow or `the_end`, and past `STORY_WRAP_S` (105 s) adds a wrap-up note to the
+instructions and the next-scene prompt ("head for the climax, end within one or two replies"), past `STORY_END_S`
+(150 s) "end it in this reply". The note goes at the end; a show cue ends the clock.
+
+## Spoken text tidy (`voices.Tidy`, in `llm_node`)
+Runs of written laughter (three syllables or more: "HAHAHA…", "hehehe", "mwahaha") become "ha ha"; `*laughs*`,
+`(chuckles)` and other stage directions in `*…*` or laughter parentheses go; a quoted character line is cut at the
+first sentence end after 25 words (hard cap 40, "…"). A comedy set's minute of "HAHAHA" (Nov 7) stalled the TTS.
+The prompt says the same: no written laughter, short lines.
 
 ## Sound effects and music
 - Played by `sounds.Soundboard` on LiveKit's `BackgroundAudioPlayer`: its own `background_audio` track in the
@@ -149,8 +207,9 @@ quote, the span its mouth flaps for) by that character's own voice. A quote with
   first, then the next each time that mood starts). A new file is picked up automatically (describe non-obvious
   names in `ABOUT`/`MUSIC_ABOUT` in `sounds.py`, add common other words to `SFX_SYNONYMS`/`MUSIC_SYNONYMS`).
   Tag names (sfx files, mood folders) must be letters and underscores (no digits: the tag parser rejects them).
-- Volumes (env overrides): `SFX_VOLUME` 0.8; music `MUSIC_VOLUME` 0.35 when nobody talks, ducked to
-  `MUSIC_DUCKED` 0.15 while Lars (`agent_state_changed` speaking) or the listener (`user_state_changed`) speaks.
+- Volumes (env overrides): `SFX_VOLUME` 0.2 (12 dB under the old 0.8; the files were re-levelled to -18 LUFS
+  short-term, Nov 7); music `MUSIC_VOLUME` 0.35 when nobody talks, ducked to
+  `MUSIC_DUCKED` 0.15 while the narrator (`agent_state_changed` speaking) or the listener (`user_state_changed`) speaks.
   The music source is our own looping frame generator that glides its gain (down in 0.25 s, up in 1.2 s); a new
   `[music:x]` fades the old track out and the new one in over 1.5 s. Offline mix check: music about -34 dBFS RMS
   between lines, -41 dBFS ducked, an explosion about -17 dBFS.
@@ -168,15 +227,21 @@ quote, the span its mouth flaps for) by that character's own voice. A quote with
   on the real arms. A listener cut-in (a push-to-talk press, or a live-chat interruption) stops the sound effects
   already playing (`Soundboard.stop_sfx`; the music only ducks) and cancels hit sounds still scheduled
   (`GestureSync.cancel_sounds` → `Hit.cancel`): the frozen arms never reach those hits. A show cue doesn't.
-- Comedy mode (prompt "Comedy show"): the opening offers a story or a comedy show; the arms do stand-up (two
-  comedians, comedian and heckler, or a double act), `[music:lounge]`, and `[sfx:rimshot]` / `[sfx:laugh_track]`
-  after small punchlines, `[sfx:laugh_big]` only after the best joke or two, with crickets or sad_trombone for a
-  deliberate flop.
+- Budget (stories and comedy): at most one sfx per `SFX_MIN_GAP_S` (12 s), about one per beat; a gesture's own
+  hit sound counts. Over budget it is dropped and logged ("dropped [sfx:x]: budget"). Scripted show acts are exempt.
+- Not offered (files kept, `sounds.OFFERED_NOT`; the prompt doesn't list them and a tag maps to a near sound or is
+  dropped): gallop, evil_laugh, rifle (→ gunshot), stomp (→ footsteps), debris (→ crash), spaceship (→ flyby), magic
+  (→ spell), kiss, laugh_track, laugh_big. double_take has no hit sound.
+- Comedy mode (prompt "Comedy show"): the opening offers a story or a comedy show; the two arms are a double act
+  (the set's two characters, cast once), `[music:lounge]`, `[sfx:rimshot]` after a punchline, crickets or
+  sad_trombone for a deliberate flop; about 2 minutes like a story.
 
 ## Interruptions and idle
 - `user_state_changed` → `speaking`: `POST /freeze` at once (VAD start of speech, before STT), and any pending
   next scene is cancelled. The prompt tells the LLM to answer with one playful line and carry on with the change.
   This is the console/`dev` behaviour; push-to-talk freezes on the press, live chat on a real cut-in (below).
+- From the session start the arms breathe (`Stage.idle()`: `/idle`, so the stage plays idle_breathe after every
+  gesture too); a `Stage.play` re-sends it if needed.
 - Agent listening and nobody talking: `POST /idle` after `IDLE_AFTER_S` (1.5 s), or later if the last gesture
   (`busy_until`, from the gesture durations) is still playing, so the final bow finishes.
 - Session start: `POST /stage`, then the greeting. Session end: `POST /rest`.
@@ -257,8 +322,11 @@ kept in the browser (`localStorage.storyMode`).
   on macOS, or the mic is silent ("Failed to read … as input to the fake device").
 
 ## Show mode (the hackathon presentation)
-Clicker-cued acts: the arms cut in on a founder, introduce Lars, the founders and the project, then hand over to
-the live story mode. Rehearsal how-to: [show.md](show.md). Script: `agent/show.md` (format in its header).
+Clicker-cued acts: the stage hands cut in on a founder, Lars hosts, introduces the founders and the project, then
+hands over to the live story mode. One voice only, Lars's (owner, Nov 7): the arms never speak, they react with
+gestures; `ShowRunner` sets `agent.host_only`, so even a live-demo character line is read by Lars. Budget: acts 0-3
+at most 2:00, act 4 at most 10 s, act 5 at most 20 s, the live story about 2 minutes (test_show checks the
+estimates; the table is in [show.md](show.md)). Rehearsal how-to: [show.md](show.md). Script: `agent/show.md` (format in its header).
 - `http://127.0.0.1:8790/show` (same `app.py`): `/token?mode=show` dispatches the worker with metadata
   `{"mode":"show"}`; `storyteller.py` then skips the greeting, appends the script's "Live context" to the prompt
   and starts `show.ShowRunner`. The normal page at `/` is unchanged.
@@ -267,9 +335,9 @@ the live story mode. Rehearsal how-to: [show.md](show.md). Script: `agent/show.m
   agent's `show_play` RPC instead (about 250 ms slower, through the SFU). The worker publishes `show.act`,
   `show.state` (playing, done, live, ready), `show.primed` and `show.latency_ms` as participant attributes.
 - Playback uses the LLM's own pipeline: `session.say(text, add_to_chat_ctx=True)` with the speech-synced gesture
-  hook, sounds, talk tags (voices, mouths). A cue first cuts the current act (`director.cut()`: freeze, drop the
-  next scene; `session.interrupt(force=True)`). Tags before an act's first word fire at once; with a sound among
-  them the voice waits `LEAD_PAUSE_S` (0.3 s).
+  hook and sounds. A cue first cuts the current act (`director.cut()`: freeze, drop the next scene;
+  `session.interrupt(force=True)`) and sets `agent.scripted` (no fill moves, no sfx budget, the story clock stops).
+  Tags before an act's first word fire at once (act 1: the snap to the audience, then Lars's first word).
 - LLM guard: until the `(live)` act any reply the LLM starts (`speech_created` with source `generate_reply`) is
   interrupted, so a stray turn can't talk over the script. The scripted lines land in the chat history, so the
   live stories know what was said.
@@ -277,9 +345,15 @@ the live story mode. Rehearsal how-to: [show.md](show.md). Script: `agent/show.m
   and is cached as WAV in `agent/.cache/show/` (key: text, TTS model and voice, the `tts_node` source, text
   transforms, voices); act 1 first (~10 s), all acts ~40 s cold, instant warm. A cached act replays its frames through
   `say(audio=…)`; before the cache is ready it streams from the TTS (~1 s first audio).
-- Measured (Nov 7, LiveKit Cloud, fake stage): cue → voice in the worker 310–320 ms on act 1 (the 0.3 s scratch
-  lead included), 12–60 ms on acts without a lead sound. Heard in a client: scratch 0.46–0.78 s and voice
-  0.75–1.0 s after the key press on the local path; 0.7–1.0 s / 1.1–1.3 s over the RPC fallback.
+- Measured (Nov 7, LiveKit Cloud, fake stage): cue → voice in the worker 12–60 ms on acts without a lead sound
+  (act 1 no longer has one). Heard in a client: voice ~0.45-0.7 s after the key press on the local path, ~0.4 s
+  more over the RPC fallback.
+- Auto-advance (`ShowRunner.auto`, page toggle → RPC `show_auto`): a finished scripted act starts the next
+  `SHOW_AUTO_GAP_S` after `stage.busy_until`, up to the live act (never into the finale). The worker publishes
+  `show.advanced` (`act.seq`) and the page moves app.py's cursor there (`/show/cue {cmd: "at"}`, plays nothing).
+- A gesture's own stage sound is cued as kind `hit` and may be a not-offered file (the kiss ensemble's kiss).
+- "Built with" card: `BUILT_n = tool: how` lines in show.md's config, shown on `/show` while the cursor is on act
+  `BUILT_WITH_ACT` (3); `Script.built_with` → `/show/script` JSON. Add a sponsor's tool as the next `BUILT_n`.
 - Per-character voices: `Storyteller.tts_node` records where each voice run starts (`voices.RunMarks`, keyed by the
   speech handle) and `transcription_node` pins gestures and mouths to them. A replayed act skips `tts_node`, so
   `show.py` synthesizes under a stand-in speech handle, caches the marks next to the WAV (`<key>.json`) and hands

@@ -2,8 +2,8 @@
 
 The page (app.py /show) keeps the act cursor (`Cursor`) and sends `show_play {"act": n}` to the worker, where
 `ShowRunner` cuts whatever is playing (arms freeze) and speaks the act through `session.say()`. `say()` runs the
-same nodes an LLM reply does: the TTS text transforms and `tts_node` (tags never reach the voice; per-character
-voices), `transcription_node` (`tags_first`) and the GestureSync outputs, so gestures, talk mouths, duets and
+same nodes an LLM reply does: the TTS text transforms and `tts_node` (tags never reach the voice; in show mode the
+host reads every line, `agent.host_only`), `transcription_node` (`tags_first`) and the GestureSync outputs, so gestures, talk mouths, duets and
 sounds fire in step with playout exactly as in the live story mode. The audio of every act is synthesized
 ahead of time (act 1 first) and cached on disk, so a cue starts speaking without waiting for the TTS.
 
@@ -26,18 +26,22 @@ from pathlib import Path
 from typing import Any
 
 from gestures import PICK_TAG, PLACE_TAG, GestureBook, GestureSink, Tag, TagParser, strip_tags, talk_arm
-from sounds import SFX_TAG, SOUND_TAGS
+from sounds import SFX_TAG
 
 logger = logging.getLogger("storyteller.show")
 
 HERE = Path(__file__).parent
 SHOW_MD = HERE / "show.md"
 CACHE_DIR = HERE / ".cache" / "show"  # pre-synthesized act audio (gitignored)
-DEFAULTS = {"SHOW_NAME": "Stage Hands", "HOST_NAME": "Lars", "LEAD_PAUSE_S": "0.3"}
+DEFAULTS = {"SHOW_NAME": "Stage Hands", "HOST_NAME": "Lars"}
 HUMAN, SCRIPTED, LIVE = "human", "scripted", "live"
 # app.py hands cues to the worker here on localhost: about a quarter second quicker than an RPC through LiveKit
 CUE_PORT = int(os.getenv("SHOW_CUE_PORT", "8792"))
-WORDS_PER_S = 2.6  # the narrator's pace, for estimates before the audio exists
+# Auto-advance (owner, Nov 7): after a scripted act, the next one starts this long after the last gesture ends, up to
+# and including the live act; the finale (after it) is always a manual cue. The page's toggle turns it off.
+AUTO_GAP_S = float(os.getenv("SHOW_AUTO_GAP_S", "1.5"))
+WORDS_PER_S = 2.6  # a person's pace (the human acts)
+LETTERS_PER_S = 8.9  # the host voice's pace, for estimates before the audio exists (measured on the cached acts, Nov 7)
 ON = ("on", "yes", "true", "1")
 
 _ACT = re.compile(r"^Act\s+(\d+)\s*[:.\-–—]\s*(.+?)\s*$", re.I)
@@ -126,24 +130,20 @@ class Act:
                 break
         return " ".join(t.raw for t in lead), rest.strip()
 
-    def lead_has_sound(self) -> bool:
-        lead, _ = self.split_lead()
-        return any(t.arm in SOUND_TAGS for t in TagParser().feed(lead) if isinstance(t, Tag))
-
     def estimate_s(self, durations: dict[str, float] | None = None, sfx: dict[str, float] | None = None) -> float:
-        """Speech at WORDS_PER_S plus whatever the tags after the last word still play (the final bow, the
+        """Speech at LETTERS_PER_S plus whatever the tags after the last word still play (the final bow, the
         applause). Duets after the last word run one after the other."""
         if self.kind == HUMAN:
             return round(len(self.spoken.split()) / WORDS_PER_S, 1)
         durations, sfx = durations or {}, sfx or {}
-        speech = len(self.spoken.split()) / WORDS_PER_S
+        speech = _letters(self.spoken) / LETTERS_PER_S
         parser = TagParser()
         pieces = parser.feed(self.text) + parser.flush()
         words = [i for i, p in enumerate(pieces) if isinstance(p, str) and re.search(r"\w", p)]
         tail = [p for p in pieces[words[-1] + 1:] if isinstance(p, Tag)] if words else []
         # gesture tags move to the start of the last sentence, so they get its speaking time back
         last_sentence = re.split(r"(?<=[.!?…])\s+", self.spoken)[-1]
-        head_start = len(last_sentence.split()) / WORDS_PER_S
+        head_start = _letters(last_sentence) / LETTERS_PER_S
         duets = solos = sounds = 0.0
         for t in tail:
             if t.arm in ("duet", "ensemble"):
@@ -175,11 +175,17 @@ class Script:
         return [self.config[k].partition("@")[0].strip() for k in sorted(self.config) if k.startswith("FOUNDER_")]
 
     @property
-    def lead_pause_s(self) -> float:
+    def built_with(self) -> list[dict[str, str]]:
+        """The "Built with" card: BUILT_n = tool: how it's used."""
+        keys = sorted((k for k in self.config if re.fullmatch(r"BUILT_\d+", k)), key=lambda k: int(k[6:]))
+        return [dict(zip(("tool", "how"), (x.strip() for x in self.config[k].partition(":")[::2]))) for k in keys]
+
+    @property
+    def built_with_act(self) -> int | None:
         try:
-            return float(self.config.get("LEAD_PAUSE_S") or DEFAULTS["LEAD_PAUSE_S"])
-        except ValueError:
-            return float(DEFAULTS["LEAD_PAUSE_S"])
+            return int(self.config["BUILT_WITH_ACT"])
+        except (KeyError, ValueError):
+            return None
 
     @property
     def last(self) -> int:
@@ -223,9 +229,13 @@ class Script:
 
     def to_json(self, durations: dict[str, float] | None = None) -> dict:
         return {"show_name": self.show_name, "host_name": self.host_name, "founders": self.founders,
-                "warnings": self.warnings,
+                "warnings": self.warnings, "built_with": self.built_with, "built_with_act": self.built_with_act,
                 "acts": [{"act": a.number, "title": a.title, "kind": a.kind, "first_line": a.first_line,
                           "note": a.note, "estimate_s": a.estimate_s(durations)} for a in self.acts]}
+
+
+def _letters(text: str) -> int:
+    return sum(c.isalnum() for c in text)
 
 
 def _values(config: dict[str, str], known: Callable[[str, str], bool] | None) -> tuple[dict[str, str], list[str]]:
@@ -299,8 +309,10 @@ class ShowRunner:
 
     def __init__(self, session: Any, agent: Any, script: Script, stage: Any, director: Any, book: GestureBook, *,
                  on_sound: Callable[[str, str], None] | None = None, cache_dir: Path = CACHE_DIR,
-                 voice_key: str = "", room_name: str = "") -> None:
+                 voice_key: str = "", room_name: str = "", on_live: Callable[[], None] | None = None) -> None:
         self.session, self.agent, self.script, self.stage, self.director = session, agent, script, stage, director
+        agent.host_only = True  # owner, Nov 7: the show has one voice, the host's; the arms never speak
+        self.on_live = on_live  # the live act's text is out: the volunteer's story starts (StoryClock.arm)
         self.cache_dir, self.voice_key, self.room_name = cache_dir, voice_key, room_name
         self._lead = GestureSink(book, stage.play, director.request_continue, next_in_chain=None,
                                  on_face=stage.face, on_talk=stage.talk, on_sound=on_sound)
@@ -311,6 +323,9 @@ class ShowRunner:
         self.marks: dict[int, Any] = {}  # act -> its voice-run marks (voices.RunMarks), pinning gestures to the audio
         self.durations: dict[int, float] = {}
         self.latency_ms: int | None = None  # cue -> first voice frame, last cue
+        self.auto = True  # auto-advance (the page's toggle, RPC show_auto)
+        self.advanced = ""  # "act.seq" of the last auto-advance, so the page moves its cursor (app.py cmd "at")
+        self._auto: asyncio.Task | None = None
         self._participant: Any = None
         self._task: asyncio.Task | None = None
         self._prime: asyncio.Task | None = None
@@ -324,6 +339,7 @@ class ShowRunner:
     def register(self, participant: Any) -> None:
         self._participant = participant
         participant.register_rpc_method("show_play", self._rpc)
+        participant.register_rpc_method("show_auto", self._rpc_auto)
 
     async def _rpc(self, data: Any) -> str:
         try:
@@ -332,6 +348,21 @@ class ShowRunner:
             act = 0
         self.play(act)
         return json.dumps(self.status())
+
+    async def _rpc_auto(self, data: Any) -> str:
+        try:
+            self.set_auto(bool(json.loads(getattr(data, "payload", "") or "{}").get("auto", True)))
+        except (ValueError, TypeError):
+            pass
+        return json.dumps(self.status())
+
+    def set_auto(self, on: bool) -> None:
+        if on != self.auto:
+            logger.info("show: auto-advance %s", "on" if on else "off")
+        self.auto = on
+        if not on and self._auto and not self._auto.done():
+            self._auto.cancel()
+        self._publish()
 
     def start(self, cue_port: int | None = CUE_PORT) -> None:
         """Synthesize every act in the background (act 1 first; the page shows which are primed) and take cues
@@ -371,7 +402,8 @@ class ShowRunner:
 
     def status(self) -> dict:
         return {"act": self.act, "state": self.state, "primed": sorted(self.audio),
-                "durations": self.durations, "latency_ms": self.latency_ms}
+                "durations": self.durations, "latency_ms": self.latency_ms, "auto": self.auto,
+                "advanced": self.advanced}
 
     def _publish(self) -> None:
         if self._participant is None:
@@ -379,7 +411,8 @@ class ShowRunner:
         s = self.status()
         attrs = {"show.act": str(s["act"]), "show.state": s["state"], "show.primed": ",".join(map(str, s["primed"])),
                  "show.durations": json.dumps({str(k): round(v, 1) for k, v in s["durations"].items()}),
-                 "show.latency_ms": "" if s["latency_ms"] is None else str(s["latency_ms"])}
+                 "show.latency_ms": "" if s["latency_ms"] is None else str(s["latency_ms"]),
+                 "show.auto": "1" if s["auto"] else "0", "show.advanced": s["advanced"]}
         try:
             res = self._participant.set_attributes(attrs)
             if inspect.isawaitable(res):
@@ -393,10 +426,13 @@ class ShowRunner:
         self._cue_at = time.perf_counter()
         self._gen += 1
         self.latency_ms = None
+        if self._auto and self._auto is not asyncio.current_task():
+            self._auto.cancel()  # a manual cue takes over; the chain goes on from the act it plays
         self._cut()
         act = self.script.act(number)
         self.act = number if act else 0
         self.live = False
+        self.agent.scripted = True  # no fill moves, no sfx budget; the story clock stops
         if act is None or act.kind == HUMAN:
             self.state = "ready"
             logger.info("show: act %d (%s): ready", self.act, act.title if act else "-")
@@ -419,13 +455,14 @@ class ShowRunner:
 
     async def _run(self, act: Act, gen: int) -> None:
         lead, rest = act.split_lead()
-        if lead:  # the record scratch, the snap to the audience: now, not when the voice starts
+        if lead:  # the snap to the audience: now, not when the voice starts
             await self._lead.capture_text(lead)
             self._lead.flush()
-            if rest and act.lead_has_sound():
-                await asyncio.sleep(self.script.lead_pause_s)
         if act.kind == LIVE:
             self.live = True  # from here the LLM may answer (its replies queue behind this line)
+            self.agent.scripted = False
+            if self.on_live:
+                self.on_live()
         if not rest:
             self._finish(act, gen)
             return
@@ -446,6 +483,24 @@ class ShowRunner:
             return
         self.state = "live" if act.kind == LIVE else "done"
         self._publish()
+        if self.auto and (nxt := self.auto_next(act)) is not None:
+            self._auto = asyncio.create_task(self._advance(nxt.number, gen))
+
+    def auto_next(self, act: Act) -> Act | None:
+        """The act auto-advance plays after `act`: the next one, if `act` is scripted and a live act is still to
+        come (so 1 -> 2 -> 3 -> 4, and never into the finale after the live act)."""
+        nxt = self.script.act(act.number + 1)
+        if act.kind != SCRIPTED or nxt is None or nxt.kind == HUMAN:
+            return None
+        return nxt if any(a.kind == LIVE and a.number >= nxt.number for a in self.script.acts) else None
+
+    async def _advance(self, number: int, gen: int) -> None:
+        # ponytail: the tail is the last gesture (stage.busy_until); a long sound after it isn't waited for
+        await asyncio.sleep(max(0.0, getattr(self.stage, "busy_until", 0.0) - time.monotonic()) + AUTO_GAP_S)
+        if gen == self._gen and self.auto:
+            logger.info("show: auto-advance to act %d", number)
+            self.advanced = f"{number}.{self._gen}"
+            self.play(number)
 
     def _on_speech(self, ev: Any) -> None:
         if getattr(ev, "source", "say") != "say" and not self.live:
@@ -526,7 +581,7 @@ class ShowRunner:
         return frames, marks.get(speech) if marks is not None else None
 
     async def aclose(self) -> None:
-        for task in (self._task, self._prime, self._local):
+        for task in (self._task, self._prime, self._local, self._auto):
             if task and not task.done():
                 task.cancel()
 

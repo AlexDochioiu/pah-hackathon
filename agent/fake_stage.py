@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 GESTURES = {
     "against_the_wind": 4.2, "bang_table": 5.3, "beat_chest": 4.1, "bite": 3.2, "block": 4.5, "bow": 2.9,
     "celebrate": 4.8, "chef_kiss": 4.2, "climb_ladder": 5.0, "cower": 3.8, "cry": 4.4, "die_dramatically": 3.0,
-    "dodge": 2.7, "double_take": 4.4, "drive": 5.3, "duck": 3.3, "eat": 4.5, "elevator": 4.2, "eye_roll": 4.8,
+    "dodge": 2.7, "double_take": 4.4, "present": 2.48, "drive": 5.3, "duck": 3.3, "eat": 4.5, "elevator": 4.2, "eye_roll": 4.8,
     "facepalm": 4.4, "flick": 4.1, "gallop": 3.0, "grab": 2.5, "gripper_clap": 2.4, "hop": 4.7, "idle_breathe": 4.0,
     "invisible_wall": 5.2, "italian": 5.9, "italian_exasperated": 6.0, "juggle": 4.7, "knee_slap": 5.9, "knock":
     5.6, "laugh": 4.2, "laugh_hard": 5.7, "lean_on_nothing": 4.9, "lift_heavy": 4.6, "look_around": 3.8,
@@ -41,7 +41,7 @@ ENSEMBLES = {
 SOUNDS: dict[str, dict] = {
     "bang_table": {'name': 'bonk', 'at': [1.485, 4.122]}, "bite": {'name': 'chomp', 'at': [1.138, 1.947]},
     "chef_kiss": {'name': 'kiss', 'at': 2.22}, "die_dramatically": {'name': 'body_fall', 'at': 1.528},
-    "double_take": {'name': 'record_scratch', 'at': 2.342}, "flick": {'name': 'whoosh', 'at': 1.55}, "knock":
+    "double_take": {'name': None, 'at': 2.342}, "flick": {'name': 'whoosh', 'at': 1.55}, "knock":
     {'name': None, 'at': [0.87, 1.34, 1.81]}, "lean_on_nothing": {'name': None, 'at': 2.82}, "roar": {'name':
     'roar', 'at': 0.9}, "shoot": {'name': 'gunshot', 'at': 1.6}, "slash": {'name': 'sword_swing', 'at': 1.95},
     "stomp": {'name': None, 'at': [1.554, 3.738]}, "ta_da": {'name': 'tada', 'at': 1.992}, "throw": {'name':
@@ -103,7 +103,7 @@ class Handler(BaseHTTPRequestHandler):
                 state["arms"][a] = {"gesture": gesture, "until": time.monotonic() + duration}
             state["mode"] = "playing"
             log(f"PLAY   {arm:>5}: {gesture} ({duration:.1f}s)")
-            return self._reply(200, {"ok": True, "duration_s": duration, "speed": speed, "starts_in": 0.0})
+            return self._reply(200, {"ok": True, "duration_s": duration, "speed": speed, "starts_in": 0.3})
         if self.path == "/duet":
             name = body.get("name")
             if name not in DUETS | ENSEMBLES:

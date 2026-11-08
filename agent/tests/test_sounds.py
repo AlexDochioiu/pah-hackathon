@@ -72,17 +72,22 @@ def test_tags_first_leaves_sound_tags_where_they_are():
 def test_library_and_fuzzy_names():
     assert len(LIBRARY.sfx) >= 60 and len(LIBRARY.music) >= 15
     assert all(len(tracks) >= 2 for tracks in LIBRARY.music.values()), {m: len(t) for m, t in LIBRARY.music.items()}
-    for name in ("explosion", "laugh_track", "laugh_big", "rimshot", "crickets", "sad_trombone", "applause", "kiss",
-                 "frog", "gunshot", "cannon"):
+    for name in ("explosion", "rimshot", "crickets", "sad_trombone", "applause", "frog", "gunshot", "cannon"):
         assert name in LIBRARY.sfx
+    for name in sounds.OFFERED_NOT:  # on disk, never offered or played
+        assert name not in LIBRARY.sfx and LIBRARY.resolve_sfx(name) in (None, "gunshot", "footsteps", "crash",
+                                                                          "flyby", "spell")
+    assert not list(sounds.SOUNDS_DIR.glob("sfx/*/record_scratch.ogg"))
     assert all(len(n) <= 16 and n.replace("_", "").isalpha() for n in LIBRARY.sfx)  # short, tag-safe names
     assert LIBRARY.resolve_sfx("explosion") == "explosion"
     assert LIBRARY.resolve_sfx("big explosion") == "explosion_big"
     assert LIBRARY.resolve_sfx("loud gunshot") == "gunshot"
     assert LIBRARY.resolve_sfx("ribbit") == "frog"
-    assert LIBRARY.resolve_sfx("mwah") == "kiss"
+    assert LIBRARY.resolve_sfx("kiss") is None and LIBRARY.resolve_sfx("mwah") is None
+    assert LIBRARY.resolve_sfx("evil_laugh") is None and LIBRARY.resolve_sfx("scratch") is None
+    assert LIBRARY.resolve_sfx("stomp") == "footsteps" and LIBRARY.resolve_sfx("sparkle") == "spell"
     assert LIBRARY.resolve_sfx("kaboom") == "explosion"
-    assert LIBRARY.resolve_sfx("laughter") == "laugh_track"
+    assert LIBRARY.resolve_sfx("laughter") is None and LIBRARY.resolve_sfx("laugh_track") is None
     assert LIBRARY.resolve_sfx("ba-dum-tss") == "rimshot"
     assert LIBRARY.resolve_sfx("explosoin") == "explosion"
     assert LIBRARY.resolve_sfx("xylophone_solo") is None
@@ -99,7 +104,7 @@ def test_library_and_fuzzy_names():
 def test_prompt_lists_the_library():
     text = build_instructions(BOOK, LIBRARY)
     assert "{{SFX}}" not in text and "{{MUSIC}}" not in text
-    assert "- weapons: " in text and "rimshot (ba-dum-tss)" in text and "- spooky:" in text
+    assert "- weapons: " in text and "rimshot (ba-dum-tss" in text and "- spooky:" in text
 
 
 def test_soundboard_cues():
@@ -113,7 +118,7 @@ def test_soundboard_cues():
         board.cue("music", "battle")  # crossfade: calm fades out as battle fades in
         board.cue("music", "none")
         board.cue("music", "spooky")
-        board.cue("sfx", "laugh_track")
+        board.cue("sfx", "rimshot")
         board.stop_all()  # STOP
         await asyncio.sleep(0)
         return player, board
@@ -121,8 +126,8 @@ def test_soundboard_cues():
     log = [(k, w) for _, k, w in player.log]
     assert log[:8] == [
         ("play", "sfx:explosion"), ("play", "music"), ("stop", "music"), ("play", "music"), ("stop", "music"),
-        ("play", "music"), ("play", "sfx:laugh_track"), ("stop", "music")]
-    assert sorted(log[8:]) == [("stop", "sfx:explosion"), ("stop", "sfx:laugh_track")]  # STOP silences the sfx too
+        ("play", "music"), ("play", "sfx:rimshot"), ("stop", "music")]
+    assert sorted(log[8:]) == [("stop", "sfx:explosion"), ("stop", "sfx:rimshot")]  # STOP silences the sfx too
     assert board.music_name is None and all(h.stopped for h in player.handles)
 
 
@@ -148,7 +153,7 @@ def test_music_loops_ducks_and_cuts():
         (handle,) = player.handles
         frames = handle.source.__aiter__()
         first = await frames.__anext__()
-        board.duck("agent", True)  # Sparky starts talking
+        board.duck("agent", True)  # the narrator starts talking
         gains = []
         for _ in range(int(sounds.DUCK_S / 0.02) + 5):  # ~20 ms frames: well past the glide down
             await frames.__anext__()
@@ -177,7 +182,7 @@ def test_sink_fires_sound_tags():
         def flush(self):
             pass
 
-    sink = GestureSink(BOOK, lambda *a: None, lambda: None, next_in_chain=Collect(),
+    sink = GestureSink(BOOK, lambda *a, **k: None, lambda: None, next_in_chain=Collect(),
                        on_sound=lambda kind, name: cued.append((kind, name)))
 
     async def run():
@@ -191,7 +196,7 @@ def test_sink_fires_sound_tags():
 
 # --- end to end, as tests/test_session.py: scripted LLM, fake TTS audio playing out in real time ------------
 SCENE = ("[music:spooky] Deep in the forest a door creaks open. [left:sneak] The little knight tiptoes in, "
-         "slowly, slowly, past the sleeping troll, [sfx:stomp] past the pile of bones, past the great big pot of soup, and "
+         "slowly, slowly, past the sleeping troll, [sfx:footsteps] past the pile of bones, past the great big pot of soup, and "
          "then she trips. [sfx:explosion] KA-BOOM! [right:roar] [music:none]")
 
 
@@ -199,11 +204,14 @@ class FakeStage:
     def __init__(self):
         self.events, self.busy_until = [], 0.0
 
-    def play(self, arm, gesture, duration):
+    def play(self, arm, gesture, duration, **_):
         self.events.append((time.time(), "play", f"{arm}:{gesture}"))
 
     def freeze(self):
         self.events.append((time.time(), "freeze", ""))
+
+    def idle(self):
+        self.send("/idle")
 
     def send(self, path, body=None):
         self.events.append((time.time(), path, ""))
@@ -248,7 +256,7 @@ async def test_sounds_fire_at_their_spot_in_the_speech():
     start = speaking[0]
     log = [(round(t - start, 2), k, w) for t, k, w in player.log]
     print("sounds:", log, "gestures:", [(round(t - start, 2), w) for t, k, w in stage.events if k == "play"])
-    assert [(k, w) for _, k, w in log] == [("play", "music"), ("play", "sfx:stomp"), ("play", "sfx:explosion"),
+    assert [(k, w) for _, k, w in log] == [("play", "music"), ("play", "sfx:footsteps"), ("play", "sfx:explosion"),
                                           ("stop", "music")]
     music_on, stomp, boom, music_off = (t for t, _, _ in log)
     # The LLM wrote the whole scene at once, so sounds fired on arrival would all land together. They must land
@@ -256,8 +264,8 @@ async def test_sounds_fire_at_their_spot_in_the_speech():
     # bounds), so a busy machine that stretches playout doesn't fail the test.
     assert music_on <= stomp <= boom <= music_off and music_off - music_on > 2.0
     spoken = strip_tags(SCENE)
-    expected = {w: len(strip_tags(SCENE.split(f"[sfx:{w}]")[0])) / len(spoken) for w in ("stomp", "explosion")}
-    at = {"stomp": (stomp - music_on) / (music_off - music_on), "explosion": (boom - music_on) / (music_off - music_on)}
+    expected = {w: len(strip_tags(SCENE.split(f"[sfx:{w}]")[0])) / len(spoken) for w in ("footsteps", "explosion")}
+    at = {"footsteps": (stomp - music_on) / (music_off - music_on), "explosion": (boom - music_on) / (music_off - music_on)}
     for w in at:  # within a fifth of the speech of where the tag sits in the text (pacing is by syllables, not chars)
         assert abs(at[w] - expected[w]) < 0.2, (w, at, expected)
     assert "[" not in tts_text and "sfx" not in tts_text and "KA-BOOM" in tts_text

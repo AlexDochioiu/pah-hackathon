@@ -86,7 +86,8 @@ SYNONYMS = {
     "joke": "ta_da", "punchline": "ta_da", "nailed_it": "ta_da",
     "deadpan": "slow_turn", "awkward": "slow_turn", "slow_turn": "slow_turn", "roll_eyes": "eye_roll",
     "eye_roll": "eye_roll", "ugh": "eye_roll", "ta_da": "ta_da", "tada": "ta_da", "voila": "ta_da",
-    "present": "ta_da", "reveal": "ta_da", "facepalm": "facepalm", "groan": "facepalm", "embarrassed": "facepalm",
+    "reveal": "ta_da", "present": "present", "introduce": "present",
+    "presenting": "present", "here_i_am": "present", "rise": "present", "facepalm": "facepalm", "groan": "facepalm", "embarrassed": "facepalm",
     "knee_slap": "knee_slap", "hilarious": "knee_slap", "crack_up": "laugh_hard", "lol": "laugh_hard",
     "guffaw": "laugh_hard", "laugh_hard": "laugh_hard", "double_take": "double_take",
     "nudge": "elbow_nudge", "get_it": "elbow_nudge", "straight_man": "straight_man", "straight_face": "straight_man",
@@ -213,50 +214,231 @@ async def strip_tags_for_tts(text: AsyncIterable[str]) -> AsyncIterable[str]:
         yield clean
 
 
-_SENTENCE_END = ".!?…\"'”’)"
+_SENTENCE_END = ".!?…"
+_CLOSERS = "\"'”’)*"
+STATEFUL_TAGS = (FACE_TAG, PROPS_TAG, PICK_TAG, PLACE_TAG)  # a gesture never moves before these
+# After a sentence ends, these open the next one; gesture, [sfx] and [next] tags there still belong to the old one.
+OPENS_SENTENCE = (TALK_TAG, "voice", FACE_TAG, PROPS_TAG, PICK_TAG, PLACE_TAG, "music")
+HIT_SOUND = "hit"  # on_sound kind for a gesture's own default sound
+FILL_TAG = "fill"  # [fill:light]: added to a sentence with nothing moving; the sink picks the arm and the move
+MARK_TAG = "mark"  # [mark:left=slash]: the word a moved tag was aimed at; the sink logs how close its hit landed
+FILL_MIN_WORDS = 4
+PRESENT = "present"
+_WORDS = re.compile(r"\S+\s*|\s+")
 
 
-async def tags_first(text: AsyncIterable[str]) -> AsyncIterable[str]:
-    """Transcription transform: move each sentence's gesture tags to the start of that sentence.
+def _moves(tag: Tag) -> bool:
+    return tag.arm in ARMS or tag.arm in (DUET_TAG, ENSEMBLE_TAG, FILL_TAG)
 
-    The LLM tends to write a tag after the sentence it acts out, so played in place the gesture starts once the
-    words are already spoken. A tag belongs to the sentence it ends or sits in; `[next]` stays at the end.
-    ponytail: holds one sentence of text (the LLM runs well ahead of speech), so the transcript lags by at most that."""
-    parser = TagParser()
-    tags: list[str] = []
-    ctrl: list[str] = []
-    buf = ""
 
-    def emit() -> str:
-        nonlocal tags, ctrl, buf
-        # a sound tag right after the last sentence stays with it (before this one's gesture tags)
-        lead = re.match(r"(\s|\[\s*(?:sfx|music)\s*:[^\]]*\])*", buf, re.I).group(0)
-        out = lead + "".join(t + " " for t in tags) + re.sub(r" {2,}", " ", buf[len(lead):]) + "".join(ctrl)
-        tags, ctrl, buf = [], [], ""
+def _speed() -> float:
+    return float(os.getenv("STAGE_SPEED", "1.0"))
+
+
+def _is_word(it: list) -> bool:
+    return it[2] is None and bool(it[0].strip())
+
+
+class _Placer:
+    """tags_first's state: text not yet passed on, as word items `[text, syllables, None]` and tag items
+    `[raw, 0, Tag]`; the open sentence starts at `cur`."""
+
+    def __init__(self, book: GestureBook | None, fill: Callable[[], bool] | None, timing: Timing) -> None:
+        self.book, self.fill, self.t = book, fill, timing
+        self.items: list[list] = []
+        self.cur = 0
+        self.presented: set[str] = set()  # arms that rose ([x:present]) this reply
+
+    def tag(self, tag: Tag) -> None:
+        self.items.append([tag.raw, 0, tag])
+
+    def text(self, text: str) -> str:
+        out = ""
+        for w in _WORDS.findall(text):
+            last = self.items[-1] if self.items else None
+            if last is not None and last[2] is None and w[:1].strip() and last[0][-1:].strip():
+                last[0] += w  # a word split across chunks
+                last[1] = len(hyphenate_without_tags(last[0].strip()))
+                continue
+            if w.strip() and (start := self._sentence_start()) is not None:
+                out += self._close(start)
+            self.items.append([w, len(hyphenate_without_tags(w.strip())) if w.strip() else 0, None])
         return out
 
+    def flush(self) -> str:
+        return self._close(len(self.items), final=True)
+
+    def _sentence_start(self) -> int | None:
+        """A word starts: where the next sentence begins if the last word ended one, else None."""
+        last = next((i for i in range(len(self.items) - 1, self.cur - 1, -1) if _is_word(self.items[i])), None)
+        if last is None or self.items[last][0].rstrip().rstrip(_CLOSERS)[-1:] not in tuple(_SENTENCE_END):
+            return None
+        return next((i for i in range(last + 1, len(self.items))
+                     if (t := self.items[i][2]) is not None and (t.arm in OPENS_SENTENCE or talk_arm(t))),
+                    len(self.items))
+
+    def _pos(self) -> list[float]:
+        """pos[i]: the syllables before item i."""
+        pos, n = [], 0
+        for it in self.items:
+            pos.append(n)
+            n += it[1]
+        return [*pos, n]
+
+    def _close(self, b: int, final: bool = False) -> str:
+        """Direct and place the sentence items[cur:b], then pass on what no later tag can still move into."""
+        a = self.cur
+        sent = self._direct(self.items[a:b])
+        self.items[a:b] = sent
+        self._place(a, a + len(sent))
+        pos, b = self._pos(), self.cur
+        if final:
+            e = len(self.items)
+        else:
+            reach = pos[b] - (self.t.max_lead_s * max(1.0, self.t.rate) if self.t.lead else 0)
+            e = max((k for k in range(b + 1) if pos[k] <= reach and (k == b or _is_word(self.items[k]))), default=0)
+        out = "".join(it[0] for it in self.items[:e])
+        self.items, self.cur = self.items[e:], (0 if final else self.cur - e)
+        return re.sub(r" {2,}", " ", out)
+
+    def _direct(self, sent: list[list]) -> list[list]:
+        """Code-side stage direction: `[arm:present]` at the start of a casting sentence whose arm has not risen
+        yet this reply; `[fill:light]` at the end of a sentence of words with nothing moving."""
+        tags = [it[2] for it in sent if it[2] is not None]
+        book = self.book
+        for t in tags:
+            if t.arm in ARMS and book is not None and book.resolve(t.name) == PRESENT:
+                self.presented.update(("left", "right") if t.arm == "both" else (t.arm,))
+        out = list(sent)
+        added = False
+        for t in tags:
+            arm = (m := re.match(r"(left|right)", t.name)) and m.group(1) if t.arm == "voice" else None
+            if arm and arm not in self.presented and book is not None and PRESENT in book.durations:
+                self.presented.add(arm)
+                raw = f"[{arm}:{PRESENT}]"
+                out.insert(0, [raw, 0, Tag(arm, PRESENT, raw)])  # first: the arm rises as it is named
+                added = True
+        moving = added or any(_moves(t) or talk_arm(t) or t.arm in (PICK_TAG, PLACE_TAG) for t in tags)
+        if not moving and sum(map(_is_word, out)) >= FILL_MIN_WORDS and self.fill is not None and self.fill():
+            raw = f"[{FILL_TAG}:light]"
+            out.append([raw, 0, Tag(FILL_TAG, "light", raw)])
+        return out
+
+    def _place(self, a: int, b: int) -> None:
+        items, pos, rate = self.items, self._pos(), max(1.0, self.t.rate)
+        words = [i for i in range(a, b) if _is_word(items[i])]
+        tags = [i for i in range(a, b) if items[i][2] is not None]
+        before: dict[int, list[list]] = {}  # item index -> tags to put in front of it (b: the sentence's end)
+        moved: set[int] = set()
+        marks: list[tuple[int, Tag]] = []
+
+        def put(k: int, i: int) -> None:
+            before.setdefault(k, []).append([items[i][0] + " ", 0, items[i][2]])
+            moved.add(i)
+
+        prev, hit_tag = a, None
+        for i in tags:
+            tag = items[i][2]
+            if tag.arm is None:  # [next]: at the end
+                if i != b - 1:
+                    put(b, i)
+                continue
+            if not _moves(tag):
+                continue
+            bound = max(prev, self._bound(i, a))
+            if not any(w > i for w in words):  # after the sentence's words: for the whole sentence
+                target = min(pos[i], pos[a] + self.t.sentence_hit_s * rate)
+            else:  # right after its word: aimed at the middle of that word
+                target = pos[i] - next((items[w][1] / 2 for w in reversed(words) if w < i), 0)
+            name, hits = self._hits(tag)
+            want = target - self.t.gesture_lead(hits[0] if hits else None, _speed()) * rate if self.t.lead else pos[a]
+            k = self._spot(want, bound, i, a, pos)
+            if k != i:
+                put(k, i)
+            prev = k
+            if hits and hit_tag is None:
+                hit_tag = i
+            if self.t.lead and name:
+                marks.append((self._spot(target, k, i, a, pos, nearest=True), tag))
+        for i in tags:
+            tag = items[i][2]
+            if tag.arm != SFX_TAG:
+                continue
+            if hit_tag is not None:  # lands on that gesture's hit (Hit): right after its tag
+                if hit_tag in moved:
+                    k = next(k for k, its in before.items() if any(x[2] is items[hit_tag][2] for x in its))
+                    before[k].insert(next(n for n, x in enumerate(before[k]) if x[2] is items[hit_tag][2]) + 1,
+                                     [items[i][0] + " ", 0, tag])
+                    moved.add(i)
+                elif i != hit_tag + 1:
+                    before.setdefault(hit_tag + 1, []).insert(0, [items[i][0] + " ", 0, tag])
+                    moved.add(i)
+            elif self.t.lead:
+                k = self._spot(pos[i] - self.t.sound_lead(tag.name) * rate, max(prev, self._bound(i, a)), i, a, pos)
+                if k != i:
+                    put(k, i)
+        for k, tag in marks:
+            raw = f"[{MARK_TAG}:{tag.arm}={tag.name}]"
+            before.setdefault(k, []).append([raw, 0, Tag(MARK_TAG, f"{tag.arm}={tag.name}", raw)])
+        out: list[list] = []
+        for k in range(b + 1):
+            out.extend(before.get(k, []))
+            if k < b and k not in moved:
+                out.append(items[k])
+        self.items[0:b] = out
+        self.cur = len(out)
+
+    def _bound(self, i: int, a: int) -> int:
+        """The earliest spot item i may move to: after the last stateful tag before it, and after any tag an
+        earlier sentence already placed."""
+        for j in range(i - 1, -1, -1):
+            if (t := self.items[j][2]) is not None and (t.arm in STATEFUL_TAGS or (j < a and (_moves(t) or t.arm == SFX_TAG))):
+                return j + 1
+        return 0
+
+    def _spot(self, want: float, bound: int, i: int, a: int, pos: list[float], nearest: bool = False) -> int:
+        """The spot in [bound, i] (a word's start, the sentence start or the bound) nearest `want` syllables;
+        i itself (stay) if want is at or past it."""
+        if want >= pos[i] and not nearest:
+            return i
+        spots = [k for k in range(bound, i + 1) if k in (a, bound, i) or _is_word(self.items[k])]
+        return min(spots, key=lambda k: (abs(pos[k] - want), k))
+
+    def _hits(self, tag: Tag) -> tuple[str | None, list[float]]:
+        if self.book is None or tag.arm == FILL_TAG:
+            return None, []
+        name = (self.book.resolve_duet(tag.name) if tag.arm in (DUET_TAG, ENSEMBLE_TAG)
+                else self.book.resolve(tag.name))
+        return name, list((self.book.sounds.get(name) or (None, []))[1]) if name else []
+
+
+async def tags_first(text: AsyncIterable[str], book: GestureBook | None = None,
+                     fill: Callable[[], bool] | None = None, timing: Timing | None = None) -> AsyncIterable[str]:
+    """Transcription transform: fire each gesture tag early enough that its hit lands on its words.
+
+    A tag right after a word is aimed at that word; one after the sentence's last word at `SENTENCE_HIT_S` into
+    the sentence. It moves earlier by `Timing.gesture_lead` (the stage's blend, the gesture's own first hit, the
+    arm's lag, minus the listener's playout delay) at the voice's speaking rate, never before a face/props/pick
+    tag or a tag placed earlier, and an [sfx] in a gesture's sentence goes right after it (it lands on its hit).
+    A `[mark:arm=name]` stays where the tag was aimed, for the sync log. `[next]` goes to the sentence's end.
+    With `GESTURE_LEAD=0` every gesture tag goes to its sentence's start (the old behaviour).
+    Code-side stage direction too: `[arm:present]` before a casting, `[fill:light]` for a motionless sentence
+    (`fill()` says whether it is on). ponytail: holds one sentence plus `max_lead_s` of text (the LLM runs well
+    ahead of speech)."""
+    placer = _Placer(book, fill, timing or TIMING)
+    parser = TagParser()
     async for chunk in text:
         out = ""
         for piece in parser.feed(chunk):
             if isinstance(piece, Tag):
-                if talk_arm(piece) is None and piece.arm not in SOUND_TAGS:
-                    (ctrl if piece.arm is None else tags).append(piece.raw)
-                    continue
-                # a talk or sound tag stays where it is (a talk tag just before its quote, a laugh track right
-                # after its punchline); a sentence may end right before it
-                if buf[-1:].isspace() and buf.rstrip()[-1:] in _SENTENCE_END:
-                    out += emit()
-                buf += piece.raw
-                continue
-            for c in piece:
-                if not c.isspace() and buf[-1:].isspace() and buf.rstrip()[-1:] in _SENTENCE_END:
-                    out += emit()
-                buf += c
+                placer.tag(piece)
+            else:
+                out += placer.text(piece)
         if out:
             yield out
     for piece in parser.flush():
-        buf += piece if isinstance(piece, str) else piece.raw
-    if rest := emit():
+        placer.text(piece) if isinstance(piece, str) else placer.tag(piece)
+    if rest := placer.flush():
         yield rest
 
 
@@ -297,6 +479,61 @@ def sfx_lead(name: str) -> float:
         return 0.0
 
 
+def _ms(name: str, default: str) -> float:
+    return float(os.getenv(name, default)) / 1000
+
+
+class Timing:
+    """The delays between a tag and what the audience sees and hears (kb/storyteller.md "Sync"). Knobs from .env,
+    measured live where possible: the page reports its playout delay, the stage its blend and round trip, the
+    sink the voice's speaking rate.
+
+    A gesture's hit should land as the listener hears its word. Heard = released + `audio_s` (network + jitter
+    buffer + output). The arm's hit = sent + rtt/2 + starts_in + hit_at/speed + `arm_lag_s`. So the tag fires
+    `gesture_lead()` seconds before its word is released: `tags_first` moves it that many syllables earlier."""
+
+    def __init__(self) -> None:
+        self.audio_s = _ms("AUDIO_DELAY_MS", "250")  # voice playout delay at the listener; the page's measure wins
+        self.sound_s: float | None = None  # the sound track's (page-measured; None: same as the voice)
+        self.measured = False  # audio_s comes from the page
+        self.arm_lag_s = _ms("ARM_LAG_MS", "70")  # the real arm trails its commanded pose (0.1-0.19 rad at speed)
+        self.hit_default_s = float(os.getenv("HIT_DEFAULT_S", "0.6"))  # a gesture without hits: its peak, s in
+        self.sentence_hit_s = float(os.getenv("SENTENCE_HIT_S", "0.5"))  # a tag for a whole sentence hits this far in
+        self.rate = float(os.getenv("SPEECH_RATE", "2.8"))  # syllables/s the voice speaks (measured: host 2.5)
+        self.rtt_s, self.starts_in_s = 0.03, 0.35  # stage round trip; its blend into a gesture (median 0.30-0.54)
+        self.max_lead_s = 3.5
+        self.lead = os.getenv("GESTURE_LEAD", "1") == "1"  # 0: tags fire where written (sentence start)
+        self.backlog: Callable[[], float] = lambda: 0.0  # sound already queued on the sound track (Soundboard)
+
+    def ema(self, attr: str, x: float, a: float = 0.3) -> None:
+        setattr(self, attr, (1 - a) * getattr(self, attr) + a * x)
+
+    def gesture_lead(self, hit_at: float | None, speed: float = 1.0) -> float:
+        at = self.hit_default_s if hit_at is None else hit_at
+        lead = self.rtt_s / 2 + self.starts_in_s + at / max(speed, 1e-3) + self.arm_lag_s - self.audio_s
+        return min(self.max_lead_s, max(0.0, lead))
+
+    def sound_s_or_voice(self) -> float:
+        return self.audio_s if self.sound_s is None else self.sound_s
+
+    def sound_lead(self, name: str) -> float:
+        """An [sfx] on a word: its own hit lands as the word is heard."""
+        return max(0.0, self.backlog() + self.sound_s_or_voice() - self.audio_s + sfx_lead(name))
+
+    def hit_offset(self) -> float:
+        """Added to a gesture's commanded hit to get when its sound must be cued: the arm's lag, minus the sound
+        track's queue and playout."""
+        return SFX_SYNC_S + self.arm_lag_s - self.backlog() - self.sound_s_or_voice()
+
+
+TIMING = Timing()
+SESSION_T0 = time.monotonic()  # sync log times are seconds since the worker started (storyteller resets it)
+
+
+def t_rel(t: float | None = None) -> float:
+    return (time.monotonic() if t is None else t) - SESSION_T0
+
+
 class Hit:
     """A fired gesture's hits (seconds from its t = 0 at speed 1) and the sound that lands on them: its default
     sound on every hit, or an explicit [sfx] from the same sentence on the first one instead. The times are fixed once
@@ -305,7 +542,7 @@ class Hit:
     def __init__(self, ats: list[float], default: str | None, play: Callable[[str], None],
                  sync_s: float | None = None) -> None:
         self.ats, self.default, self._play = ats, default, play
-        self.sync_s = SFX_SYNC_S if sync_s is None else sync_s
+        self.sync_s = sync_s  # None: Timing.hit_offset() when the stage answers (SFX_SYNC_MS + arm lag - sound delay)
         self.when: list[float] | None = None  # monotonic hit times; None until the stage answers
         self.explicit: str | None = None
         self.refused = False
@@ -320,7 +557,8 @@ class Hit:
             if self.explicit:
                 self._play(self.explicit)
             return
-        self.when = [t0 + at / max(speed, 1e-3) + self.sync_s for at in self.ats]
+        sync = TIMING.hit_offset() if self.sync_s is None else self.sync_s
+        self.when = [t0 + at / max(speed, 1e-3) + sync for at in self.ats]
         self._arm()
 
     def sfx(self, name: str) -> None:
@@ -426,6 +664,14 @@ class GestureBook:
         return "\n".join(self._line(n, d) for n, d in self.durations.items() if n not in ("stage", "rest"))
 
 
+HIT_GAP_S = float(os.getenv("HIT_GAP_MS", "200")) / 1000  # a gesture waits for the same arm's last hit + this
+HIT_WAIT_MAX_S = 1.5  # ...but never longer
+
+
+def _sides(arm: str) -> tuple[str, ...]:
+    return ("left", "right") if arm == "both" else (arm,) if arm in ("left", "right") else ()
+
+
 class Stage:
     """Client for the stage server's HTTP API (robot/ owns the server; agent/fake_stage.py fakes it).
 
@@ -441,6 +687,10 @@ class Stage:
         self._pending: asyncio.Task | None = None  # a duet waiting for the arms to be free
         self._order = asyncio.Lock()  # requests reach the stage in the order sent ([face:...] then [both:bow])
         self.busy_until = 0.0  # monotonic time the last fired gesture should be done
+        self.duet_from = self.duet_until = 0.0  # a duet holds both arms then: solos and mouths are dropped
+        self.hit_at = {"left": 0.0, "right": 0.0}  # each arm's last gesture's first visible hit (monotonic)
+        self.idling = False  # /idle sent since the last freeze: arms breathe between gestures instead of holding
+        self._delayed: set[asyncio.Task] = set()  # sends waiting their turn (a freeze cancels them)
 
     def _session(self) -> aiohttp.ClientSession:
         if self._http is None or self._http.closed:
@@ -487,11 +737,14 @@ class Stage:
             await asyncio.sleep(delay)
         reply = None
         try:
-            async with self._order, self._session().post(f"{self.url}{path}", json=body or {}) as resp:
-                if resp.status >= 400:
-                    logger.warning("stage %s %s -> %s %s", path, body or "", resp.status, await resp.text())
-                elif on_reply:
-                    reply = await resp.json(content_type=None)
+            async with self._order:
+                sent = time.monotonic()
+                async with self._session().post(f"{self.url}{path}", json=body or {}) as resp:
+                    if resp.status >= 400:
+                        logger.warning("stage %s %s -> %s %s", path, body or "", resp.status, await resp.text())
+                    elif on_reply:
+                        reply = await resp.json(content_type=None)
+                TIMING.ema("rtt_s", min(1.0, time.monotonic() - sent), 0.2)
         except Exception as e:  # noqa: BLE001
             logger.warning("stage %s failed: %s", path, e)
         if on_reply:
@@ -502,7 +755,15 @@ class Stage:
         task = asyncio.create_task(self._post(path, body, delay, on_reply))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
+        if delay > 0:
+            self._delayed.add(task)
+            task.add_done_callback(self._delayed.discard)
         return task
+
+    def idle(self) -> None:
+        """Arms breathe (the stage's idle_breathe) now and after every gesture, instead of holding still."""
+        self.idling = True
+        self.send("/idle")
 
     def play(self, arm: str, gesture: str, duration_s: float, speed: float | None = None,
              on_start: Callable[[float | None, float], None] | None = None) -> None:
@@ -510,17 +771,33 @@ class Stage:
         stage's blend into it, its "starts_in") and the speed it plays at; t0 None if refused."""
         if speed is None:  # STAGE_SPEED: every gesture and duet (read per call: .env loads after this import)
             speed = float(os.getenv("STAGE_SPEED", "1.0"))
-        logger.info("gesture %s:%s", arm, gesture)
+        now = time.monotonic()
+        if arm in ARMS and self.duet_from <= now < self.duet_until:
+            logger.info("dropped %s:%s: a duet holds both arms", arm, gesture)
+            if on_start:
+                on_start(None, speed)
+            return
+        if arm != PROPS_TAG and not self.idling:
+            self.idle()  # after a freeze (or at the start): breathe between gestures from now on
+        hits = (self.sounds.get(gesture) or (None, []))[1]
 
         def started(reply: dict | None) -> None:
+            t0 = None
+            if reply is not None:
+                starts_in = float(reply.get("starts_in") or 0.0)
+                TIMING.ema("starts_in_s", min(3.0, starts_in), 0.2)
+                t0 = time.monotonic() - TIMING.rtt_s / 2 + starts_in
+                if arm in self.hit_at:
+                    self.hit_at[arm] = t0 + ((hits[0] if hits else TIMING.hit_default_s) / speed) + TIMING.arm_lag_s
+                logger.info("stage %s:%s starts in %.2f s (rtt %.0f ms)", arm, gesture, starts_in, TIMING.rtt_s * 1000)
             if on_start:
-                on_start(None if reply is None else time.monotonic() + float(reply.get("starts_in") or 0.0),
-                         float(reply.get("speed") or speed) if reply else speed)
-        cb = started if on_start else None
+                on_start(t0, float(reply.get("speed") or speed) if reply else speed)
+        cb = started
         if arm == DUET_TAG:  # needs both arms free: let the gestures already fired finish first
-            now = time.monotonic()
             wait = self.busy_until + DUET_MARGIN_S - now if self.busy_until > now else 0.0
             self.busy_until = now + wait + duration_s / speed
+            self.duet_from = now + wait
+            self.duet_until = self.busy_until + TIMING.starts_in_s + DUET_MARGIN_S
             self._pending = self.send("/duet", {"name": gesture, "speed": speed}, delay=wait, on_reply=cb)
             return
         if arm == PROPS_TAG:  # gesture = the arm that takes a prop ("left", or "left_car": a known toy), or "none"
@@ -529,21 +806,35 @@ class Stage:
             logger.info("props %s", gesture)
             self.send("/props", {"arm": who if on else "both", "on": on, **({"kind": kind} if on and kind else {})})
             return
-        self.busy_until = max(self.busy_until, time.monotonic() + duration_s / speed)
-        self.send("/play", {"arm": arm, "gesture": gesture, "speed": speed}, on_reply=cb)
+        # the arm's last gesture keeps going until its hit has been seen (the stage's newest-wins would cut it)
+        wait = max(0.0, min(HIT_WAIT_MAX_S, max(self.hit_at.get(a, 0.0) for a in _sides(arm)) + HIT_GAP_S - now))
+        self.busy_until = max(self.busy_until, now + wait + duration_s / speed)
+        for a in _sides(arm):  # until the stage answers: a guess, so a quick next tag waits for this hit too
+            self.hit_at[a] = now + wait + TIMING.starts_in_s + (hits[0] if hits else TIMING.hit_default_s) / speed
+        if wait > 0.05:
+            logger.info("gesture %s:%s waits %.2f s for the last one's hit", arm, gesture, wait)
+        self.send("/play", {"arm": arm, "gesture": gesture, "speed": speed}, delay=wait, on_reply=cb)
 
     def talk(self, arm: str, on: bool) -> None:
+        if on and self.duet_from <= time.monotonic() < self.duet_until:
+            logger.info("dropped talk %s: a duet holds both arms", arm)
+            return
         logger.info("talk %s %s", arm, "on" if on else "off")
         self.send("/talk", {"arm": arm, "on": on})
 
     def face(self, stance: str) -> None:
-        logger.info("face %s", stance)
-        self.send("/stance", {"stance": stance})
+        wait = max(0.0, self.duet_until - time.monotonic())  # a turn mid-duet is refused: turn once it ends
+        logger.info("face %s%s", stance, f" in {wait:.1f} s, after the duet" if wait else "")
+        self.send("/stance", {"stance": stance}, delay=wait)
 
     def freeze(self) -> None:
-        self.busy_until = 0.0
+        self.busy_until = self.duet_from = self.duet_until = 0.0
+        self.hit_at = {"left": 0.0, "right": 0.0}
+        self.idling = False
         if self._pending:  # the listener interrupted: a duet still waiting never starts
             self._pending.cancel()
+        for task in list(self._delayed):  # gestures waiting their turn never start either
+            task.cancel()
         self.send("/freeze")
 
     async def aclose(self) -> None:
@@ -553,6 +844,11 @@ class Stage:
             await self._http.close()
 
 
+FILL_MOVES = {"audience": ("look_at_other", "nod", "look_around"), "each_other": ("nod", "look_at_other", "look_around")}
+TALK_TAIL_S = 0.12  # the mouth shuts this long after the last word of its quote is heard
+TALK_MIN_S = 0.4    # ...and is open at least this long (a one-word quote is released as a single token)
+
+
 class GestureSink(io.TextOutput):
     """Sits right after the transcript synchronizer: sees the reply's text as it is spoken, fires its
     gesture tags, and passes the text on without them."""
@@ -560,23 +856,34 @@ class GestureSink(io.TextOutput):
     def __init__(
         self,
         book: GestureBook,
-        play: Callable[[str, str, float], None],
+        play: Callable[..., None],
         on_continue: Callable[[], None],
         *,
         next_in_chain: io.TextOutput | None,
         on_face: Callable[[str], None] | None = None,
         on_talk: Callable[[str, bool], None] | None = None,
         on_sound: Callable[[str, str], None] | None = None,
+        on_tag: Callable[[Tag], None] | None = None,
     ) -> None:
         super().__init__(label="GestureSink", next_in_chain=next_in_chain)
         self._book, self._play, self._on_continue, self._on_face = book, play, on_continue, on_face
-        self._on_talk, self._on_sound = on_talk, on_sound
+        self._on_talk, self._on_sound, self._on_tag = on_talk, on_sound, on_tag
         self._parser = TagParser()
         self._talker: str | None = None  # the arm whose mouth is talking
         self._quoted = False               # its quote has opened
+        self._mouth: dict[str, bool] = {}  # arm -> open, as last sent
+        self._mouth_at: dict[str, float] = {}  # arm -> when it opened
+        self._mouth_timer: dict[str, asyncio.TimerHandle] = {}
         self._toys: dict[str, str | None] = {"left": None, "right": None}  # toy kind each arm holds ([props:left car])
-        self._hit: Hit | None = None  # the hits of this sentence's gesture: its [sfx] tags land on them
-        self._ended = False  # the text so far ends a sentence: the next word starts a new one
+        self._holding: dict[str, bool] = {"left": False, "right": False}  # a guest (Lars) in that hand
+        self._facing = "audience"
+        self._until: dict[str, float] = {"left": 0.0, "right": 0.0}  # each arm busy with our last gesture until
+        self._last_arm = "left"
+        self._fills = 0
+        self._hit: Hit | None = None  # the gesture just fired: an [sfx] right after its tag lands on its hit
+        self._sync: dict[tuple[str, str], list[dict]] = {}  # (arm, name) -> fired, awaiting their mark
+        self._reply_t: float | None = None  # first release of this reply, and its syllables since
+        self._reply_syl = 0
         self._hits: weakref.WeakSet[Hit] = weakref.WeakSet()  # alive while a sound is still to come
 
     def cancel_sounds(self) -> None:
@@ -585,22 +892,49 @@ class GestureSink(io.TextOutput):
             hit.cancel()
         self._hit = None  # the next reply's [sfx] plays when spoken, not on a cancelled hit
 
-    def _talk(self, arm: str | None) -> None:
-        if self._talker and self._on_talk:
-            self._on_talk(self._talker, False)
+    # the talking mouth
+    def _set_mouth(self, arm: str, on: bool, delay: float) -> None:
+        if (h := self._mouth_timer.pop(arm, None)) is not None:
+            h.cancel()
+        if self._mouth.get(arm, False) == on:
+            return  # e.g. the next quote opens before the last one's mouth shut: it just stays open
+
+        def send() -> None:
+            self._mouth_timer.pop(arm, None)
+            self._mouth[arm] = on
+            if on:
+                self._mouth_at[arm] = time.monotonic()
+            if self._on_talk:
+                self._on_talk(arm, on)
+        if delay <= 0:
+            send()
+            return
+        try:
+            self._mouth_timer[arm] = asyncio.get_running_loop().call_later(delay, send)
+        except RuntimeError:  # no loop (a sync test): now
+            send()
+
+    def _talk(self, arm: str | None, word: str = "", now: bool = False) -> None:
+        """Mouths follow the voice as heard: open `audio_s` after the quote is released, shut after its last word."""
+        if self._talker:
+            off = 0.0 if now else TIMING.audio_s + len(hyphenate_without_tags(word)) / 2 / max(1.0, TIMING.rate) + TALK_TAIL_S
+            opened = self._mouth_at.get(self._talker, 0.0) if self._mouth.get(self._talker) else time.monotonic() + TIMING.audio_s
+            if not now:
+                off = max(off, opened + TALK_MIN_S - time.monotonic())
+            self._set_mouth(self._talker, False, off)
         self._talker, self._quoted = arm, False
-        if arm and self._on_talk:
-            self._on_talk(arm, True)
+        if arm:
+            self._set_mouth(arm, True, 0.0 if now else TIMING.audio_s)
 
     def _scan_quotes(self, text: str) -> None:
         """The talking mouth stops at its quote's closing mark (the text arrives as it is spoken)."""
-        for c in text:
+        for n, c in enumerate(text):
             if not self._talker:
                 return
             if not self._quoted and c in QUOTES_OPEN:
                 self._quoted = True
             elif self._quoted and c in QUOTES_CLOSE:
-                self._talk(None)
+                self._talk(None, re.split(r"\s", text[:n])[-1])
 
     def _handle(self, pieces: list[str | Tag]) -> str:
         text = ""
@@ -608,17 +942,24 @@ class GestureSink(io.TextOutput):
             if isinstance(p, str):
                 text += p
                 self._scan_quotes(p)
-                if p.strip():  # a sound tag right after a sentence still belongs to it; the next word doesn't
-                    if self._ended:
-                        self._hit = None
-                    self._ended = p.rstrip().rstrip("\"'”’)")[-1:] in tuple(".!?…")
-            elif (who := talk_arm(p)) is not None:
+                if p.strip():
+                    self._hit = None  # words came after the gesture: a later [sfx] is its own
+                    self._rate(p)
+                continue
+            if self._on_tag:
+                self._on_tag(p)
+            if (who := talk_arm(p)) is not None:
                 self._talk(who)
             elif p.arm is None:
                 if p.name == CONTINUE_TAG:
                     self._on_continue()
+            elif p.arm == MARK_TAG:
+                self._marked(p.name)
+            elif p.arm == FILL_TAG:
+                self._fill()
             elif p.arm == FACE_TAG:
                 if (facing := FACINGS.get(p.name)) and self._on_face:
+                    self._facing = facing
                     self._on_face(facing)
                 else:
                     logger.info("dropped %s", p.raw)
@@ -636,7 +977,10 @@ class GestureSink(io.TextOutput):
                     logger.info("dropped %s", p.raw)
             elif p.arm in (PICK_TAG, PLACE_TAG):
                 if name := self._book.guest(p.arm, p.name):
-                    self._play(self._book.sides[name], name, self._book.guests[name])
+                    side = self._book.sides[name]
+                    self._holding[side] = p.arm == PICK_TAG
+                    self._busy(side, self._book.guests[name])
+                    self._play(side, name, self._book.guests[name])
                 else:
                     logger.info("dropped %s: no such guest on the stage", p.raw)
             elif p.arm in (DUET_TAG, ENSEMBLE_TAG):
@@ -656,20 +1000,85 @@ class GestureSink(io.TextOutput):
             else:
                 held = [self._toys[s] for s in (("left", "right") if p.arm == "both" else (p.arm,))]
                 if (name := without_toy(name, held)) in self._book.durations:
-                    self._fire(p.arm, name, self._book.durations[name])
+                    self._fire(p.arm, name, self._book.durations[name], tag=p.name)
         return text
 
-    def _fire(self, arm: str, name: str, secs: float) -> None:
-        """Play it; a gesture with hits gets its sound (or the sentence's [sfx]) scheduled on them."""
-        if self._ended:  # the first tag of a new sentence (tags_first puts them before its words)
-            self._hit, self._ended = None, False
-        if (snd := self._book.sounds.get(name)) is None:
-            self._play(arm, name, secs)
+    def _busy(self, arm: str, secs: float) -> None:
+        until = time.monotonic() + TIMING.starts_in_s + secs / max(_speed(), 1e-3)
+        for a in ("left", "right") if arm in ("both", DUET_TAG) else (arm,):
+            self._until[a] = max(self._until.get(a, 0.0), until)
+
+    def _fill(self) -> None:
+        """A sentence with nothing moving: a light move on a free arm, the last active one first."""
+        now = time.monotonic()
+        for arm in (self._last_arm, "right" if self._last_arm == "left" else "left"):
+            if self._until[arm] > now or self._toys[arm] or self._holding[arm] or self._mouth.get(arm):
+                continue
+            moves = [m for m in FILL_MOVES.get(self._facing, FILL_MOVES["audience"]) if m in self._book.durations]
+            if not moves:
+                return
+            move = moves[self._fills % len(moves)]
+            self._fills += 1
+            logger.info("fill: %s:%s (a sentence with nothing moving)", arm, move)
+            self._fire(arm, move, self._book.durations[move], fill=True)
             return
-        hit = Hit(snd[1], snd[0], lambda n: self._on_sound(SFX_TAG, n) if self._on_sound else None)
+
+    def _fire(self, arm: str, name: str, secs: float, tag: str | None = None, fill: bool = False) -> None:
+        """Play it; a gesture with hits gets its sound (or the [sfx] right after its tag) scheduled on them."""
+        if arm in ("left", "right") and not fill:
+            self._last_arm = arm
+        self._busy(arm, secs)
+        snd = self._book.sounds.get(name)
+        # the stage's own sound for this gesture is "hit" (curated: plays even if not offered to the LLM, e.g. kiss)
+        hit = Hit(snd[1], snd[0], lambda n: self._on_sound(HIT_SOUND if n == snd[0] else SFX_TAG, n)
+                  if self._on_sound else None) if snd else None
         self._hit = hit
-        self._hits.add(hit)
-        self._play(arm, name, secs, on_start=hit.started)
+        if hit is not None:
+            self._hits.add(hit)
+        rec = {"arm": arm, "name": name, "sent": time.monotonic(), "hit": None, "heard": None, "hitobj": hit,
+               "ats": snd[1] if snd else []}
+        if not fill:
+            for key in {(arm, name), (arm, tag or name)}:
+                self._sync.setdefault(key, []).append(rec)
+
+        def started(t0: float | None, speed: float = 1.0) -> None:
+            if hit is not None:
+                hit.started(t0, speed)
+            if t0 is not None:
+                rec["hit"] = t0 + (rec["ats"][0] if rec["ats"] else TIMING.hit_default_s) / max(speed, 1e-3) + TIMING.arm_lag_s
+            self._log_sync(rec)
+        self._play(arm, name, secs, on_start=started)
+
+    def _marked(self, body: str) -> None:
+        """The word a moved tag was aimed at is being released now: heard `audio_s` from now."""
+        arm, _, name = body.partition("=")
+        recs = self._sync.get((arm, name)) or self._sync.get((arm, self._book.resolve(name) or name)) or []
+        rec = next((r for r in recs if r["heard"] is None), None)
+        if rec is None:
+            return
+        rec["heard"] = time.monotonic() + TIMING.audio_s
+        self._log_sync(rec)
+
+    def _log_sync(self, rec: dict) -> None:
+        if rec["heard"] is None or rec["hit"] is None or rec.get("logged"):
+            return
+        rec["logged"] = True
+        for recs in self._sync.values():
+            if rec in recs:
+                recs.remove(rec)
+        hit = rec["hitobj"]
+        sfx = ", ".join(f"{n} cued {t_rel(w - sfx_lead(n)):.2f}" for n, w in (hit.scheduled if hit else []))
+        logger.info("sync %s:%s: sent %.2f, word heard %.2f, hit %.2f (%+.0f ms)%s", rec["arm"], rec["name"],
+                    t_rel(rec["sent"]), t_rel(rec["heard"]), t_rel(rec["hit"]), (rec["hit"] - rec["heard"]) * 1000,
+                    f"; sfx {sfx}" if sfx else "")
+
+    def _rate(self, text: str) -> None:
+        """The voice's speaking rate, from how fast the synchronizer releases the words (for Timing.rate)."""
+        now = time.monotonic()
+        if self._reply_t is None:
+            self._reply_t, self._reply_syl = now, 0
+            return
+        self._reply_syl += sum(len(hyphenate_without_tags(w)) for w in text.split())
 
     async def capture_text(self, text: str) -> None:
         clean = self._handle(self._parser.feed(text))
@@ -679,7 +1088,13 @@ class GestureSink(io.TextOutput):
     def flush(self) -> None:
         # an interrupted segment flushes too; whatever is held back was never spoken, so drop its tags
         rest = "".join(p for p in self._parser.flush() if isinstance(p, str))
-        self._talk(None)  # end of the reply, or an interruption: the mouth shuts
+        self._talk(None, now=True)  # end of the reply, or an interruption: the mouth shuts
+        for arm in list(self._mouth_timer):
+            self._set_mouth(arm, False, 0.0)
+        if self._reply_t is not None and (secs := time.monotonic() - self._reply_t) > 4 and self._reply_syl > 10:
+            TIMING.ema("rate", min(6.0, max(1.5, self._reply_syl / secs)), 0.3)
+        self._reply_t = None
+        self._sync.clear()
         if self.next_in_chain:
             if rest:
                 asyncio.ensure_future(self.next_in_chain.capture_text(rest))
@@ -690,12 +1105,13 @@ class GestureSync:
     """Wraps the session's audio + transcription outputs in our own TranscriptSynchronizer, whose text
     output feeds a GestureSink. Call `install()` after `session.start()` has set the outputs up."""
 
-    def __init__(self, book: GestureBook, play: Callable[[str, str, float], None],
+    def __init__(self, book: GestureBook, play: Callable[..., None],
                  on_continue: Callable[[], None], on_face: Callable[[str], None] | None = None,
                  on_talk: Callable[[str, bool], None] | None = None,
-                 on_sound: Callable[[str, str], None] | None = None) -> None:
+                 on_sound: Callable[[str, str], None] | None = None,
+                 on_tag: Callable[[Tag], None] | None = None) -> None:
         self._book, self._play, self._on_continue, self._on_face = book, play, on_continue, on_face
-        self._on_talk, self._on_sound = on_talk, on_sound
+        self._on_talk, self._on_sound, self._on_tag = on_talk, on_sound, on_tag
         self.sync: TranscriptSynchronizer | None = None
         self.sink: GestureSink | None = None
 
@@ -706,7 +1122,8 @@ class GestureSync:
 
     def install(self, output: io.AgentOutput) -> None:
         sink = self.sink = GestureSink(self._book, self._play, self._on_continue, next_in_chain=output.transcription,
-                                       on_face=self._on_face, on_talk=self._on_talk, on_sound=self._on_sound)
+                                       on_face=self._on_face, on_talk=self._on_talk, on_sound=self._on_sound,
+                                       on_tag=self._on_tag)
         if output.audio is None:  # text-only (console --text): nothing to sync to, fire as the text streams
             logger.warning("no audio output: gestures fire as the text arrives, not synced to speech")
             output.transcription = sink

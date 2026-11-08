@@ -307,7 +307,7 @@ def library():
     s.wait(0.8).to(np.zeros(6), 0.8)
     s.grips((0, C), (t, C), (t + T, O), (t + T + 0.8, O), (t + T + 1.35, C))
     add(s, "double_take", "Glance at something, look away, then snap back, head jerking up and tilted, jaw dropped: "
-        "a double take, spot, notice, wait, what?!", sound="record_scratch")
+        "a double take, spot, notice, wait, what?!", sound=None)
 
     s = Seq().to(pose(j2=0.1, j3=0.45, p=0.6, j6=0.2), 0.3, hold=0.2)
     s.shake(0.3, 1.5, pose(j4=0.04, j6=0.04), 4.0, ramp=0.2).wait(1.0).to(np.zeros(6), 1.0)
@@ -576,6 +576,12 @@ def library():
     s.grips((0, C), (0.8, C), (1.1, O), (2.3, O), (2.9, C))
     add(s, "ta_da", "Gather in, then swing up and out to the audience with a flourish, mouth wide: ta-da, "
         "presenting, voila, here it is, a big reveal, a magic trick.", sound="tada")
+
+    # Casting (Nov 7): the arm being introduced rises tall, head high, and holds, so the audience on every side sees
+    # which one it is ("left/right" depends on where you sit). No mouth, so it plays the same holding a prop.
+    s = Seq().to(pose(j2=0.15, j3=0.38, p=0.6), 0.6, hold=1.2).to(np.zeros(6), 0.65)  # head +22 cm (idle: 2)
+    add(s, "present", "Rise up tall, head high, hold, then settle: presenting this actor, here I am, introducing a "
+        "character.")
 
     # slow_turn knows where the audience is: from the audience facing it first side-eyes the other arm, from
     # each_other it is already looking at it (stance_keys, set after the library is built).

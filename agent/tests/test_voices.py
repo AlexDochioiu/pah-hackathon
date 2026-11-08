@@ -6,7 +6,7 @@ from livekit import rtc
 from gestures import parse_tag
 from livekit.agents.types import NOT_GIVEN
 
-from voices import Cast, RunMarks, VoiceSplitter, resolve_voice, timestamp_runs, voiced_tts
+from voices import PALETTE, Cast, RunMarks, VoiceSplitter, resolve_voice, timestamp_runs, voiced_tts
 
 
 def split(*chunks):
@@ -54,7 +54,7 @@ def test_cast_tags():
     assert split("Gloria the dragon [right:roar] [voice:right=deep]!") == [
         (None, "Gloria the dragon  "), Cast("right", "deep"), (None, "!")]
     assert split("[voice:left = Squeaky Mouse]") == [Cast("left", "squeaky")]
-    assert resolve_voice("robotic") == "robot" and resolve_voice("dragon") == "deep"
+    assert "robot" not in PALETTE and resolve_voice("robotic") == resolve_voice("alien") == "deep" and resolve_voice("dragon") == "deep"
     assert resolve_voice("banana") is None
     assert parse_tag("[voice:left=deep]").arm == "voice"  # a tag, so the transcript keeps it for the LLM
 
@@ -82,8 +82,8 @@ async def test_voiced_tts_streams_each_run_in_its_voice_in_order():
 
     cast = {"left": "deep", "right": "squeaky"}
     frames = [f async for f in voiced_tts(llm(), synth("narrator", 0.05), lambda v: synth(v, 0.0), cast)]
-    assert [f.userdata["voice"] for f in frames] == ["narrator"] * 6 + ["squeaky"] * 2 + ["robot"] + ["narrator"] * 2
-    assert cast["left"] == "robot"
+    assert [f.userdata["voice"] for f in frames] == ["narrator"] * 6 + ["squeaky"] * 2 + ["deep"] + ["narrator"] * 2
+    assert cast["left"] == "deep"  # the robot voice is gone: its nearest
 
 
 async def test_transcript_is_pinned_to_each_run_start():

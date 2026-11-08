@@ -157,6 +157,15 @@
   placement (calib.json) and sliding fingers; it matches `show.py` to 0.04 mm (arm) and 2.8 mm (fingertips) over
   200 random poses. Pipeline latency p50 38 ms / p95 62 ms; real arms → twin ~0.1 s. A ghost endpoint (`POST :8796/ghost`)
   replays a trajectory on dimos's preview robot. `--mcp` serves play/duet/freeze/rest skills (kin stage only).
+- Nov 7 ~20:15: story fix after the first full real-arm story run. Sync measured (a tag at its sentence's start
+  hit 1.2-3.4 s late: the gesture's first hit, median 1.55 s, plus the stage's blend, median 0.30-0.54 s; sfx ~0.5 s
+  late from the background track's 400 ms queue; comedy marks known only after playback, so a 72 s stall then a
+  burst): tags now fire `gesture_lead` early, with a per-gesture sync log, page-measured playout and a 150 ms sound
+  queue. Sfx at most one per 12 s, 12 dB quieter, files re-levelled, the worst out of the offer, record_scratch
+  deleted. David ("British Storyteller") narrates stories, Lars ("Deadpool better") only hosts the show and is its only voice; new
+  squeaky/child voices and a pirate slot (owner's picks). Two characters per story with a
+  `present` lift and a recast lock, ~2-minute stories with a clock, no written laughter, the robot voice gone. Show
+  cut to acts 0-3 under 2:00 with a "Built with" card (Dimensional twin in; Dream-1 commented out until it works on the real arms) and auto-advance 1 -> 4. Not yet on the real arms.
 - Nov 7 ~20:30: live chat freezes the arms only when an interruption is real (the heard speech ends interrupted),
   not when LiveKit merely pauses the voice: after a false interruption the voice resumes with the arms still acting
   and its tags in sync (the owner's "always motion" rule). A turn between scenes no longer freezes idling arms.

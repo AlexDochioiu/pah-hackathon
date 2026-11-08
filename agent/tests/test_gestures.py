@@ -87,7 +87,7 @@ def test_sink_fires_and_strips():
     faced = []
     book = GestureBook(DEFAULT_GESTURES, {"cross_swords": 9.3}, {"storm": 4.9})
     assert book.describe_duets() == "- cross_swords (9.3s)" and book.describe_duets(ensembles=True) == "- storm (4.9s)"
-    sink = GestureSink(book, lambda a, g, d: played.append((a, g)), lambda: continued.append(1),
+    sink = GestureSink(book, lambda a, g, d, **k: played.append((a, g)), lambda: continued.append(1),
                        next_in_chain=Collect(), on_face=faced.append)
 
     async def run():
@@ -110,7 +110,7 @@ def test_text_only_mode_still_fires():
 
     from gestures import GestureSync
     out = SimpleNamespace(audio=None, transcription=None)
-    GestureSync(BOOK, lambda *a: None, lambda: None).install(out)
+    GestureSync(BOOK, lambda *a, **k: None, lambda: None).install(out)
     assert isinstance(out.transcription, GestureSink)
 
 
@@ -149,16 +149,18 @@ def test_talk_tags_stay_put_and_mouth_follows_the_quote():
         def flush(self):
             pass
 
-    sink = GestureSink(BOOK, lambda *a: None, lambda: None, next_in_chain=Collect(),
+    sink = GestureSink(BOOK, lambda *a, **k: None, lambda: None, next_in_chain=Collect(),
                        on_talk=lambda arm, on: talks.append((arm, on)))
 
     async def run():
         for c in ['Then [talk:left] “Who', ' goes there?” she asks. [left:talk] "Me', 'ow', '!" [talk:right] "Hi']:
             await sink.capture_text(c)
+            await asyncio.sleep(0.6)  # each mouth shuts after its last word is heard
         sink.flush()  # the reply ends (or is interrupted) mid-quote: the mouth shuts
         await asyncio.sleep(0)
     asyncio.run(run())
-    assert talks == [("left", True), ("left", False), ("left", True), ("left", False), ("right", True), ("right", False)]
+    # the left one's second quote opens before its first one's mouth shut: it stays open through both
+    assert talks == [("left", True), ("right", True), ("left", False), ("right", False)], talks
     assert "[" not in "".join(forwarded)
 
 
@@ -177,7 +179,7 @@ def test_guest_pick_and_place_tags():
 
     book = GestureBook({**DEFAULT_GESTURES, "pick_lars": 5.0, "place_lars": 5.2}, sides={"pick_lars": "right"})
     assert "pick_lars" not in book.describe() and book.resolve("pick_lars") != "pick_lars"
-    sink = GestureSink(book, lambda a, g, d: played.append((a, g, d)), lambda: None, next_in_chain=Collect())
+    sink = GestureSink(book, lambda a, g, d, **k: played.append((a, g, d)), lambda: None, next_in_chain=Collect())
 
     async def run():
         await sink.capture_text("Here comes Lars [pick:Lars] hello [place:lars] [pick:bob] [right:wave]")
@@ -206,7 +208,7 @@ def test_toy_moves_fall_back_without_the_toy():
         def on_attached(self):
             pass
 
-    sink = GestureSink(book, lambda a, g, d: played.append((a, g)), lambda: None, next_in_chain=Collect())
+    sink = GestureSink(book, lambda a, g, d, **k: played.append((a, g)), lambda: None, next_in_chain=Collect())
 
     async def run():
         await sink.capture_text("[left:race] [props:left car] [left:race] [right:drive] [props:none] [left:fly] ")
@@ -260,11 +262,10 @@ def test_sounds_land_on_the_gesture_hit():
     sink = GestureSink(book, play, lambda: None, next_in_chain=Collect(), on_sound=lambda k, n: sounds.append(n))
 
     async def run_sink():
-        await sink.capture_text("[left:shoot] Bang! ")
-        await sink.capture_text("[sfx:laser] ")  # right after its sentence: still this gesture's
+        await sink.capture_text("[left:shoot] ")
+        await sink.capture_text("[sfx:laser] Bang! ")  # right after its tag (tags_first puts it there): its hit's
         await sink.capture_text("[left:wave] Bye. [sfx:applause] ")  # a later sentence: plays when spoken
-        ((_, on_start), (_, none)) = starts
-        assert none is None  # wave has no hits
+        ((_, on_start), _) = starts
         on_start(time.monotonic() - 10, 1.0)  # its hit is long gone: nothing more plays
         await asyncio.sleep(0)
 

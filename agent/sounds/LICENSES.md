@@ -83,7 +83,6 @@ on 2026-11-07.
 | `sfx/crowd/rimshot.ogg` | Freesound [#271208](https://freesound.org/s/271208/) | OverlookHotelRecords | Baddum Tish - Comedy Rimshots - classic rim shot.wav | CC0 |
 | `sfx/crowd/crickets.ogg` | Freesound [#129678](https://freesound.org/s/129678/) | FreethinkerAnon | crickets | CC0 |
 | `sfx/crowd/sad_trombone.ogg` | Freesound [#175409](https://freesound.org/s/175409/) | kirbydx | wah wah sad trombone.wav | CC0 |
-| `sfx/crowd/record_scratch.ogg` | Freesound [#43404](https://freesound.org/s/43404/) | simkiott | record_scratch.wav | CC0 |
 
 ## Music (`music/<mood>/`, the tracks of a mood take turns)
 

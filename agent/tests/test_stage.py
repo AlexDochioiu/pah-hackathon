@@ -29,13 +29,14 @@ async def test_stage_client_against_fake_stage(capsys):
         await asyncio.sleep(0.2)
         assert json.load(urllib.request.urlopen(f"{url}/state"))["props"] == {"left": True, "right": False}
         stage.play("props", "none", 0.0)
+        stage.hit_at["left"] = 0.0  # as if the slash had hit (a gesture waits for its arm's last hit)
         stage.face("each_other")
         stage.play("both", "bow", 2.5)  # sent after the face: must arrive after it
         await asyncio.sleep(0.3)
         state = json.load(urllib.request.urlopen(f"{url}/state"))
         assert state["stance"] == "each_other" and state["playing"]["right"] == "bow"
         assert state["props"] == {"left": False, "right": False}
-        stage.busy_until = 0.0  # as if the bow had finished
+        stage.busy_until, stage.hit_at = 0.0, {"left": 0.0, "right": 0.0}  # as if the bow had finished
         stage.play("left", "nod", 0.2)
         stage.play("duet", "cheers", 9.7)  # waits for the nod (0.2 s + margin) before it is sent
         await asyncio.sleep(0.15)
@@ -43,12 +44,14 @@ async def test_stage_client_against_fake_stage(capsys):
         await asyncio.sleep(0.6)
         state = json.load(urllib.request.urlopen(f"{url}/state"))
         assert state["playing"]["left"] == state["playing"]["right"] == "duet:cheers"
-        stage.talk("left", True)
+        stage.talk("left", True)  # mid-duet: dropped (the stage would refuse it)
+        stage.play("right", "nod", 0.2)  # likewise
         stage.freeze()
         stage.send("/idle")
         await asyncio.sleep(0.3)
         out = capsys.readouterr().out
-        assert "PLAY    left: slash" in out and "REJECT" in out and "FREEZE" in out and "IDLE" in out and "TALK    left: on" in out
+        assert "PLAY    left: slash" in out and "REJECT" in out and "FREEZE" in out and "IDLE" in out and "TALK" not in out
+        assert "right: nod" not in out and out.index("IDLE") < out.index("PLAY    left: slash")  # breathing first
         assert out.index("STANCE facing each_other") < out.index("PLAY    both: bow")
     finally:
         await stage.aclose()

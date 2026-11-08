@@ -22,7 +22,11 @@ Update this page when a piece is added or a connection changes. Details live on 
 2. The storyteller (`agent/storyteller.py`) runs STT → LLM. The LLM writes narration with inline tags
    (`[left:roar]`, `[duet:hug]`, `[talk:left] "…"`, `[face:each_other]`, `[props:right]`, `[sfx:x]`,
    `[music:x]`, and soon `[pick:lars]`). The prompt is `agent/prompt.md`; the gesture list in it comes from the stage server.
-3. `tags_first` moves gesture tags to the start of their sentence; `Storyteller.tts_node` (`agent/voices.py`)
+3. `Storyteller.llm_node` tidies the text (`voices.Tidy`: no written laughter, character lines capped).
+   `tags_first` moves each gesture tag early enough that its hit lands on its word (the stage's blend, the
+   gesture's first hit and the arm's lag, minus the listener's playout delay, which the page measures and publishes
+   as the `playout_ms` attribute), and adds a `present` lift before a casting and a light move for a motionless
+   sentence; `Storyteller.tts_node` (`agent/voices.py`)
    removes all tags before speech and gives each character's quoted lines its own TTS voice; `GestureSync` fires
    each tag when playback reaches it (the transcript is time-stamped at every voice switch). A gesture's default
    sound (its stage `sound`, or an `[sfx]` from its sentence) is scheduled on its visible hit from the stage's

@@ -10,9 +10,9 @@ import pytest
 from director import Director
 from gestures import FACINGS, GestureBook, GestureSync, Tag, TagParser, strip_tags_for_tts, talk_arm
 from lkfakes.fake_session import FakeActions, create_session
-from show import HUMAN, LIVE, SCRIPTED, SHOW_MD, Cursor, Script, ShowRunner, is_show, resolve_chain
+from show import HUMAN, LETTERS_PER_S, LIVE, SCRIPTED, SHOW_MD, Cursor, Script, ShowRunner, is_show, resolve_chain
 from sounds import SoundBook
-from storyteller import Storyteller, build_instructions
+from storyteller import Storyteller, build_instructions, narrator_voice
 
 ROBOT = Path(__file__).resolve().parents[2] / "robot"
 
@@ -38,7 +38,9 @@ FOUNDER_1 = Ann @ back_left
 FOUNDER_2 = Bo @ nowhere
 SPOT_back_left = left:point_back_left | left:look_at_other
 PICK = off
-LEAD_PAUSE_S = 0.1
+BUILT_WITH_ACT = 2
+BUILT_2 = Thing Two: does two
+BUILT_1 = Thing One: does one
 ```
 
 ## Act 0: Cold open (human)
@@ -46,8 +48,8 @@ LEAD_PAUSE_S = 0.1
 Hi, so, it's like a robot?
 
 ## Act 1: One
-[sfx:record_scratch] [face:audience]
-[talk:left] "Stop." [left:shake_head] Hello there everyone, I am {HOST_NAME} of {SHOW_NAME}, nice to meet you all today. Meet {FOUNDER_1}! {POINT_1} [right:wave]
+[face:audience]
+Stop. [left:shake_head] Hello there everyone, I am {HOST_NAME} of {SHOW_NAME}, nice to meet you all today. Meet {FOUNDER_1}! {POINT_1} [right:wave]
 {?PICK} This line is only there when PICK is on.
 
 ## Act 2: Two
@@ -69,7 +71,9 @@ def tags(text: str) -> list[Tag]:
 
 def test_parse_acts_config_and_names():
     s = Script.parse(MINI)
-    assert (s.show_name, s.host_name, s.founders, s.lead_pause_s) == ("Test Show", "Kermit", ["Ann", "Bo"], 0.1)
+    assert (s.show_name, s.host_name, s.founders) == ("Test Show", "Kermit", ["Ann", "Bo"])
+    assert s.built_with == [{"tool": "Thing One", "how": "does one"}, {"tool": "Thing Two", "how": "does two"}]
+    assert s.to_json()["built_with_act"] == 2 and s.to_json()["built_with"] == s.built_with
     assert [(a.number, a.kind, a.title) for a in s.acts] == [
         (0, HUMAN, "Cold open"), (1, SCRIPTED, "One"), (2, SCRIPTED, "Two"), (3, LIVE, "Demo")]
     assert s.act(0).note == "a note for the presenters" and "<!--" not in s.act(0).text
@@ -96,22 +100,21 @@ def test_conditional_line_on():
     assert "This line is only there when PICK is on." in s.act(1).text
 
 
-def test_lead_tags_fire_first_and_talk_tags_stay():
+def test_lead_tags_fire_first():
     lead, rest = Script.parse(MINI).act(1).split_lead()
-    assert lead == "[sfx:record_scratch] [face:audience]"
-    assert rest.startswith('[talk:left] "Stop."')
-    assert Script.parse(MINI).act(1).lead_has_sound() and not Script.parse(MINI).act(2).lead_has_sound()
+    assert lead == "[face:audience]"
+    assert rest.startswith("Stop. [left:shake_head]")
 
 
 def test_first_line_and_estimates():
     s = Script.parse(MINI)
-    assert s.act(1).first_line.startswith('"Stop." Hello there everyone')
+    assert s.act(1).first_line.startswith("Stop. Hello there everyone")
     assert "[" not in s.act(1).first_line
     assert s.act(0).first_line == "Hi, so, it's like a robot?"
     two = s.act(2)
-    words = len(two.spoken.split())
+    letters = sum(c.isalnum() for c in two.spoken)
     # the bow moves to the start of the last (only) sentence, so it ends 2.5 s in: speech covers it
-    assert two.estimate_s({"bow": 2.5}) == round(words / 2.6, 1)
+    assert two.estimate_s({"bow": 2.5}) == round(letters / LETTERS_PER_S, 1)
     assert two.estimate_s({"bow": 9.0}) > two.estimate_s({"bow": 2.5})
 
 
@@ -142,8 +145,8 @@ def test_show_md_is_complete_and_every_tag_exists_on_the_stage():
     for act in s.acts:
         assert "{" not in act.text and "}" not in act.text, act.number
         for t in tags(act.text):
-            if talk_arm(t):
-                continue
+            # owner, Nov 7: one voice in the show, the host's. The arms never speak, they react.
+            assert not talk_arm(t) and t.arm != "voice", (act.number, t.raw)
             if t.arm in ("left", "right", "both"):
                 assert t.name in book.durations, (act.number, t.raw)
             elif t.arm in ("duet", "ensemble"):
@@ -156,13 +159,25 @@ def test_show_md_is_complete_and_every_tag_exists_on_the_stage():
                 assert t.name in FACINGS, (act.number, t.raw)
             else:
                 pytest.fail(f"act {act.number}: unexpected tag {t.raw}")
-    # the takeover cuts in with the scratch and the snap to the audience, before any word
-    assert s.act(1).split_lead()[0] == "[sfx:record_scratch] [face:audience]"
+    assert '"' not in s.act(1).spoken.replace("…", "")  # no quoted lines left over either
+    # the takeover cuts in hard: the snap to the audience, then the first word at once
+    assert s.act(1).split_lead()[0] == "[face:audience]"
+    assert "[both:present]" in s.act(1).text  # the stage hands are lifted as they're introduced
     # pointing gestures don't exist yet: their placeholders fall back
     assert "[left:look_at_other]" in s.act(2).text and "[right:double_take]" in s.act(1).text
-    # the pre-demo slot is about three minutes
-    total = sum(a.estimate_s(book.durations | book.duets) for a in s.acts if a.number <= 4)
-    assert 120 < total < 200, total
+    assert sum("table" in a.spoken for a in s.acts) == 1  # one table gag, not three
+    # the budget (owner, Nov 7; ~5 minutes with the demo): acts 0-3 <= 2:00, the demo intro <= 10 s, the finale <= 20 s
+    # (the estimate is the host voice's measured pace plus the tails: within ~2 s of the real audio, Nov 7)
+    est = {a.number: a.estimate_s(book.durations | book.duets) for a in s.acts}
+    print(est)
+    assert 80 < sum(est[n] for n in range(4)) <= 120, est
+    assert est[4] <= 10 and est[5] <= 20, est
+    # the "Built with" card: what the code really uses, shown during the pitch
+    tools = " ".join(b["tool"] for b in s.built_with)
+    assert s.built_with_act == 3 and all(b["how"] for b in s.built_with)
+    for name in ("LiveKit", "Fish Audio", "YAM", "MuJoCo", "OpenCV", "CC0", "Claude Code", "Dimensional"):
+        assert name in tools, name
+    assert "Dream" not in tools  # commented out until the Dream-1 pick works on the real arms
 
 
 def test_lars_pick_line_uses_the_baked_guest_tags():
@@ -174,9 +189,15 @@ def test_lars_pick_line_uses_the_baked_guest_tags():
     assert "[pick:lars]" not in Script.parse(text, GestureBook({"double_take": 1.0, "nod": 1.0})).act(1).text
 
 
-def test_prompt_uses_the_host_name():
-    text = build_instructions(stage_book(), SoundBook.load(), Script.load())
-    assert text.startswith("You are Lars, a small green plush frog") and "{{HOST_NAME}}" not in text
+def test_story_has_an_unnamed_narrator_and_the_show_has_lars():
+    book, sounds, script = stage_book(), SoundBook.load(), Script.load()
+    story = build_instructions(book, sounds, script)
+    show = build_instructions(book, sounds, script, show=True)
+    # (Lars may still turn up in a story as a toy the right arm can pick up, never as the narrator)
+    assert story.startswith("You are the storyteller") and "You are Lars" not in story and "host the show" not in story
+    assert show.startswith("You are Lars, a small green plush frog")
+    assert "{{" not in story and "{{" not in show
+    assert narrator_voice(False) != narrator_voice(True)  # David narrates stories, Lars ("Deadpool better") hosts the show
 
 
 # --- cue playback -----------------------------------------------------------------------------------------------
@@ -188,7 +209,7 @@ class RecStage:
     def _rec(self, *what):
         self.events.append((time.perf_counter(), *what))
 
-    def play(self, arm, gesture, duration):
+    def play(self, arm, gesture, duration, **_):
         self._rec("play", f"{arm}:{gesture}")
 
     def face(self, stance):
@@ -199,6 +220,9 @@ class RecStage:
 
     def freeze(self):
         self._rec("freeze", "")
+
+    def idle(self):
+        self.send("/idle")
 
     def send(self, path, body=None, delay=0.0):
         self._rec(path, "")
@@ -246,14 +270,14 @@ async def test_cue_plays_the_act_through_the_stage_in_step_with_speech(tmp_path)
         t0 = time.perf_counter()
         show.runner.play(1)
         await asyncio.sleep(0.05)
-        # instantly: the arms freeze, then the lead: the scratch and the snap to the audience
-        assert show.kinds()[:3] == [("freeze", ""), ("sfx", "record_scratch"), ("face", "audience")]
+        # instantly: the arms freeze, then the lead: the snap to the audience
+        assert show.kinds()[:2] == [("freeze", ""), ("face", "audience")]
+        assert show.agent.host_only and show.agent.scripted
         await asyncio.sleep(4.0)
         events = show.kinds()
         print([(round(t - t0, 2), k, w) for t, k, w in show.stage.events])
         assert [e for e in events if e[0] in ("play", "talk")] == [  # shake_head moved to its sentence's start
-            ("play", "left:shake_head"), ("talk", "left:on"), ("talk", "left:off"),
-            ("play", "left:look_at_other"), ("play", "right:wave")]
+            ("play", "left:shake_head"), ("play", "left:look_at_other"), ("play", "right:wave")]
         wave_at = next(t for t, k, w in show.stage.events if w == "right:wave") - t0
         assert 1.5 < wave_at < 3.8  # with its sentence near the end of the 3 s of audio, not at the cue
         assert "[" not in "".join(show.tts_inputs) and "Kermit" in "".join(show.tts_inputs)
@@ -274,7 +298,6 @@ async def test_a_new_cue_cuts_the_act_and_starts_the_next(tmp_path):
         assert after[0] == ("freeze", "")
         assert ("face", "audience") in after and ("play", "left:bow") in after
         assert ("play", "right:wave") not in show.kinds()  # act 1 never got there
-        assert ("talk", "left:off") in show.kinds()  # the mouth shut on the cut
         assert show.runner.act == 2 and show.runner.state == "done"
 
 
@@ -309,7 +332,7 @@ async def test_primed_audio_starts_at_once_and_is_cached(tmp_path):
         show.runner.play(2)  # not primed: waits for the slow TTS
         await asyncio.sleep(1.8)
         streamed = show.runner.latency_ms
-        print(f"cue -> voice: primed {primed} ms (0.1 s lead pause), streamed {streamed} ms")
+        print(f"cue -> voice: primed {primed} ms, streamed {streamed} ms")
         assert primed is not None and primed < 450
         assert streamed is not None and streamed > 1000
 
@@ -325,7 +348,7 @@ async def test_primed_audio_starts_at_once_and_is_cached(tmp_path):
         again.runner.play(1)
         await asyncio.sleep(2.8)
         assert [e for e in again.kinds(t0) if e[0] in ("play", "talk")] == [
-            ("play", "left:shake_head"), ("talk", "left:on"), ("talk", "left:off"), ("play", "right:wave")]
+            ("play", "left:shake_head"), ("play", "right:wave")]
         wave_at = next(t for t, k, w in again.stage.events if w == "right:wave") - t0
         assert 0.8 < wave_at < 2.3, wave_at  # near the end of the 2 s of audio
         assert again.runner.state == "done"
@@ -345,3 +368,61 @@ async def test_local_cues_only_for_this_room(tmp_path):
                 assert r.status == 200 and (await r.json())["act"] == 2
         assert show.runner.act == 2 and show.runner.state == "playing"
         server.cancel()
+
+
+AUTO = """# auto
+## Act 0: Open (human)
+Hi.
+## Act 1: One
+[face:audience] Act one now.
+## Act 2: Two
+Act two now.
+## Act 3: Three
+Act three now.
+## Act 4: Demo (live)
+Who wants a story?
+## Act 5: Finale
+Goodnight.
+"""
+
+
+def _record_plays(runner):
+    played, play = [], runner.play
+
+    def rec(n):
+        played.append(n)
+        play(n)
+    runner.play = rec
+    return played
+
+
+async def test_auto_advance_runs_acts_one_to_four_and_stops_before_the_finale(tmp_path, monkeypatch):
+    import show as show_mod
+    monkeypatch.setattr(show_mod, "AUTO_GAP_S", 0.1)
+    async with Show(Script.parse(AUTO), tmp_path, audio_s=0.4) as show:
+        played = _record_plays(show.runner)
+        show.runner.play(1)
+        await asyncio.sleep(3.5)
+        assert played == [1, 2, 3, 4] and show.runner.state == "live"
+        assert show.runner.advanced.startswith("4.")  # the page moves its cursor to act 4
+        await asyncio.sleep(1.0)
+        assert played == [1, 2, 3, 4]  # never into the finale: that's a manual cue
+        show.runner.play(5)
+        await asyncio.sleep(1.2)
+        assert played == [1, 2, 3, 4, 5] and show.runner.state == "done"
+
+
+async def test_a_manual_jump_mid_chain_takes_over_and_the_chain_goes_on_from_there(tmp_path, monkeypatch):
+    import show as show_mod
+    monkeypatch.setattr(show_mod, "AUTO_GAP_S", 0.1)
+    async with Show(Script.parse(AUTO), tmp_path, audio_s=0.4) as show:
+        played = _record_plays(show.runner)
+        show.runner.play(1)
+        await asyncio.sleep(0.2)
+        show.runner.play(3)  # mid act 1: cuts it, act 2 is skipped
+        await asyncio.sleep(2.2)
+        assert played == [1, 3, 4]
+        show.runner.set_auto(False)  # the page's toggle off: one act at a time
+        show.runner.play(2)
+        await asyncio.sleep(1.2)
+        assert played == [1, 3, 4, 2] and show.runner.state == "done"

@@ -3,13 +3,19 @@ BackgroundAudioPlayer track (the web page plays every agent audio track, so they
 
 The LLM writes `[sfx:explosion]` where a sound happens and `[music:spooky]` when the mood changes (`[music:none]`
 stops it). gestures.py's GestureSink fires them as the spoken words reach them, like the gestures, and
-`tags_first` leaves them where they were written (a laugh track belongs after its punchline, not before).
+`tags_first` leaves them where they were written (a rimshot belongs after its punchline, not before).
 
-- One-shots play at the library's level (`SFX_VOLUME`) and overlap freely.
-- `[music:mood]` picks one of that mood's tracks (they take turns, so stories don't repeat). It loops and is ducked: `MUSIC_DUCKED` while Sparky or the listener speaks, `MUSIC_VOLUME` in the
+- One-shots play well under the voice (`SFX_VOLUME`) and are rare: in a story at most one every `SFX_MIN_GAP_S`
+  (12 s); a cue inside the gap is dropped (logged), a gesture's own hit sound included. Scripted show acts skip
+  the budget.
+- `OFFERED_NOT` files stay on disk but are not offered to the LLM, and an `[sfx:x]` for one maps to a near sound or
+  is dropped (harsh, clipped, too long). A gesture's own curated hit sound (stage `sound`, cue kind "hit") still
+  plays one (the kiss ensemble's kiss).
+- `[music:mood]` picks one of that mood's tracks (they take turns, so stories don't repeat). It loops and is ducked: `MUSIC_DUCKED` while the narrator or the listener speaks, `MUSIC_VOLUME` in the
   gaps, gliding between the two. A new track crossfades with the old one.
-- The files in sounds/ are trimmed and loudness-normalised (sfx peak at -16 LUFS momentary, music at -20 LUFS
-  integrated); sounds/LICENSES.md says where each came from.
+- The files in sounds/ are trimmed and loudness-normalised (sfx levelled Nov 7 to max(loudest 200 ms, loudest
+  3 s + 3 LU) = -18 LUFS, true peak <= -2 dBTP; music at -20 LUFS integrated); sounds/LICENSES.md says where each
+  came from.
 """
 from __future__ import annotations
 
@@ -36,7 +42,16 @@ SFX_TAG, MUSIC_TAG = "sfx", "music"
 SOUND_TAGS = (SFX_TAG, MUSIC_TAG)
 MUSIC_OFF = ("none", "off", "stop", "no", "silence", "quiet", "nothing")
 
-SFX_VOLUME = float(os.getenv("SFX_VOLUME", "0.8"))
+SFX_VOLUME = float(os.getenv("SFX_VOLUME", "0.2"))  # -12 dB from Nov 7's 0.8: a hit sits ~6 LU under the narrator
+SFX_MIN_GAP_S = float(os.getenv("SFX_MIN_GAP_S", "12"))  # story budget: at most one sfx per this many seconds
+SFX_BUFFER_MS = int(os.getenv("SFX_BUFFER_MS", "150"))  # the sound track's send queue (LiveKit's default 400 + a
+# 100 ms mix block kept every sfx ~0.5 s behind its cue while music played); what is queued is cued that much early
+SFX_BLOCK_S = 0.02  # mix block
+# Kept on disk, never offered or played (Nov 7 listening proxy, kb/storyteller.md): clipped (gallop), squashed or
+# droning (rifle, spaceship), sub-bass mud on a small speaker (stomp, debris), piercing hiss (magic, kiss), too long and
+# hammy (evil_laugh); laugh_track / laugh_big sound canned (owner, Nov 7: replacements on a review page).
+OFFERED_NOT = {"gallop", "evil_laugh", "rifle", "stomp", "debris", "spaceship", "magic", "kiss", "laugh_track",
+               "laugh_big"}
 MUSIC_VOLUME = float(os.getenv("MUSIC_VOLUME", "0.35"))  # nobody talking
 MUSIC_DUCKED = float(os.getenv("MUSIC_DUCKED", "0.15"))  # under speech: ~17 dB below the voice
 MUSIC_FADE_S = 1.5  # crossfade between tracks, fade-in of the first one
@@ -45,15 +60,15 @@ DUCK_S, UNDUCK_S = 0.25, 1.2  # glide time down to MUSIC_DUCKED and back up
 # Short notes for the prompt, only where the name alone doesn't say it. Every file is listed either way.
 ABOUT = {
     "blaster": "a retro sci-fi blaster", "laser_small": "a small pew", "cannon": "a pirate cannon",
-    "rifle": "a machine-gun burst", "unsheathe": "a sword drawn from its sheath", "clang": "a metal clang",
-    "crash": "something heavy smashes", "debris": "an explosion, then rubble falling", "body_fall": "someone falls, thud",
-    "stomp": "a giant's heavy steps", "flyby": "a spaceship zooms past", "teleport": "beam in or out",
+"unsheathe": "a sword drawn from its sheath", "clang": "a metal clang",
+    "crash": "something heavy smashes", "body_fall": "someone falls, thud",
+    "flyby": "a spaceship zooms past", "teleport": "beam in or out",
     "skid": "tyres screech", "roar": "a dragon roar", "growl": "a monster growl", "chomp": "one big bite",
-    "evil_laugh": "a villain's mwa-ha-ha", "magic": "a sparkle", "spell": "a spell is cast", "poof": "vanish in smoke",
-    "zip": "a quick cartoon zip", "kiss": "a cartoon mwah", "tada": "a tada fanfare", "drum_roll": "before a reveal",
-    "laugh_track": "a sitcom laugh, after a small joke", "laugh_big": "the audience roars, after the best joke",
-    "rimshot": "ba-dum-tss", "crickets": "nobody laughed", "sad_trombone": "wah-wah-waaah, a flop",
-    "record_scratch": "wait, what?", "slide_whistle": "a cartoon fall", "gasp": "the crowd gasps",
+    "spell": "a spell is cast", "poof": "vanish in smoke",
+    "zip": "a quick cartoon zip", "tada": "a tada fanfare", "drum_roll": "before a reveal",
+    "rimshot": "ba-dum-tss, after a punchline", "crickets": "nobody laughed, after a flop",
+    "sad_trombone": "wah-wah-waaah, a flop",
+    "slide_whistle": "a cartoon fall", "gasp": "the crowd gasps",
     "audience_ooh": "the audience goes ooooh", "audience_aww": "the audience goes awww",
 }
 MUSIC_ABOUT = {
@@ -68,34 +83,35 @@ MUSIC_ABOUT = {
 SFX_SYNONYMS = {
     "boom": "explosion", "kaboom": "explosion", "blast": "explosion", "bomb": "explosion", "big_explosion": "explosion_big",
     "huge_explosion": "explosion_big", "small_explosion": "explosion_small", "little_explosion": "explosion_small",
-    "smash": "crash", "bang": "crash", "rubble": "debris", "collapse": "debris", "shatter": "glass", "window": "glass",
+    "smash": "crash", "bang": "crash", "rubble": "crash", "collapse": "crash", "shatter": "glass", "window": "glass",
     "break": "wood_break", "snap": "wood_break", "crack": "wood_break", "metal": "clang", "thud": "body_fall",
     "fall": "body_fall", "faint": "body_fall", "cartoon_fall": "slide_whistle",
     "sword": "sword_clash", "clash": "sword_clash", "swing": "sword_swing", "slash": "sword_swing",
     "draw": "unsheathe", "blade": "unsheathe", "pew": "laser", "zap": "laser", "beam": "laser", "shot": "gunshot",
-    "gun": "gunshot", "pistol": "gunshot", "machine_gun": "rifle", "burst": "rifle", "ricochet": "ricochet",
+    "gun": "gunshot", "pistol": "gunshot", "machine_gun": "gunshot", "burst": "gunshot", "ricochet": "ricochet",
     "arrows": "arrow", "bow": "arrow", "crossbow": "arrow", "thunk": "arrow_hit", "shield": "shield_hit",
     "block": "shield_hit", "hit": "punch", "thwack": "punch", "smack": "punch", "boot": "kick",
-    "spell": "spell", "cast": "spell", "sparkle": "magic", "twinkle": "magic", "wand": "magic", "smoke": "poof",
+    "spell": "spell", "cast": "spell", "sparkle": "spell", "twinkle": "spell", "wand": "spell", "smoke": "poof",
     "vanish": "poof", "disappear": "poof", "warp": "teleport", "beam_up": "teleport", "zoom": "zip", "dash": "zip",
-    "plop": "pop", "bubble": "pop", "mwah": "kiss", "smooch": "kiss", "bump": "bonk", "head": "bonk",
+    "plop": "pop", "bubble": "pop", "bump": "bonk", "head": "bonk",
     "lightning": "thunder", "storm": "thunder", "raining": "rain", "drizzle": "rain", "breeze": "wind",
     "gust": "wind", "flames": "fire", "campfire": "fire", "burn": "fire", "slam": "door_slam", "door": "door_creak",
     "creak": "door_creak", "ding": "bell", "ring": "bell", "chime": "bell", "tick": "clock", "tock": "clock",
     "siren": "alarm", "water": "splash", "swoosh": "whoosh", "swish": "whoosh", "bounce": "boing", "spring": "boing",
     "jump": "boing", "horn": "car_horn", "honk": "car_horn", "beep": "car_horn", "car": "car_engine",
     "engine": "car_engine", "rev": "car_engine", "screech": "skid", "brakes": "skid", "tyres": "skid", "tires": "skid",
-    "rocket": "spaceship", "ufo": "spaceship", "zoom_past": "flyby", "walk": "footsteps", "steps": "footsteps",
-    "giant": "stomp", "horse": "gallop", "flap": "wings", "wing": "wings", "fly": "wings", "bite": "chomp",
+    "rocket": "flyby", "ufo": "flyby", "zoom_past": "flyby", "walk": "footsteps", "steps": "footsteps",
+    "giant": "footsteps", "flap": "wings", "wing": "wings", "fly": "wings", "bite": "chomp",
     "nom": "chomp", "growling": "growl", "monster": "growl", "dragon": "roar", "howl": "wolf", "tweet": "bird",
     "chirp": "bird", "meow": "cat", "bark": "dog", "woof": "dog", "ribbit": "frog", "croak": "frog",
-    "villain": "evil_laugh", "mwahaha": "evil_laugh", "drumroll": "drum_roll", "fanfare": "tada", "clap": "applause",
+    "drumroll": "drum_roll", "fanfare": "tada", "clap": "applause",
     "claps": "applause", "clapping": "applause", "hooray": "cheer", "crowd": "cheer", "cheering": "cheer",
-    "laugh": "laugh_track", "laughs": "laugh_track", "laughter": "laugh_track", "sitcom": "laugh_track",
-    "roaring_laughter": "laugh_big", "big_laugh": "laugh_big", "badumtss": "rimshot", "ba_dum_tss": "rimshot",
+    "badumtss": "rimshot", "ba_dum_tss": "rimshot",
     "drum": "rimshot", "cricket": "crickets", "silence": "crickets", "trombone": "sad_trombone", "fail": "sad_trombone",
     "wah_wah": "sad_trombone", "ooh": "audience_ooh", "oooh": "audience_ooh", "aww": "audience_aww",
-    "awww": "audience_aww", "scratch": "record_scratch", "whistle": "slide_whistle",
+    "awww": "audience_aww", "whistle": "slide_whistle",
+    # the unoffered files, to their nearest offered sound (none for the rest)
+    "rifle": "gunshot", "stomp": "footsteps", "debris": "crash", "spaceship": "flyby", "magic": "spell",
 }
 MUSIC_SYNONYMS = {
     "quest": "adventure", "journey": "adventure", "happy": "adventure", "scary": "spooky", "creepy": "spooky",
@@ -140,17 +156,25 @@ class SoundBook:
     def __init__(self, sfx: dict[str, Path], music: dict[str, list[Path]], groups: dict[str, str] | None = None) -> None:
         self.sfx, self.music = dict(sfx), {m: list(t) for m, t in music.items()}
         self.groups = dict(groups or {})  # sfx name -> group
+        self.hidden: dict[str, Path] = {}  # OFFERED_NOT files: only a gesture's curated hit sound plays them
 
     @classmethod
     def load(cls, root: Path = SOUNDS_DIR) -> SoundBook:
-        sfx, groups, music = {}, {}, {}
+        sfx, groups, music, hidden = {}, {}, {}, {}
         for p in sorted((root / "sfx").glob("*/*.ogg")):
-            sfx[p.stem], groups[p.stem] = p, p.parent.name
+            if p.stem not in OFFERED_NOT:
+                sfx[p.stem], groups[p.stem] = p, p.parent.name
+            else:
+                hidden[p.stem] = p
         for p in sorted((root / "music").glob("*/*.ogg")):
             music.setdefault(p.parent.name, []).append(p)
-        return cls(sfx, music, groups)
+        book = cls(sfx, music, groups)
+        book.hidden = hidden
+        return book
 
     def resolve_sfx(self, name: str) -> str | None:
+        if _norm(name) in OFFERED_NOT:  # never a close spelling of a dropped file ("kiss" -> "kick")
+            return SFX_SYNONYMS.get(_norm(name)) if SFX_SYNONYMS.get(_norm(name)) in self.sfx else None
         return _resolve(name, self.sfx, SFX_SYNONYMS)
 
     def resolve_music(self, name: str) -> str | None:
@@ -189,15 +213,29 @@ class Soundboard:
         self._sfx: set[PlayHandle] = set()
         self._ducked = {"agent": False, "user": False}
         self._next_track: dict[str, int] = {}  # mood -> which of its tracks plays next (they take turns)
+        self.min_gap_s = SFX_MIN_GAP_S
+        self._last_sfx = -1e9  # loop time of the last sfx played under the budget
 
     async def start(self, room: rtc.Room, session: AgentSession) -> None:
         player = BackgroundAudioPlayer()
+        # A short send queue and small mix blocks: with LiveKit's defaults (400 ms queue, 100 ms blocks) the mixer
+        # runs ~0.4 s ahead of real time whenever music plays, so every sfx came out ~0.5 s after its cue.
+        # ponytail: private attributes of livekit-agents 1.8; drop this if a release exposes the sizes.
+        with contextlib.suppress(Exception):
+            old = (player._audio_mixer, player._audio_source)
+            player._audio_source = rtc.AudioSource(48000, 1, queue_size_ms=SFX_BUFFER_MS)
+            player._audio_mixer = rtc.AudioMixer(48000, 1, blocksize=int(48000 * SFX_BLOCK_S), capacity=1,
+                                                 stream_timeout_ms=200)
+            for o in old:
+                await o.aclose()
         try:
             await player.start(room=room)
         except Exception as e:  # noqa: BLE001 - no sound is better than no show
             logger.warning("background audio failed to start (%s): no sfx or music this session", e)
             return
         self.player = player
+        logger.info("sfx volume %.2f, budget one per %.0f s, send queue %d ms", SFX_VOLUME, self.min_gap_s,
+                    SFX_BUFFER_MS)
         session.on("agent_state_changed", lambda ev: self.duck("agent", ev.new_state == "speaking"))
         session.on("user_state_changed", lambda ev: self.duck("user", ev.new_state == "speaking"))
 
@@ -207,23 +245,43 @@ class Soundboard:
     def target(self) -> float:
         return MUSIC_DUCKED if any(self._ducked.values()) else MUSIC_VOLUME
 
-    def cue(self, kind: str, name: str) -> None:
-        if kind == SFX_TAG:
-            self.sfx(name)
+    def backlog(self) -> float:
+        """Seconds of sound already queued ahead of real time on the sound track: an sfx cued now is heard this
+        much later (plus the network), so callers cue it this much early."""
+        source = getattr(self.player, "_audio_source", None)
+        try:
+            return float(source.queued_duration) + SFX_BLOCK_S if source is not None else 0.0
+        except Exception:  # noqa: BLE001
+            return 0.0
+
+    def cue(self, kind: str, name: str, budget: bool = True) -> None:
+        if kind in (SFX_TAG, "hit"):
+            self.sfx(name, budget, curated=kind == "hit")
         elif kind == MUSIC_TAG:
             self.music(name)
 
-    def sfx(self, name: str) -> None:
-        resolved = self.book.resolve_sfx(name)
+    def sfx(self, name: str, budget: bool = True, curated: bool = False) -> bool:
+        """Play a one-shot. Under the budget (stories), one inside `min_gap_s` of the last is dropped. True if it
+        plays. `curated`: a gesture's own hit sound, which may be one not offered to the LLM."""
+        resolved = name if curated and name in self.book.hidden else self.book.resolve_sfx(name)
         if resolved is None:
-            logger.info("dropped [sfx:%s]: unknown sound", name)
-            return
+            logger.info("dropped [sfx:%s]: unknown or unoffered sound", name)
+            return False
+        now = asyncio.get_running_loop().time()
+        if budget and now - self._last_sfx < self.min_gap_s:
+            logger.info("dropped [sfx:%s]: budget (%.1f s since the last, gap %.0f s)", resolved,
+                        now - self._last_sfx, self.min_gap_s)
+            return False
+        if budget:
+            self._last_sfx = now
         logger.info("sfx %s", resolved)
         if self.player is None:
-            return
-        handle = self.player.play(AudioConfig(str(self.book.sfx[resolved]), volume=SFX_VOLUME))
+            return True
+        path = self.book.sfx.get(resolved) or self.book.hidden[resolved]
+        handle = self.player.play(AudioConfig(str(path), volume=SFX_VOLUME))
         self._sfx.add(handle)
         asyncio.ensure_future(self._forget(handle))
+        return True
 
     async def _forget(self, handle: PlayHandle) -> None:
         with contextlib.suppress(Exception):

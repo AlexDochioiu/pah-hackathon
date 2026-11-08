@@ -23,6 +23,7 @@ class Director:
         self.holding = False  # push-to-talk: the listener holds the talk button
         self.freeze_on_speech = True  # live chat (live.LiveTurns): freeze on a real cut-in, not on any VAD speech
         self._timer: asyncio.Task | None = None
+        self.continue_instructions = CONTINUE_INSTRUCTIONS  # StoryClock swaps in a wrap-up near two minutes
         session.on("user_state_changed", self._on_user_state)
         session.on("agent_state_changed", self._on_agent_state)
 
@@ -81,11 +82,11 @@ class Director:
             await asyncio.sleep(self._continue_after_s)
             self.continue_pending = False
             logger.info("next scene")
-            self._session.generate_reply(instructions=CONTINUE_INSTRUCTIONS)
+            self._session.generate_reply(instructions=self.continue_instructions)
             return
         # let the last gesture (often the final bow) finish before relaxing the arms
         await asyncio.sleep(max(self._idle_after_s, self._stage.busy_until - time.monotonic()))
-        self._stage.send("/idle")
+        self._stage.idle()
 
 
 class PushToTalk:

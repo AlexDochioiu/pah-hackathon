@@ -234,6 +234,9 @@ class App:
             act = self.cursor.prev()
         elif cmd == "jump":
             act = self.cursor.jump(int(body.get("act", 0)), last)
+        elif cmd == "at":  # the worker auto-advanced there: move the cursor, play nothing
+            self.cursor.jump(int(body.get("act", 0)), last)
+            return web.json_response({"act": None, "current": self.cursor.act, "sent": False})
         else:
             return web.json_response({"error": f"unknown cmd {cmd!r}"}, status=400)
         sent = act is not None and await self.cue_worker(act)

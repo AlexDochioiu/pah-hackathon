@@ -78,6 +78,13 @@
   #acts { grid-row:1 / 3; grid-column:3; list-style:none; margin:0; padding:0; font-size:18px; line-height:1.6; }
   #acts li.cur { font-weight:800; }
   #keys { grid-column:1 / 4; font-size:17px; color:var(--ink-soft); }
+  /* the "Built with" card (show.md BUILT_n), during act BUILT_WITH_ACT: big enough for the projector */
+  #built { display:none; grid-column:1 / 4; background:var(--cream); border:var(--line); border-radius:var(--r-md);
+           padding:12px 22px; }
+  #built.on { display:block; }
+  #built h2 { margin:0 0 8px; font-size:36px; font-weight:800; }
+  #built ul { margin:0; padding:0; list-style:none; font-size:28px; line-height:1.35; columns:2; column-gap:36px; }
+  #built li { break-inside:avoid; margin-bottom:6px; }
 </style>
 </head>
 <body>
@@ -95,8 +102,10 @@
   <div><div id="act-title">…</div><div id="act-state"></div><div id="act-note"></div></div>
   <ul id="acts"></ul>
   <div id="prompter"></div>
+  <div id="built"><h2>Built with</h2><ul></ul></div>
   <div id="keys">Next: → · PageDown · Space &nbsp;|&nbsp; Back: ← · PageUp &nbsp;|&nbsp; Jump: 1–9 (0: start over)
-    &nbsp;|&nbsp; STOP: Esc. The talk button works in the demo act.</div>
+    &nbsp;|&nbsp; STOP: Esc. The talk button works in the demo act.
+    &nbsp;|&nbsp; <label><input type="checkbox" id="auto" checked> auto-advance</label> (acts 2–4 follow on their own; the finale is always a cue)</div>
 </section>
 <div id="say">Starting…</div>
 <button id="talk" disabled>HOLD TO TALK<small>or hold the space bar</small><span id="level"><i></i></span></button>
@@ -130,8 +139,29 @@ function showAttr(k) { return agent ? agent.attributes["show." + k] : undefined;
 function actOf(n) { return script && script.acts.find((a) => a.act === n); }
 function liveNow() { const a = actOf(current); return !SHOW || (a && a.kind === "live" && showAttr("act") === String(current)); }
 
+// auto-advance (show.py ShowRunner.auto): the worker plays acts 2-4 on its own; the page follows its cursor
+let autoOn = localStorage.getItem("show.auto") !== "0", lastAdvanced = null, autoSent = null;
+$("auto").checked = autoOn;
+$("auto").addEventListener("change", () => { autoOn = $("auto").checked; localStorage.setItem("show.auto", autoOn ? "1" : "0"); render(); });
+function syncAuto() {
+  if (!SHOW || !room || !agent || showAttr("auto") === undefined) return;
+  const want = autoOn ? "1" : "0";
+  if (showAttr("auto") === want) autoSent = null;
+  else if (autoSent !== want) { autoSent = want; rpc("show_auto", JSON.stringify({ auto: autoOn })); }
+  const adv = showAttr("advanced");
+  if (adv && adv !== lastAdvanced) {
+    const first = lastAdvanced === null;
+    lastAdvanced = adv;
+    if (!first || showAttr("act") === adv.split(".")[0]) {  // (a page reload sees the last one: only if it is current)
+      current = Number(adv.split(".")[0]);
+      fetch("/show/cue", { method: "POST", body: JSON.stringify({ cmd: "at", act: current }) }).catch(() => {});
+    }
+  }
+}
+
 function renderShow() {
   if (!SHOW || !script) return;
+  syncAuto();
   const act = actOf(current), next = actOf(current + 1);
   const playingHere = showAttr("act") === String(current);
   const state = !agent ? "storyteller not connected" : !playingHere ? "cued" :
@@ -159,6 +189,13 @@ function renderShow() {
     ul.appendChild(li);
   }
   if (script.warnings.length) $("act-note").textContent += " ⚠ " + script.warnings.join("; ");
+  const built = $("built"), items = script.built_with || [];
+  built.classList.toggle("on", items.length > 0 && current === script.built_with_act);
+  built.querySelector("ul").replaceChildren(...items.map(({ tool, how }) => {
+    const li = document.createElement("li"), b = document.createElement("b");
+    b.textContent = tool; li.append(b, document.createTextNode(how ? ": " + how : ""));
+    return li;
+  }));
 }
 
 function render() {
@@ -198,7 +235,7 @@ function showSegment(id, who, text, final) {
   if (!p) {
     p = document.createElement("p");
     p.innerHTML = '<span class="who"></span><span class="text"></span>';
-    p.querySelector(".who").textContent = who === "you" ? "You:" : (script ? script.host_name : "Lars") + ":";
+    p.querySelector(".who").textContent = who === "you" ? "You:" : (SHOW && script ? script.host_name : "Storyteller") + ":";  // Lars hosts only the show
     if (who === "you") p.classList.add("you");
     segments.set(id, p);
     transcript.appendChild(p);
@@ -215,6 +252,35 @@ function findAgent() {
   agent = room ? [...room.remoteParticipants.values()].find((p) => p.isAgent) || null : null;
   render();
 }
+
+// Playout delay, for the worker's gesture timing (storyteller._listen_playout -> gestures.Timing.audio_s): per agent
+// track the jitter buffer's average delay over the last 2 s, plus half the RTT and the audio output latency.
+const jitter = new Map();  // track sid -> [jitterBufferDelay, jitterBufferEmittedCount]
+let playoutSent = -1e9, outCtx = null;
+async function measurePlayout() {
+  if (!room || !agent) return;
+  const delays = {};
+  let rtt = 0;
+  for (const pub of agent.audioTrackPublications.values()) {
+    const receiver = pub.track && pub.track.receiver;
+    if (!receiver) continue;
+    (await receiver.getStats()).forEach((s) => {
+      if (s.type === "inbound-rtp" && s.kind === "audio") {
+        const [d0, n0] = jitter.get(pub.trackSid) || [0, 0];
+        jitter.set(pub.trackSid, [s.jitterBufferDelay, s.jitterBufferEmittedCount]);
+        if (s.jitterBufferEmittedCount > n0) delays[/background/i.test(pub.trackName) ? "bg" : "voice"] = (s.jitterBufferDelay - d0) / (s.jitterBufferEmittedCount - n0);
+      } else if (s.type === "candidate-pair" && s.nominated && s.currentRoundTripTime) rtt = s.currentRoundTripTime;
+    });
+  }
+  if (delays.voice === undefined) return;
+  outCtx = outCtx || new AudioContext();
+  const extra = rtt / 2 + (outCtx.outputLatency || 0) + (outCtx.baseLatency || 0);
+  const ms = (d) => String(Math.round((d + extra) * 1000));
+  if (Math.abs(ms(delays.voice) - playoutSent) < 15) return;  // only real changes
+  playoutSent = +ms(delays.voice);
+  room.localParticipant.setAttributes({ playout_ms: ms(delays.voice), playout_bg_ms: delays.bg === undefined ? "" : ms(delays.bg) });
+}
+setInterval(() => measurePlayout().catch((e) => console.debug("playout", e)), 2000);
 
 async function connect() {
   connecting = true;

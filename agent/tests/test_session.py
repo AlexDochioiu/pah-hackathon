@@ -17,11 +17,14 @@ class FakeStage:
     def __init__(self):
         self.events, self.busy_until = [], 0.0
 
-    def play(self, arm, gesture, duration):
+    def play(self, arm, gesture, duration, **_):
         self.events.append((time.time(), "play", f"{arm}:{gesture}"))
 
     def freeze(self):
         self.events.append((time.time(), "freeze", ""))
+
+    def idle(self):
+        self.send("/idle")
 
     def send(self, path, body=None):
         self.events.append((time.time(), path, ""))

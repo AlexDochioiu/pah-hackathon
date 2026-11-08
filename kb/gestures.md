@@ -112,7 +112,7 @@ Every gesture is checked on **both** arms at load (the server and bring-up refus
   folds), and duets are refused. `"table": {..., "prop": true}` lets the held toy touch the table too (drive,
   ufo_land). Sim only, like every table-contact move.
 
-## Library (74 gestures, all pass; durations at speed 1; the `about` texts the storyteller sees)
+## Library (75 gestures, all pass; durations at speed 1; the `about` texts the storyteller sees)
 | Gesture | s | About |
 |---|---|---|
 | `against_the_wind` | 4.2 | Mime: lean hard into a storm and struggle forward, pushed back by every gust: wind, a storm, walk against it, a blizzard, struggle. |
@@ -128,7 +128,7 @@ Every gesture is checked on **both** arms at load (the server and bring-up refus
 | `cry` | 4.4 | Hang the head and sob, shoulders shaking, the mouth quivering: cry, weep, sob, sad, heartbroken. |
 | `die_dramatically` | 3.0 | The power cuts: a short gasp, then the whole arm collapses at once onto the table, a small bounce, and lies dead still with the head on the table, mouth slack (play revive or stage after). **Table contact.** Sound: body_fall at 1.53 s. |
 | `dodge` | 2.7 | Weave fast to one side, then the other, then back: dodge, swerve, weave, escape a blow. |
-| `double_take` | 4.4 | Glance at something, look away, then snap back, head jerking up and tilted, jaw dropped: a double take, spot, notice, wait, what?! Sound: record_scratch at 2.34 s. |
+| `double_take` | 4.4 | Glance at something, look away, then snap back, head jerking up and tilted, jaw dropped: a double take, spot, notice, wait, what?! No sound (owner, Nov 7). |
 | `drive` | 5.3 | Holding a toy car, roll it down onto the table and drive it: vroom along over two bumps, turn toward the audience, lift it off: drive, race, park, a road trip. **Table contact.** **Needs the car.** |
 | `duck` | 3.3 | Duck down fast, stay low, then peek up carefully: duck, hide, take cover, an arrow flies over. |
 | `eat` | 4.5 | Bend down and munch, chewing with the head bobbing, then look up satisfied: eat, munch, chew, gobble, taste. |
@@ -157,6 +157,7 @@ Every gesture is checked on **both** arms at load (the server and bring-up refus
 | `pick_lars` | 16.8 | Lars the frog joins: the right arm picks him up from his dock and holds him head up. Ends holding him: then any gesture plays with him. **Right arm only** (lars.py bake). |
 | `place_lars` | 17.3 | Lars goes home: the right arm puts him back on his dock, lets go and returns to the stage pose. **Right arm only** (lars.py bake). |
 | `point_at_audience` | 2.8 | Reach forward and point the prop at the audience. |
+| `present` | 2.5 | Rise up tall, head high, hold, then settle: presenting this actor, here I am, introducing a character. The storyteller opens each casting with it; the code adds it if the LLM forgot (Nov 7). |
 | `pounce` | 3.5 | Crouch low, wiggle, then leap forward with the mouth open and snap it shut on the prey: pounce, leap out, lunge, attack, catch. |
 | `pull` | 3.2 | Bite onto something ahead and tug it back, hard, twice: pull, drag, tug, heave a rope. |
 | `push` | 3.4 | Lower the head and shove forward, twice, straining: push, shove, ram, butt, move a boulder. |

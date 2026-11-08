@@ -40,6 +40,9 @@ class Stage:
     def freeze(self):
         self.sent.append("/freeze")
 
+    def idle(self):
+        self.send("/idle")
+
     def send(self, path, body=None):
         self.sent.append(path)
 
