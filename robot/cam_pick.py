@@ -81,14 +81,17 @@ def main():
         prev = qj
     q_lift = q
     present = None  # the claw horizontal toward the audience (tool z = +x), fingers closing sideways: the pen stands up
-    for dz in (0.0, -0.05, 0.05, -0.10):
+    # where: above the pen first, else in front of the arm's own base (Nov 8: a far-left pen had no pose above it)
+    for px, py, dz in [(xy[0], xy[1], 0.0), (0.30, 0.0, 0.0), (0.25, 0.0, 0.0), (0.30, 0.0, -0.05), (0.35, 0.0, 0.05),
+                       (0.25, 0.0, -0.08), (xy[0], xy[1], -0.08)]:
         for ysign in (1, -1):
             T = np.eye(4)
             T[:3, :3] = np.column_stack([np.cross([0, ysign, 0], [1, 0, 0]), [0, ysign, 0], [1, 0, 0]])
-            T[:3, 3] = [xy[0], xy[1], top + PRESENT_Z + dz]
-            qp = solve(ik, q_lift, T)
-            if qp is not None and (present is None or np.abs(qp - q_lift).sum() < np.abs(present - q_lift).sum()):
-                present = qp
+            T[:3, 3] = [px, py, top + PRESENT_Z + dz]
+            for seed in (q_lift, q_up):
+                qp = solve(ik, seed, T, iters=1500)
+                if qp is not None and (present is None or np.abs(qp - q_lift).sum() < np.abs(present - q_lift).sum()):
+                    present = qp
         if present is not None:
             break
     other = "left" if side == "right" else "right"
