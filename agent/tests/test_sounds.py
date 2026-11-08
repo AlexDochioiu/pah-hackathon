@@ -65,7 +65,7 @@ def test_tags_first_leaves_sound_tags_where_they_are():
         return "".join([t async for t in tags_first(src())])
 
     text = 'Knock knock. [talk:left] "Who is there?" [sfx:rimshot] The dragon sneezes [sfx:explosion] BOOM! [right:roar]'
-    assert asyncio.run(run(text)) == ('Knock knock. [talk:left] "Who is there?" [right:roar] [sfx:rimshot] The dragon '
+    assert asyncio.run(run(text)) == ('Knock knock. [talk:left] "Who is there?" [sfx:rimshot] [right:roar] The dragon '
                                       'sneezes [sfx:explosion] BOOM! ')
 
 

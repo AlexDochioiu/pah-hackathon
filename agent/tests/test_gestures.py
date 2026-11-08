@@ -185,3 +185,88 @@ def test_guest_pick_and_place_tags():
         await asyncio.sleep(0)
     asyncio.run(run())
     assert played == [("right", "pick_lars", 5.0), ("right", "place_lars", 5.2), ("right", "wave", 2.0)]
+
+
+def test_toy_moves_fall_back_without_the_toy():
+    from gestures import TOY_FALLBACK, without_toy
+
+    played = []
+    book = GestureBook({**DEFAULT_GESTURES, "drive": 5.3, "ufo_fly": 5.9, "hop": 4.7, "die_dramatically": 5.8}, {})
+    assert set(TOY_FALLBACK.values()) <= set(DEFAULT_GESTURES) | {"hop", "grab", "stomp", "die_dramatically"}
+    assert without_toy("drive", ["car"]) == "drive" and without_toy("drive", [None]) == "gallop"
+    assert without_toy("ufo_fly", ["ufo", None]) == "hop" and without_toy("wave", [None]) == "wave"
+
+    class Collect:
+        async def capture_text(self, text):
+            pass
+
+        def flush(self):
+            pass
+
+        def on_attached(self):
+            pass
+
+    sink = GestureSink(book, lambda a, g, d: played.append((a, g)), lambda: None, next_in_chain=Collect())
+
+    async def run():
+        await sink.capture_text("[left:race] [props:left car] [left:race] [right:drive] [props:none] [left:fly] ")
+        sink.flush()
+    asyncio.run(run())
+    assert played == [("left", "gallop"), ("props", "left_car"), ("left", "drive"), ("right", "gallop"),
+                      ("props", "none"), ("left", "hop")], played
+
+
+def test_sounds_land_on_the_gesture_hit():
+    """A gesture's sound plays at its start + at / speed + SFX_SYNC_MS; an [sfx] in its sentence moves onto that
+    hit instead of the default; one in a later sentence plays when spoken."""
+    import time
+
+    from gestures import Hit, sfx_lead
+    assert sfx_lead("gunshot") < 0.05 < 0.3 < sfx_lead("sword_swing") < 0.5  # a swish peaks late: it starts early
+
+    async def run():
+        played = []
+        h = Hit([1.6, 2.0], "stomp", played.append, sync_s=0.05)
+        t0 = time.monotonic() + 0.3
+        h.started(t0, speed=0.5)
+        assert h.scheduled == [("stomp", t0 + 3.2 + 0.05), ("stomp", t0 + 4.0 + 0.05)]
+        h.sfx("punch")  # explicit, same sentence: replaces the default, on the first hit
+        assert h.scheduled == [("punch", t0 + 3.25)]
+        quick = Hit([0.01], "gunshot", played.append, sync_s=0.0)
+        quick.started(time.monotonic(), 1.0)
+        await asyncio.sleep(0.05)
+        assert played == ["gunshot"]
+        late = Hit([0.0], None, played.append, sync_s=0.0)
+        late.sfx("crash")  # before the stage answered: waits for the start
+        assert played == ["gunshot"]
+        late.started(None)  # refused: plays now rather than never
+        assert played == ["gunshot", "crash"]
+
+    asyncio.run(run())
+
+    starts, sounds = [], []
+
+    class Collect:
+        async def capture_text(self, text):
+            pass
+
+        def flush(self):
+            pass
+
+    def play(arm, name, secs, on_start=None):
+        starts.append((name, on_start))
+
+    book = GestureBook({**DEFAULT_GESTURES, "shoot": 3.4}, sounds={"shoot": ("gunshot", [1.6])})
+    sink = GestureSink(book, play, lambda: None, next_in_chain=Collect(), on_sound=lambda k, n: sounds.append(n))
+
+    async def run_sink():
+        await sink.capture_text("[left:shoot] Bang! ")
+        await sink.capture_text("[sfx:laser] ")  # right after its sentence: still this gesture's
+        await sink.capture_text("[left:wave] Bye. [sfx:applause] ")  # a later sentence: plays when spoken
+        ((_, on_start), (_, none)) = starts
+        assert none is None  # wave has no hits
+        on_start(time.monotonic() - 10, 1.0)  # its hit is long gone: nothing more plays
+        await asyncio.sleep(0)
+
+    asyncio.run(run_sink())
+    assert sounds == ["applause", "laser"], sounds

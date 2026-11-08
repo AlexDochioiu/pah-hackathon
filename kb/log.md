@@ -118,3 +118,11 @@
   LLM's own pipeline (gestures, sounds, voices), voices pre-synthesized so act 1 cuts in ~0.3 s after the cue. The
   host is now Lars the frog (`HOST_NAME`), the show is "Stage Hands". See [show.md](show.md).
 - 2026-11-07 18:10: real cause of the motor dropouts: the library check ran with the arms open and starved the motor thread. `stage.py --real` checks first, then opens the arms; it came up clean.
+- Round 3b answers (sim only): mic_drop cut; die_dramatically is now a power cut (gasp, `collapse_law` drop at 70 %
+  of the accel limits, 20 cm/s at the table, rebound, dead still; per-stance keys so it lands facing each other too);
+  italian pumps along the reach with the tip up; shoot aims, holds, kicks; chef_kiss and flick bigger with a crisp
+  pop. Gestures and duets get an optional `sound` `{name, at}` from their hit keyframes; the agent plays it on the
+  hit (`at / speed` after the stage's `starts_in`, minus the sound's own lead to its peak, plus `SFX_SYNC_MS`). Grip keys slew-limited so no gesture plays
+  slowed. Mime set: 11 solos (invisible_wall, trapped_in_box, climb_ladder, against_the_wind, lean_on_nothing,
+  juggle, smell_flower, taste_sour, knock, tightrope, elevator) and duets mirror, invisible_ball, hand_through_wall.
+  Sim latency: POST to first commanded sample 12 ms median.

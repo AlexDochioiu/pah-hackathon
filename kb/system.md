@@ -22,7 +22,9 @@ Update this page when a piece is added or a connection changes. Details live on 
    `[music:x]`, and soon `[pick:lars]`). The prompt is `agent/prompt.md`; the gesture list in it comes from the stage server.
 3. `tags_first` moves gesture tags to the start of their sentence; `Storyteller.tts_node` (`agent/voices.py`)
    removes all tags before speech and gives each character's quoted lines its own TTS voice; `GestureSync` fires
-   each tag when playback reaches it (the transcript is time-stamped at every voice switch).
+   each tag when playback reaches it (the transcript is time-stamped at every voice switch). A gesture's default
+   sound (its stage `sound`, or an `[sfx]` from its sentence) is scheduled on its visible hit from the stage's
+   `starts_in` reply.
 4. Fired tags become HTTP calls to the stage server (`agent/gestures.py` `Stage`), through the ssh tunnel.
 5. The stage server (`robot/stage.py`) plays pre-built, pre-checked trajectories from `robot/gestures/` and
    `robot/duets/` on the arms. Anything that fails the checker is refused, not played.
@@ -40,7 +42,8 @@ Update this page when a piece is added or a connection changes. Details live on 
 
 ## Rules that cross pieces
 - A new gesture needs: the trajectory, an `about` line (it goes into the prompt), SYNONYMS verbs in
-  `agent/gestures.py`, and a preview. Without the `about` the LLM won't use it well.
+  `agent/gestures.py`, and a preview. Without the `about` the LLM won't use it well. A sound on it is optional:
+  `sound` with `Seq.hit` times from the trajectory, names from `agent/sounds/sfx/` (check_gestures verifies both).
 - Real arms only through the stage server or `lars.py`, one program at a time (station lock). Safety rules:
   [AGENTS.md](../AGENTS.md), [arm-control.md](arm-control.md).
 - New code on the station needs `./sync.sh` and a stage server restart (it checks every gesture at start, ~20 s).

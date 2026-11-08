@@ -331,18 +331,18 @@ def pchip(t, y, tq):
 
 class Gesture:
     """A gesture file: {"name", "about", "arms": "one"|"both", "hold": bool, "loop": bool,
-    "keys": [{"t": s, "q": [6 rad, left arm, relative to stage], "g": 0..1 (optional, absolute gripper)}]}."""
+    "keys": [{"t": s, "q": [6 rad, left arm, relative to stage], "g": 0..1 (optional, absolute gripper)}],
+    "stance_keys": {stance: keys} (optional: the same move re-solved for that stance, e.g. so a table move still
+    reaches the table with the head turned; "each_other" also serves "each_other_props"),
+    "sound": {"name": an agent/sounds/sfx name or None, "at": s or [s]} (optional: the impact keyframes; the agent
+    plays the sound, or an explicit [sfx] in the same sentence, on them)}."""
 
     def __init__(self, d):
         self.d = d
         self.name, self.about = d["name"], d.get("about", "")
         self.arms, self.hold, self.loop = d.get("arms", "one"), bool(d.get("hold")), bool(d.get("loop"))
-        keys = d["keys"]
-        self.t = np.array([k["t"] for k in keys], float)
-        self.dq = np.array([k["q"] for k in keys], float)
-        gk = [(k["t"], k["g"]) for k in keys if "g" in k]
-        self.gt, self.gv = (np.array([a for a, _ in gk]), np.array([[b] for _, b in gk])) if gk else (None, None)
-        assert self.dq.shape[1] == 6 and np.all(np.diff(self.t) > 0) and self.t[0] == 0, f"{self.name}: bad keys"
+        self.var = {st: self._keys(k) for st, k in d.get("stance_keys", {}).items()}
+        self.t, self.dq, self.gt, self.gv = self._keys(d["keys"])
         self.duration = float(self.t[-1])
         self.max_speed = None  # set by check()
         self.table = d.get("table")  # {"min": m, "impact": m/s, "prop": bool}: the hand may touch the table (TABLE_PARTS)
@@ -358,17 +358,31 @@ class Gesture:
             c = np.asarray(self.carry["capsule"], float)
             PROP_SHAPES[self.carry["name"]] = ([tuple(c[:3] + f * (c[3:] - c[:3])) for f in np.linspace(0, 1, 12)],
                                                float(self.carry["r"]))
+        self.sound = d.get("sound")  # {"name": sfx or None, "at": s or [s]}: its hits, from t = 0 at speed 1
         self.stances = {"audience"}  # stances it passed the checker in (load_library)
+
+    def _keys(self, keys):
+        t = np.array([k["t"] for k in keys], float)
+        dq = np.array([k["q"] for k in keys], float)
+        gk = [(k["t"], k["g"]) for k in keys if "g" in k]
+        gt, gv = (np.array([a for a, _ in gk]), np.array([[b] for _, b in gk])) if gk else (None, None)
+        assert dq.shape[1] == 6 and np.all(np.diff(t) > 0) and t[0] == 0, f"{self.name}: bad keys"
+        return t, dq, gt, gv
+
+    def keys_for(self, stance):
+        """(t, dq, gt, gv) played in that stance: its own re-solved keys, else the plain stance's, else the default."""
+        return self.var.get(stance) or self.var.get(stance.removesuffix("_props")) or (self.t, self.dq, self.gt, self.gv)
 
     def samples(self, side, speed=1.0, hz=HZ, stance="audience"):
         """(joints (N,6), grips (N,) or None) at hz for the given speed, absolute for that side."""
-        n = max(2, int(round(self.duration / speed * hz)) + 1)
-        tq = np.linspace(0, self.duration, n)
+        t, dq, gt, gv = self.keys_for(stance)
+        n = max(2, int(round(t[-1] / speed * hz)) + 1)
+        tq = np.linspace(0, t[-1], n)
         if self.side:  # absolute for self.side; the other arm gets the mirror image (previews only, never played)
-            Q = pchip(self.t, self.dq, tq) * (1 if side == self.side else MIRROR)
+            Q = pchip(t, dq, tq) * (1 if side == self.side else MIRROR)
         else:
-            Q = stage_pose(side, stance) + mirror(pchip(self.t, self.dq, tq), side)
-        G = None if self.gt is None else pchip(self.gt, self.gv, tq)[:, 0]
+            Q = stage_pose(side, stance) + mirror(pchip(t, dq, tq), side)
+        G = None if gt is None else pchip(gt, gv, tq)[:, 0]
         return Q, G
 
 

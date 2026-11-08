@@ -9,14 +9,16 @@ at rest, and on Ctrl-C / SIGTERM folds both arms back to rest before switching t
 Run on the station: cd ~/physical-ai-hacks && .venv/bin/python ~/dial/stage.py [--real]
 
 API (JSON in and out; "arm" is left | right | both, default both):
-  GET  /gestures                       [{"name","duration_s","arms","about","hold","loop","max_speed","uses_gripper"}]
+  GET  /gestures                       [{"name","duration_s","arms","about","hold","loop","max_speed","uses_gripper",
+                                        "stances","sound"}]  sound: {"name": sfx or null, "at": s or [s]} = its hits
+  POST /play answers {"ok","started","speed","starts_in"}: starts_in = s until the gesture's t = 0 (the blend)
   GET  /state                          per arm: what it plays, progress, queue, joints, tracking error, last error;
                                        plus rejected gestures and gesture pairs refused on the two arms at once
   POST /play {"arm","gesture","speed":1.0,"mode":"now"|"queue"}   now = newest wins (default), queue = after current
   POST /freeze {"arm"}                 hold the current pose at once, drop queues
   POST /idle {"arm"}                   go to stage and breathe; gestures return to idle afterwards
   POST /stage {"arm","speed"}          go to the stage pose and hold
-  GET  /duets                          [{"name","kind","props","duration_s","about","max_speed","closest_contact_cm"}]
+  GET  /duets                          [{"name","kind","props","duration_s","about","max_speed","closest_contact_cm","sound"}]
                                        kind "duet": two characters together; "ensemble": both arms as ONE thing
                                        (wings, a storm, a castle gate). Both play through /duet, from either stance.
   POST /duet {"name","speed"}          a two-arm duet (the arms touch); needs both arms free, and while it plays
@@ -31,7 +33,8 @@ API (JSON in and out; "arm" is left | right | both, default both):
                                        mouth and each_other turns deep (eye contact). While any arm holds a prop,
                                        everything is checked with both props, each_other turns shallow (the arms turn
                                        there now), /talk is refused on a holding arm, gestures keep its grip, and
-                                       duets with "props": false (hand contact) are refused
+                                       duets with "props": false (hand contact) are refused. A held toy plays only
+                                       duets whose per-arm "props" ({"left": "ufo", "right": false}) match exactly
   POST /rest {"arm","speed"}           fold back to rest and hold (motors stay on)
   Pick/place gestures (lars.py --bake: pick_lars / place_lars) play through /play on their own arm only, facing the
                                        audience. pick_lars picks Lars up from his dock: the arm then holds him (props
@@ -116,6 +119,7 @@ class Plan:
         self.name, self.Q, self.G, self.sweep, self.gesture, self.loop, self.hold = name, Q, G, sweep, gesture, loop, hold
         self.duet = duet  # duet name: both arms' plans run in lockstep
         self.i, self.err = 0, 0.0
+        self.lead = 0  # ticks from the plan's start to the gesture's own t = 0 (the blend into it)
 
     @property
     def done(self):
@@ -168,9 +172,12 @@ class Stage:
         The blend and pose targets (stage, rest) are folds: they may lean back as far as rest or their start pose."""
         q0, g0 = self.cmd_q[side], self.cmd_g[side]
         G = np.full(len(Q), g0) if G is None else G
-        BQ, BG = show.blend(q0, Q[0], speed, g0, G[0])
-        probs, bsweep = self.ck.check_samples(side, np.vstack([q0[None], BQ, Q[:1]]), fold=True,
-                                              table=self._table(side, gesture))
+        for k in range(4):  # a blend down onto the table (a toy's ready pose) slows until it lands softly enough
+            BQ, BG = show.blend(q0, Q[0], speed / 2 ** k, g0, G[0])
+            probs, bsweep = self.ck.check_samples(side, np.vstack([q0[None], BQ, Q[:1]]), fold=True,
+                                                  table=self._table(side, gesture))
+            if not any("near the table" in p for p in probs):
+                break
         if base_sweep is None:
             p2, base_sweep = self.ck.check_samples(side, Q, fold=gesture is None)
             probs += p2
@@ -178,8 +185,10 @@ class Stage:
             probs += show.motion_problems(Q) + self.ck.lean_problems(side, Q)  # at the requested speed
         if probs:
             raise StageError(f"{side} {name}: " + "; ".join(probs))
-        return Plan(name, np.vstack([q0[None], BQ, Q]), np.concatenate([[g0], BG, G]),
+        plan = Plan(name, np.vstack([q0[None], BQ, Q]), np.concatenate([[g0], BG, G]),
                     show.join(bsweep, base_sweep), gesture, loop, hold)
+        plan.lead = len(BQ) + 1
+        return plan
 
     def _table(self, side, gesture=None):
         """Table allowance of a blend: the gesture it leaves (a dead arm lies on the table) or the one it goes into."""
@@ -330,9 +339,12 @@ class Stage:
                 raise StageError(f"unknown duet {name!r}" + (f" (rejected: {self.duets_rejected[name]})"
                                                               if name in self.duets_rejected else ""))
             self._guard()
-            if not du.props and any(self.props.values()):
+            if isinstance(du.props, dict):  # per-arm props (toys): exactly these in hand
+                if any(self.props[s] != du.props[s] for s in SIDES):
+                    raise StageError(f"duet {name} needs the props {du.props} in hand (now {self.props}); POST /props")
+            elif not du.props and any(self.props.values()):
                 raise StageError(f"duet {name} needs empty hands; POST /props off first")
-            if any(v not in (False, True) for v in self.props.values()):
+            elif any(v not in (False, True) for v in self.props.values()):
                 raise StageError(f"duet {name}: a toy is in hand; " + ("put it back first" if set(self.props.values()) & self.carried
                                                                       else "POST /props off first"))
             busy = [s for s in SIDES if not (self.plan[s].done or self.plan[s].loop) or self.queue[s]]
@@ -343,7 +355,8 @@ class Stage:
             parts = {}
             for s in SIDES:
                 Q, G = smp[s]
-                G = np.full(len(Q), self.cmd_g[s]) if G is None else G
+                if G is None or self.props[s] not in (False, True):  # a toy in hand: keep the grip, never drop it
+                    G = np.full(len(Q), self.cmd_g[s])
                 BQ, BG = show.blend(self.cmd_q[s], Q[0], speed, self.cmd_g[s], G[0])
                 OQ, OG = show.blend(Q[-1], show.stage_pose(s, self._st()), speed, G[-1], G[-1])
                 parts[s] = [(np.vstack([self.cmd_q[s][None], BQ]), np.concatenate([[self.cmd_g[s]], BG])), (Q[1:], G[1:]),
@@ -375,7 +388,9 @@ class Stage:
                                     hold=self.after[s] != "idle", duet=name)
                 self.queue[s].clear(); self.last_error[s] = None
             self.fault = None
-            return {"ok": True, "duet": name, "speed": round(speed, 2), "duration_s": round(len(Q) / show.HZ, 2)}
+            # starts_in: when the duet's own t=0 is reached (after the padded blend-in); its "sound" times are t / speed
+            return {"ok": True, "duet": name, "speed": round(speed, 2), "duration_s": round(len(Q) / show.HZ, 2),
+                    "starts_in": round((len(parts["left"][0][0]) - 1) / show.HZ, 2)}
 
     def talk(self, arm, on=True):
         with self.lock:
@@ -417,7 +432,9 @@ class Stage:
                     self.mouth[s].on = False  # a fist on the table: the mouth shuts
             for s in sides:
                 self.queue[s].clear()
-            return {"ok": True, "started": sides, "speed": round(next(iter(plans.values()))[1], 2)}
+            # starts_in: seconds until the gesture's own t = 0 (after the blend into it), for sounds on its hits
+            return {"ok": True, "started": sides, "speed": round(next(iter(plans.values()))[1], 2),
+                    "starts_in": round(max(p.lead for p, _ in plans.values()) / show.HZ, 3)}
 
     def freeze(self, arm=None):
         with self.lock:
@@ -611,8 +628,9 @@ class Stage:
                 self.last_error[s] = str(e); print("refused:", e, flush=True)
             return
         if p.loop or (self.after[s] == "idle" and not p.hold and p.name != "freeze"):
+            again = p.gesture.name if p.loop and p.gesture is not None else "idle_breathe"  # a loop repeats
             try:
-                self._commit({s: self._gesture_plan(s, "idle_breathe", 1.0)[0]})
+                self._commit({s: self._gesture_plan(s, again, 1.0)[0]})
                 self.plan[s].i = 1
             except StageError as e:
                 self.after[s] = "hold"; self.last_error[s] = f"idle refused: {e}"
@@ -775,11 +793,12 @@ def serve(st, port):
                 self._send(200, [
                     {"name": g.name, "duration_s": round(g.duration, 2), "arms": g.arms, "about": g.about,
                      "hold": g.hold, "loop": g.loop, "max_speed": round(g.max_speed, 2), "uses_gripper": g.gt is not None,
-                     "stances": sorted(g.stances), "side": g.side, "carry": g.carry["name"] if g.carry else None}
+                     "stances": sorted(g.stances), "side": g.side, "carry": g.carry["name"] if g.carry else None,
+                     "sound": g.sound}
                     for g in st.lib.values()])
             elif self.path == "/duets":
                 self._send(200, [{"name": d.name, "kind": d.kind, "props": d.props, "duration_s": round(d.duration, 2), "about": d.about,
-                                  "max_speed": round(d.max_speed, 2), "closest_contact_cm": d.stats["closest_contact_cm"]}
+                                  "max_speed": round(d.max_speed, 2), "closest_contact_cm": d.stats["closest_contact_cm"], "sound": d.sound}
                                  for d in st.duets.values()])
             elif self.path == "/state":
                 self._send(200, st.state())

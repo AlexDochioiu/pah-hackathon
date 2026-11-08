@@ -56,7 +56,7 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 - `[sfx:explosion]`: one sound effect from `agent/sounds/sfx/` (`{{SFX}}` in the prompt). `[music:spooky]`: start
   or crossfade the looping background music from `agent/sounds/music/` (`{{MUSIC}}`); `[music:none]` stops it.
   Sound tags are not moved by `tags_first`: they play where they were written (a laugh track after its punchline,
-  a boom before its "KA-BOOM!"). Names map like gestures (exact, synonym table, difflib 0.7, any word); unknown
+  a boom before its "KA-BOOM!"), except one in the same sentence as a gesture with hits (below). Names map like gestures (exact, synonym table, difflib 0.7, any word); unknown
   ones are dropped and logged. See "Sound effects and music" below.
 - `[next]` at the end of a scene means "carry on". Once it has been spoken in full, the director waits
   `NEXT_SCENE_AFTER_S` (0.8 s) and asks for the next scene; the listener can jump in during that gap.
@@ -65,6 +65,8 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 - Names are normalised (case, spaces, hyphens), then mapped: exact, then a synonym table (`attack`→`slash`,
   `cheer`→`celebrate`…), then fuzzy match (difflib, cutoff 0.6), then any word of a compound (`sword_slash`).
   Unknown gestures and unknown arms are dropped and logged. Any short `[...]` span is removed from speech.
+  Duets map first through `DUET_SYNONYMS` (catch/ball → `invisible_ball`, copy → `mirror`, through_the_wall →
+  `hand_through_wall`); the mime solos have their own verbs (`wall`, `box`, `ladder`, `wind`, `flower`, `sour`...).
 - The gesture list comes from `GET {STAGE_URL}/gestures` at session start; if the stage is down, the built-in
   default list in `gestures.py` is used (same names as `fake_stage.py`).
 
@@ -153,6 +155,15 @@ quote, the span its mouth flaps for) by that character's own voice. A quote with
   between lines, -41 dBFS ducked, an explosion about -17 dBFS.
 - STOP: the page mutes every audio element at once, then `/stop` deletes the room; the session's shutdown callback
   closes the player (cancels every sound and unpublishes the track).
+- Sound on the hit (round 3b): a gesture or duet whose stage entry has `sound` (`{"name", "at"}`, see gestures.md)
+  plays it on its visible hits, not at its start: `Hit` in `gestures.py` schedules each at `t0 + at / speed +
+  SFX_SYNC_MS`, where `t0` is the reply's arrival + its `starts_in` and `speed` the stage's (clamped) speed. An
+  `[sfx:x]` in the same sentence (or right after it, before the next word) replaces the default on the first
+  upcoming hit; one in a later sentence plays when spoken, as before. Refused gesture: a pending `[sfx]` plays at
+  once. A hit already past plays now unless that sound already played. `SFX_SYNC_MS` (agent/.env, default 0)
+  shifts every scheduled sound: the sim measures ~12 ms from POST to the first commanded sample, so tune it by ear
+  on the real arms. Known gap: an interruption does not cancel hit sounds already scheduled (ponytail: they are
+  at most a few seconds out).
 - Comedy mode (prompt "Comedy show"): the opening offers a story or a comedy show; the arms do stand-up (two
   comedians, comedian and heckler, or a double act), `[music:lounge]`, and `[sfx:rimshot]` / `[sfx:laugh_track]`
   after small punchlines, `[sfx:laugh_big]` only after the best joke or two, with crickets or sad_trombone for a

@@ -131,7 +131,7 @@ When the listener wants comedy, the two arms do stand-up. The whole goal is to m
 - Each bit is short: a setup line, a beat, then the punchline, mostly in quoted lines with talk tags. The
   gestures carry the joke: a look at the other arm before the punchline, the mouth for the punchline itself,
   a nod or a shake of the head from the straight man, a bow after a big one. Pick them from the gesture list.
-  The comedy moves: ta_da to present a joke, mic_drop or knee_slap for the punchline, laugh_hard, double_take,
+  The comedy moves: ta_da to present a joke or land the punchline, knee_slap for a big laugh, laugh_hard, double_take,
   facepalm or eye_roll for a groaner, slow_turn after a flop, and the duets elbow_nudge, straight_man and heckle.
 - Right after a punchline, write `[sfx:rimshot]` or `[sfx:laugh_track]`: laugh_track after a small joke,
   `[sfx:laugh_big]` only after the best joke or two of the set. Now and then let a joke flop on purpose, which

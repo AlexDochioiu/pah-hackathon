@@ -13,23 +13,44 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 GESTURES = {
-    "bang_table": 6.9, "beat_chest": 6.9, "bite": 3.2, "block": 4.5, "bow": 2.9, "celebrate": 4.8, "chef_kiss": 3.4,
-    "cower": 3.8, "cry": 4.4, "die_dramatically": 5.8, "dodge": 2.7, "double_take": 4.4, "drive": 15.0, "duck": 3.3,
-    "eat": 4.5, "eye_roll": 4.8, "facepalm": 4.4, "flick": 2.7, "gallop": 3.0, "grab": 2.5, "gripper_clap": 2.4,
-    "hop": 4.7, "idle_breathe": 4.0, "italian": 5.4, "italian_exasperated": 7.2, "knee_slap": 5.9, "laugh": 4.2,
-    "laugh_hard": 6.0, "lift_heavy": 4.6, "look_around": 3.8, "look_at_other": 2.8, "mic_drop": 6.1, "nod": 2.5,
-    "point_at_audience": 2.8, "pounce": 3.5, "pull": 3.2, "push": 3.4, "revive": 5.5, "roar": 3.6, "shake_head":
-    2.9, "shoot": 5.0, "sigh": 4.4, "slash": 3.9, "slow_turn": 6.0, "sneak": 4.6, "sneeze": 3.5, "snore": 6.2,
-    "startle": 3.0, "stir_frantic": 8.2, "stir_lazy": 10.5, "stomp": 4.6, "ta_da": 4.1, "throw": 2.9, "thrust": 3.0,
-    "tremble_excited": 3.1, "ufo_crash": 11.5, "ufo_fly": 13.6, "ufo_hover": 8.0, "ufo_land": 13.0, "wave": 4.7,
-    "pick_lars": 5.0, "place_lars": 5.2,  # the right arm only (the real stage lists "side")
+    "against_the_wind": 4.2, "bang_table": 5.3, "beat_chest": 4.1, "bite": 3.2, "block": 4.5, "bow": 2.9,
+    "celebrate": 4.8, "chef_kiss": 4.2, "climb_ladder": 5.0, "cower": 3.8, "cry": 4.4, "die_dramatically": 3.0,
+    "dodge": 2.7, "double_take": 4.4, "drive": 5.3, "duck": 3.3, "eat": 4.5, "elevator": 4.2, "eye_roll": 4.8,
+    "facepalm": 4.4, "flick": 4.1, "gallop": 3.0, "grab": 2.5, "gripper_clap": 2.4, "hop": 4.7, "idle_breathe": 4.0,
+    "invisible_wall": 5.2, "italian": 5.9, "italian_exasperated": 6.0, "juggle": 4.7, "knee_slap": 5.9, "knock":
+    5.6, "laugh": 4.2, "laugh_hard": 5.7, "lean_on_nothing": 4.9, "lift_heavy": 4.6, "look_around": 3.8,
+    "look_at_other": 2.8, "nod": 2.5, "point_at_audience": 2.8, "pounce": 3.5, "pull": 3.2, "push": 3.4, "rest":
+    3.0, "revive": 5.5, "roar": 3.6, "shake_head": 2.9, "shoot": 3.4, "sigh": 4.4, "slash": 3.9, "slow_turn": 5.9,
+    "smell_flower": 5.2, "sneak": 4.6, "sneeze": 3.5, "snore": 5.8, "stage": 3.0, "startle": 3.0, "stir_frantic":
+    3.6, "stir_lazy": 4.4, "stomp": 4.6, "ta_da": 4.1, "taste_sour": 3.6, "throw": 2.9, "thrust": 3.0, "tightrope":
+    6.0, "trapped_in_box": 5.6, "tremble_excited": 3.1, "ufo_crash": 5.5, "ufo_fly": 5.9, "ufo_hover": 4.0,
+    "ufo_land": 5.7, "wave": 4.7
 }
-DUETS = {"cheers": 8.7, "copycat": 7.3, "cross_swords": 8.4, "elbow_nudge": 7.1, "heckle": 8.1, "place_hat": 8.8,
-         "poke": 8.1, "quick_draw": 8.9, "straight_man": 9.6, "tip_hats": 5.6}
-ENSEMBLES = {"car_ride": 8.6, "cauldron": 10.4, "chomp": 9.3, "clap": 8.2, "drum_roll": 9.0, "explosion": 8.6,
-             "fist_bump": 7.2, "gate_opening": 9.9, "heart": 8.1, "high_five": 8.1, "hug": 7.6, "once_upon_a_time":
-             8.1, "pull_rope": 13.7, "rocket": 5.9, "row_boat": 8.2, "rub_hands": 10.0, "shrug": 4.7, "storm": 4.9,
-             "the_end": 4.0, "this_big": 3.5, "waves": 3.7, "wings": 7.1}
+DUETS = {
+    "car_chase": 8.0, "cheers": 7.5, "copycat": 7.3, "cross_swords": 7.7, "elbow_nudge": 7.5, "hand_through_wall":
+    7.6, "heckle": 7.1, "invisible_ball": 6.0, "mirror": 7.9, "place_hat": 7.2, "poke": 7.4, "quick_draw": 7.7,
+    "straight_man": 7.5, "tip_hats": 5.6, "ufo_abduct": 7.9
+}
+ENSEMBLES = {
+    "car_ride": 7.7, "cauldron": 8.0, "chomp": 7.7, "clap": 8.2, "drum_roll": 7.8, "explosion": 7.4, "fist_bump":
+    7.2, "gate_opening": 7.6, "heart": 8.1, "high_five": 7.4, "hug": 7.6, "once_upon_a_time": 7.3, "pull_rope":
+    13.7, "rocket": 5.9, "row_boat": 7.7, "rub_hands": 10.0, "shrug": 4.7, "storm": 4.9, "the_end": 4.0, "this_big":
+    3.5, "waves": 3.7, "wings": 7.1
+}
+# name -> the stage's "sound" ({"name", "at"}), copied from robot/gestures and robot/duets
+SOUNDS: dict[str, dict] = {
+    "bang_table": {'name': 'punch', 'at': [1.485, 4.122]}, "bite": {'name': 'chomp', 'at': [1.138, 1.947]},
+    "chef_kiss": {'name': None, 'at': 2.22}, "die_dramatically": {'name': None, 'at': 1.528}, "flick": {'name':
+    'whoosh', 'at': 1.55}, "knock": {'name': None, 'at': [0.87, 1.34, 1.81]}, "lean_on_nothing": {'name': None,
+    'at': 2.82}, "roar": {'name': 'roar', 'at': 0.9}, "shoot": {'name': 'gunshot', 'at': 1.6}, "slash": {'name':
+    'whoosh', 'at': 1.95}, "stomp": {'name': None, 'at': [1.554, 3.738]}, "ta_da": {'name': 'tada', 'at': 1.992},
+    "throw": {'name': 'whoosh', 'at': 1.317}, "ufo_crash": {'name': 'crash', 'at': 4.9}, "cheers": {'name': None,
+    'at': 4.36}, "chomp": {'name': 'chomp', 'at': [2.7, 4.01, 5.6]}, "cross_swords": {'name': 'sword_clash', 'at':
+    3.94}, "drum_roll": {'name': 'drum_roll', 'at': 1.38}, "elbow_nudge": {'name': None, 'at': [1.96, 3.48, 5.0]},
+    "explosion": {'name': 'explosion', 'at': 3.1}, "fist_bump": {'name': None, 'at': 3.1}, "high_five": {'name':
+    None, 'at': 3.36}, "place_hat": {'name': None, 'at': 3.54}, "poke": {'name': None, 'at': 4.14}, "quick_draw":
+    {'name': 'gunshot', 'at': 3.64}
+}
 T0 = time.monotonic()
 state = {"mode": "rest", "stance": "audience", "props": {"left": False, "right": False}, "arms": {"left": None, "right": None}}  # arm -> {"gesture", "until"} while playing
 
@@ -53,11 +74,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/gestures":
             arms = ["left", "right", "both"]
-            self._reply(200, [{"name": n, "duration_s": d, "arms": arms, "side": "right" if n.endswith("_lars") else None}
-                              for n, d in GESTURES.items()])
+            self._reply(200, [{"name": n, "duration_s": d, "arms": arms, "side": "right" if n.endswith("_lars") else None,
+                               "sound": SOUNDS.get(n)} for n, d in GESTURES.items()])
         elif self.path == "/duets":
-            self._reply(200, [{"name": n, "kind": "duet", "duration_s": d} for n, d in DUETS.items()]
-                        + [{"name": n, "kind": "ensemble", "duration_s": d} for n, d in ENSEMBLES.items()])
+            self._reply(200, [{"name": n, "kind": "duet", "duration_s": d, "sound": SOUNDS.get(n)} for n, d in DUETS.items()]
+                        + [{"name": n, "kind": "ensemble", "duration_s": d, "sound": SOUNDS.get(n)}
+                           for n, d in ENSEMBLES.items()])
         elif self.path == "/state":
             now = time.monotonic()
             arms = {a: (g["gesture"] if g and g["until"] > now else None) for a, g in state["arms"].items()}
@@ -82,7 +104,7 @@ class Handler(BaseHTTPRequestHandler):
                 state["arms"][a] = {"gesture": gesture, "until": time.monotonic() + duration}
             state["mode"] = "playing"
             log(f"PLAY   {arm:>5}: {gesture} ({duration:.1f}s)")
-            return self._reply(200, {"ok": True, "duration_s": duration})
+            return self._reply(200, {"ok": True, "duration_s": duration, "speed": speed, "starts_in": 0.0})
         if self.path == "/duet":
             name = body.get("name")
             if name not in DUETS | ENSEMBLES:
@@ -92,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
             for a in ("left", "right"):
                 state["arms"][a] = {"gesture": f"duet:{name}", "until": time.monotonic() + duration}
             log(f"DUET   {name} ({duration:.1f}s)")
-            return self._reply(200, {"ok": True, "duet": name})
+            return self._reply(200, {"ok": True, "duet": name, "speed": float(body.get("speed") or 1.0), "starts_in": 0.0})
         if self.path == "/talk":
             log(f"TALK   {body.get('arm', 'both'):>5}: {'on' if body.get('on', True) else 'off'}")
             return self._reply(200, {"ok": True})

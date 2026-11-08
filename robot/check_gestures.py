@@ -49,12 +49,27 @@ dive = fake("dive", (0, [0] * 6), (3, [0, 1.3, -0.6, -0.8, 0, 0])).d
 assert any("off the hand" in p for p in ck.check(show.Gesture(dict(dive, table=dict(min=-0.5, impact=9.0)))))
 ck.set_props(False)
 print("table contact: empty hands only, depth, impact speed and link clearance enforced")
+# Sounds on hits: known sfx names, hit times inside the move, and a table move's hits are its contact frames.
+SFX = {f.stem for f in (show.pathlib.Path(__file__).parent.parent / "agent" / "sounds" / "sfx").glob("*/*.ogg")}
+for g in ok.values():
+    if snd := g.sound:
+        ats = snd["at"] if isinstance(snd["at"], list) else [snd["at"]]
+        assert (snd["name"] is None or snd["name"] in SFX) and all(0 <= a <= g.duration for a in ats), (g.name, snd)
+        if g.table:
+            for st_ in ("audience", "each_other"):
+                Q, _ = g.samples("left", stance=st_)
+                hand = ck.scene.lows("left", Q)[0]
+                for a in ats:
+                    i = int(round(a * show.HZ))
+                    assert hand[max(i - 3, 0):i + 4].min() < hand.min() + 0.01, (g.name, st_, a)  # within 60 ms, 1 cm
+print(f"sounds ok: {sum(1 for g in ok.values() if g.sound)} gestures hit on their contact / peak frames")
 
 # Duets: all pass; an undeclared close pair (< 15 cm) and a fast final approach (> 5 cm/s inside 5 cm) are refused.
 dc = duets.DuetChecker(ck)
 dok, dbad = duets.load_duets(dc)
 assert not dbad and {"cross_swords", "cheers", "poke", "quick_draw", "tip_hats", "copycat", "place_hat", "elbow_nudge",
-                     "straight_man", "heckle"} <= set(dok), \
+                     "straight_man", "heckle", "car_chase", "ufo_abduct", "mirror", "invisible_ball",
+                     "hand_through_wall"} <= set(dok), \
     (sorted(dok), dbad)
 for d in dok.values():
     assert d.max_speed <= 1 and min(d.stats["closest_contact_cm"].values(), default=1) > 0 and d.stats["closest_other_cm"] >= 15, d.stats
@@ -91,7 +106,7 @@ assert call("/stage", {"speed": 1.0})[0] == 200
 st.wait()
 assert np.allclose(st.cmd_q["left"], show.stage_pose("left")) and np.allclose(st.cmd_q["right"], show.stage_pose("right"))
 code, r = call("/play", {"arm": "left", "gesture": "slash", "speed": 1.0})
-assert code == 200, r
+assert code == 200 and 0 <= r["starts_in"] < 2, r  # the blend in, for the agent's hit-timed sounds
 code, r = call("/play", {"arm": "right", "gesture": "block"})
 assert code == 200, r
 time.sleep(0.3)
@@ -113,7 +128,13 @@ assert call("/grip", {"arm": "right", "value": 0.0})[0] == 200
 time.sleep(0.5)
 assert call("/state")[1]["arms"]["right"]["grip"] < 0.05
 assert call("/bogus", {})[0] == 404
-print("HTTP API ok: /gestures /stage /play /freeze /idle /grip, queue, refusals")
+assert call("/play", {"arm": "left", "gesture": "stir_lazy"})[0] == 200  # a loop repeats until the next gesture
+time.sleep(1.5 * ok["stir_lazy"].duration / st.warp)
+assert call("/state")[1]["arms"]["left"]["playing"] == "stir_lazy"
+assert call("/play", {"arm": "left", "gesture": "nod"})[0] == 200
+st.wait()
+assert call("/idle", {})[0] == 200
+print("HTTP API ok: /gestures /stage /play /freeze /idle /grip, queue, refusals, loops")
 
 assert call("/talk", {"arm": "left", "on": True})[0] == 200  # the mouth flaps on top of the idle breathing
 G = []
@@ -154,7 +175,7 @@ g0 = st.cmd_g["left"]
 assert call("/play", {"arm": "left", "gesture": "gripper_clap"})[0] == 200
 assert np.allclose(st.plan["left"].G, g0)  # holding a prop: the gesture keeps the grip
 st.wait()
-hands = [n for n, d in dok.items() if not d.props]
+hands = [n for n, d in dok.items() if d.props is False]
 code, r = call("/duet", {"name": hands[0]})
 assert code == 409 and "empty hands" in r["error"], r
 assert call("/props", {"arm": "left", "on": False})[1]["stance"] == "each_other"
@@ -170,11 +191,21 @@ assert st.ck.scene.props == {"left": "car", "right": True}
 assert call("/play", {"arm": "left", "gesture": "slash"})[0] == 409
 assert call("/play", {"arm": "left", "gesture": "ufo_hover"})[0] == 409
 assert call("/duet", {"name": "cheers"})[0] == 409
-assert call("/play", {"arm": "left", "gesture": "drive"})[0] == 200
+code, r = call("/play", {"arm": "left", "gesture": "drive"})
+assert code == 200, r
+st.wait()
+assert call("/duet", {"name": "car_chase"})[0] == 409  # a toy duet plays only with exactly its props: one car is not two
+assert call("/props", {"arm": "right", "on": True, "kind": "car"})[0] == 200
+st.wait()
+code, r = call("/duet", {"name": "car_chase"})
+assert code == 200 and r["starts_in"] >= 0, r
+st.wait()
+assert call("/duet", {"name": "ufo_abduct"})[0] == 409  # cars in hand, not the UFO
+assert call("/props", {"arm": "right", "on": False})[0] == 200
 st.wait()
 assert call("/props", {"arm": "left", "on": False})[0] == 200 and call("/props", {"arm": "left", "kind": "kite"})[0] == 409
 st.wait()
-print("toys ok: a held car plays drive only, its gestures need it")
+print("toys ok: a held car plays drive only, its gestures need it; toy duets need exactly their toys")
 assert call("/play", {"arm": "left", "gesture": "die_dramatically"})[0] == 200
 assert not st.mouth["left"].on
 st.wait()

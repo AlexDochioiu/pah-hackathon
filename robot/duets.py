@@ -5,10 +5,14 @@ time in make_duets.py), played with the same monotone cubic at 50 Hz as gestures
   {"name", "kind": "duet"|"ensemble", "about", "contact": [{"left": [parts], "right": [parts], "min": m}, ...],
    "table": {"min": m, "impact": m/s} (optional: the hands may touch the table, as for a gesture; show.TABLE_PARTS),
    "props": false (optional: played with empty hands, checked without the prop sticks; hand contact),
+   "props": {"left": "ufo", "right": false} (optional, per arm: false, true (a stick) or a show.PROP_SHAPES toy kind;
+            played only while the held props match exactly; each arm is checked with its own),
    "prop": {"t": s, "to": "right"} (optional: the left hands its prop to the right at t),
+   "sound": {"name": an agent/sounds/sfx name or None, "at": s or [s]} (optional: its hits (clash, shot, touches),
+            from the build, from t = 0 at speed 1; GET /duets shows it, play_duet's "starts_in" says when t = 0 is),
    "keys": [{"t": s, "left": [6 rad], "right": [6 rad], "gl": 0..1, "gr": 0..1 (grips optional)}, ...]}
-Every duet starts and ends with both arms at the stage pose. Parts: "prop" (the 15 cm stick, on whichever arm holds
-it), "fingers" (both finger links), "gripper" (the gripper body), "wrist" (link4 and link5, the wrist links behind the gripper). The arm links (link2,
+Every duet starts and ends with both arms at the stage pose. Parts: "prop" (the 15 cm stick, or the held toy's look
+geoms, on whichever arm holds it), "fingers" (both finger links), "gripper" (the gripper body), "wrist" (link4 and link5, the wrist links behind the gripper). The arm links (link2,
 link3) can never be contact parts: they always keep show.GAP (15 cm).
 
 Safety (DuetChecker.check, on top of show.Checker's per-arm rules: limits, speed/accel, table clearance with the prop,
@@ -54,7 +58,14 @@ class Duet:
         self.contact = [(tuple(c["left"]), tuple(c["right"]), float(c["min"])) for c in d.get("contact", [])]
         self.prop = d.get("prop")
         self.table = d.get("table")  # {"min", "impact"}: the hands may touch the table (show.TABLE_PARTS)
-        self.props = bool(d.get("props", True))  # False: empty hands (the stage refuses it while a prop is held)
+        self.sound = d.get("sound")  # {"name": sfx or None, "at": s or [s]}, at speed 1 from the duet's t = 0
+        props = d.get("props", True)  # False: empty hands (the stage refuses it while a prop is held); True: sticks
+        if isinstance(props, dict):  # per arm, exactly what it must hold: False, True (a stick) or a toy kind
+            assert set(props) == set(SIDES), f"{d['name']}: props needs both arms"
+            props = {s: True if props[s] == "stick" else props[s] for s in SIDES}
+            assert all(v in (False, True) or v in show.PROP_SHAPES for v in props.values()), f"{d['name']}: bad props"
+            assert not d.get("prop"), f"{d['name']}: no handover with per-arm props"
+        self.props = props if isinstance(props, dict) else bool(props)
         assert all(self.q[s].shape[1] == 6 for s in SIDES) and np.all(np.diff(self.t) > 0) and self.t[0] == 0, \
             f"{self.name}: bad keys"
         assert all(set(a) | set(b) <= set(PARTS) for a, b, _ in self.contact), f"{self.name}: unknown contact part"
@@ -75,9 +86,13 @@ class Duet:
             out[s] = (show.pchip(self.t, self.q[s], tq), G)
         return out
 
+    def held(self, side):
+        """What the side holds: False, True (a stick) or a toy kind."""
+        return self.props[side] if isinstance(self.props, dict) else self.props
+
     def holds_prop(self, side, tq):
         """Which frames the side holds a prop (both do, except across a handover)."""
-        if not self.props:
+        if not self.held(side):
             return np.zeros(len(tq), bool)
         if not self.prop:
             return np.ones(len(tq), bool)
@@ -97,11 +112,13 @@ class DuetChecker:
         sc = self.ck.scene
         m = sc.m
         self.part = {}  # side -> {geom id: part name or None}
+        self.kind = {}  # side -> {prop geom id: the PROP_SHAPES kind it shows}
         for s in SIDES:
             p, parts = PRE[s], {}
-            for g in [g for g, _, _ in sc.geoms[s]] + [sc.prop_geom[s]]:  # the stick's capsule (not in sc.geoms)
+            self.kind[s] = {g: k for k, ids in sc.prop_look[s].items() for g in ids}  # stick capsule, car box, ufo
+            for g in [g for g, _, _ in sc.geoms[s]] + list(self.kind[s]):  # the props' geoms (not in sc.geoms)
                 body = m.body(m.geom_bodyid[g]).name
-                parts[g] = ("prop" if m.geom(g).name == p + "prop" else "fingers" if body in (p + "tip_left", p + "tip_right")
+                parts[g] = ("prop" if g in self.kind[s] else "fingers" if body in (p + "tip_left", p + "tip_right")
                             else "gripper" if body == p + "gripper" else "wrist" if body in (p + "link4", p + "link5") else None)
             self.part[s] = parts
         self._ft = np.zeros(6)
@@ -114,7 +131,8 @@ class DuetChecker:
         held = {s: duet.holds_prop(s, tq) for s in SIDES}
         K = len(duet.contact)
         cd, od, op = np.full((len(tq), K), np.inf), np.full(len(tq), np.inf), [None] * len(tq)
-        L, R = list(self.part["left"]), list(self.part["right"])
+        kind = {s: "stick" if duet.held(s) is True else duet.held(s) for s in SIDES}  # only the held prop's geoms count
+        L, R = ([g for g in self.part[s] if self.kind[s].get(g, kind[s]) == kind[s]] for s in SIDES)
         cap = show.GAP + 0.05
         for i in range(len(tq)):
             for s in SIDES:

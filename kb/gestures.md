@@ -43,8 +43,23 @@ sim on the station), then run on the real arms (results at the end).
 - `g` (gripper, 0 closed … 1 open) is optional; without it the gripper keeps its current value. Most round-3
   gestures act with the mouth (`mouth.py` shut 0.05, wide 0.8); while an arm holds a prop the server keeps its grip.
 - `table` (optional): table contact, see the checker.
-- `hold`: stay at the end pose instead of returning to idle (`die_dramatically`, `stage`, `rest`).
-  `loop`: repeat (`idle_breathe`). `arms`: the intended use, `both` = mirrored on both arms.
+- `stance_keys` (optional, round 3b): `{stance: keys}`, the same move re-solved for that stance (`Gesture.keys_for`:
+  the stance's own keys, else the plain stance's for a `_props` one, else `keys`). `make_gestures.table_variant`
+  makes them for the table moves (die, revive, bang_table: a constant j2/j3/j4 correction faded in around the
+  near-table keys, solved so the hand's lowest point matches the audience version), so they touch the table facing
+  each other too; `slow_turn` has its own each_other keys (side-eye the other arm, then the slow turn out); the toys
+  have `each_other_props` keys (IK from that stance).
+- `sound` (optional, round 3b): `{"name": an agent/sounds/sfx name or null, "at": s or [s]}`: the impact keyframes
+  (from the move that makes them, `Seq.hit`: a contact, the kick of a recoil, the fastest point of a swing, the jaw
+  closing), seconds from t = 0 at speed 1. The agent plays `name` on every hit, or an explicit `[sfx:x]` from the same
+  sentence on the first one instead (null name: hits only, for an explicit `[sfx]`). check_gestures verifies the
+  names and that a table move's hits are its contact frames (within 60 ms and 1 cm, both stances).
+- `hold`: stay at the end pose instead of returning to idle (`die_dramatically`, `stage`, `rest`, the toys: they start
+  and end at a ready pose, the stage's blend takes the arm there). `loop`: the stage repeats it until that arm's
+  next gesture (`idle_breathe`, `stir_lazy`, `stir_frantic`; each cycle is whole periods, so a repeat joins
+  smoothly). `arms`: the intended use, `both` = mirrored on both arms.
+- Grip keys are slew-limited to 70 % of `GRIP_VMAX` per key (round 3b): a faster mouth made the stage clamp the
+  whole gesture's speed (bite played at 0.56); now every gesture plays at speed 1.
 - `recorded`: set by `record.py`; `make_gestures.py` keeps such files when it regenerates.
 - Pick/place gestures (`pick_lars`, `place_lars`, made by `lars.py --bake`): `side` = keys are absolute joints for
   that arm only (same in every facing); `near` = the near-table rule instead of `CLEAR`; `carry: {"name", "from",
@@ -66,9 +81,11 @@ Every gesture is checked on **both** arms at load (the server and bring-up refus
   5 cm of `min`; everything else keeps 4 cm. Empty hands only (refused in the `_props` stances). `max_speed` is
   capped at 1 for them. A blend out of a table gesture inherits its allowance (a dead arm can get up). The real arms
   sag 1–2 cm and are position-controlled: aiming 4 mm into the table is a small, held error. Sim only so far;
-  nobody tests them on the real arms while the station is unattended. `die_dramatically` (min 5 mm, 5 cm/s) and
-  `revive` lie a hair above the table; `bang_table` (min −4 mm, 30 cm/s) knocks it. Facing each other (head yawed
-  ~60°) the same deltas stay ~4–8 cm above the table: a knock in the air, a slump that hovers.
+  nobody tests them on the real arms while the station is unattended. `die_dramatically` (min 5 mm, 30 cm/s: the
+  power-cut collapse, `collapse_law`: bang-bang along one joint line at 70 % of the accel limits, ≤ 20 cm/s in the
+  last 5.5 cm) and `revive` (5 cm/s) lie a hair above the table; `bang_table` (min −4 mm, 30 cm/s) knocks it. Facing
+  each other they play their `stance_keys` and touch the table the same (hand lows audience / each_other: die
+  0.85 / 0.88 cm, bang −0.34 / −0.33, revive 0.73 / 0.71).
 - Other arm: alone on one arm, a gesture must stay ≥ 15 cm from the other arm at stage, at rest and idling, or it
   is rejected. Two gestures at once: the swept volumes (all frames, any timing) of left × right are compared for
   every pair; pairs closer than 15 cm are listed as `unsafe_pairs` (currently none; closest is `look_at_other` on
@@ -92,41 +109,47 @@ Every gesture is checked on **both** arms at load (the server and bring-up refus
   folds), and duets are refused. `"table": {..., "prop": true}` lets the held toy touch the table too (drive,
   ufo_land). Sim only, like every table-contact move.
 
-## Library (62 gestures, all pass; durations at speed 1; the `about` texts the storyteller sees)
+## Library (72 gestures, all pass; durations at speed 1; the `about` texts the storyteller sees)
 | Gesture | s | About |
 |---|---|---|
-| `bang_table` | 6.9 | Make a fist and bang it on the table, twice, snarl, and once more, hard: anger, impatience, demanding, a judge's verdict. **Table contact.** |
-| `beat_chest` | 6.9 | Rise tall and pound, left-right-left-right, mouth roaring open: beat the chest like a gorilla, show off, I am the strongest! |
-| `bite` | 3.2 | Rear back with the mouth wide, then lunge and snap it shut, twice, and shake the catch: bite, snap the jaws, chomp, grab with the teeth. |
+| `against_the_wind` | 4.2 | Mime: lean hard into a storm and struggle forward, pushed back by every gust: wind, a storm, walk against it, a blizzard, struggle. |
+| `bang_table` | 5.3 | Make a fist and bang it on the table, snarl, and bang once more, hard: anger, impatience, demanding, a judge's verdict. **Table contact.** Sound: punch at 1.49, 4.12 s. |
+| `beat_chest` | 4.1 | Rise tall and pound, left-right-left-right, mouth roaring open: beat the chest like a gorilla, show off, I am the strongest! |
+| `bite` | 3.2 | Rear back with the mouth wide, then lunge and snap it shut, twice, and shake the catch: bite, snap the jaws, chomp, grab with the teeth. Sound: chomp at 1.14, 1.95 s. |
 | `block` | 4.5 | Raise the prop upright in front like a guard, hold. |
 | `bow` | 2.9 | Lean toward the audience, head down, hold, straighten. |
 | `celebrate` | 4.8 | Thrust the prop up high and wiggle it in triumph. |
-| `chef_kiss` | 3.4 | The chef's kiss: pinched fingertips peck forward, then spring open and fly up: perfect!, delicious!, magnificent, a masterpiece. |
+| `chef_kiss` | 4.2 | The chef's kiss: the pinched fingertips drawn slowly to the lips, savoured, then thrown up and out, bursting open: perfect!, delicious!, magnificent, a masterpiece. Sound: (hits only) at 2.22 s. |
+| `climb_ladder` | 5.0 | Mime: reach up, grab a rung (a dead stop), pull, and again, higher and higher: climb, a ladder, a rope, a tree, go up. |
 | `cower` | 3.8 | Shrink down, turn the head away from the other arm and down, trembling. |
 | `cry` | 4.4 | Hang the head and sob, shoulders shaking, the mouth quivering: cry, weep, sob, sad, heartbroken. |
-| `die_dramatically` | 5.8 | Gasp and shudder, then go limp: drops like a puppet with its strings cut, a small bounce, and lies dead with the head on the table, mouth slack (play revive or stage after). **Table contact.** |
+| `die_dramatically` | 3.0 | The power cuts: a short gasp, then the whole arm collapses at once onto the table, a small bounce, and lies dead still with the head on the table, mouth slack (play revive or stage after). **Table contact.** Sound: (hits only) at 1.53 s. |
 | `dodge` | 2.7 | Weave fast to one side, then the other, then back: dodge, swerve, weave, escape a blow. |
 | `double_take` | 4.4 | Glance at something, look away, then snap back, head jerking up and tilted, jaw dropped: a double take, spot, notice, wait, what?! |
-| `drive` | 15.0 | Holding a toy car, put it down on the table and drive it: vroom along over two bumps, turn toward the audience, brake, lift it off: drive, race, park, a road trip. **Table contact.** **Needs the car.** |
+| `drive` | 5.3 | Holding a toy car, roll it down onto the table and drive it: vroom along over two bumps, turn toward the audience, lift it off: drive, race, park, a road trip. **Table contact.** **Needs the car.** |
 | `duck` | 3.3 | Duck down fast, stay low, then peek up carefully: duck, hide, take cover, an arrow flies over. |
 | `eat` | 4.5 | Bend down and munch, chewing with the head bobbing, then look up satisfied: eat, munch, chew, gobble, taste. |
+| `elevator` | 4.2 | Mime: sink straight down, head level, as if riding an elevator (or stairs) behind a counter, then come back up: go down, an elevator, downstairs, sink, hide behind something. |
 | `eye_roll` | 4.8 | The head rolls up and around and away, then sags: an eye roll, ugh, so boring, whatever, really?, roll eyes. |
 | `facepalm` | 4.4 | The head drops into the hand and turns away, shaking slowly: facepalm, groan, a terrible pun, oh no, embarrassed, I can't believe it. |
-| `flick` | 2.7 | A dismissive flick: the hand flips up and away, fingers springing open, head turned aside: bah!, whatever, go away, never mind. |
+| `flick` | 4.1 | A dismissive flick: nose in the air, the head turned away, then the hand flicks out and away, fingers springing open: bah!, whatever, go away, never mind. Sound: whoosh at 1.55 s. |
 | `gallop` | 3.0 | Bounce up and down like riding a horse. |
 | `grab` | 2.5 | Reach out with the mouth open, snatch, and pull it back: grab, take, snatch, steal, catch. |
 | `gripper_clap` | 2.4 | Snap the gripper open and shut three times (drops a held prop!). |
 | `hop` | 4.7 | Bounce up and down three times like hopping: hop, jump, skip, a bunny, a frog. |
 | `idle_breathe` | 4.0 | Slow breathing sway; loops while idle. |
-| `italian` | 5.4 | The pinched-fingers hand: fingertips together pointing up, pumping up and down with a head tilt: "what do you want?!", arguing, insisting, explaining, complaining. |
-| `italian_exasperated` | 7.2 | Both hands pinched and pumping big, then thrown open to the sky and dropped: "mamma mia!", exasperated, fed up, giving up. |
+| `invisible_wall` | 5.2 | Mime: the flat hand meets an invisible wall and stops dead, slides along it, then slips past its edge: a wall, a window, a barrier, stuck, feel the way. |
+| `italian` | 5.9 | The pinched-fingers hand: fingertips together pointing up, jabbing hard toward the listener and back, again and again: "what do you want?!", arguing, insisting, explaining, complaining. |
+| `italian_exasperated` | 6.0 | Both hands pinched and pumping big, then thrown open to the sky and dropped: "mamma mia!", exasperated, fed up, giving up. |
+| `juggle` | 4.7 | Mime: juggle three invisible balls, the head following them up and across, the hand flicking each one: juggle, a circus, show off a trick. |
 | `knee_slap` | 5.9 | Laugh, head thrown back, and slap the knee, three times: knee slap, that's hilarious, the joke lands, roaring with laughter. |
+| `knock` | 5.6 | Mime: knock-knock-knock on an invisible door, wait, listen, then grab the handle and pull it open: knock, a door, open the door, visit, who's there? Sound: (hits only) at 0.87, 1.34, 1.81 s. |
 | `laugh` | 4.2 | Throw the head back and laugh, ha-ha-ha, bouncing, then double over: laugh, giggle, find it funny, chuckle. |
-| `laugh_hard` | 6.0 | Crack up: head back, bouncing, the mouth flapping with laughter, then doubled over, still laughing: laugh hard, crack up, roar with laughter, can't stop laughing, LOL. |
+| `laugh_hard` | 5.7 | Crack up: head back, bouncing, the mouth flapping with laughter, then doubled over, still laughing: laugh hard, crack up, roar with laughter, can't stop laughing, LOL. |
+| `lean_on_nothing` | 4.9 | Mime: lean casually on an invisible post, relaxed, then it gives way and it drops, catching itself: lean, relax, slip, oops. Sound: (hits only) at 2.82 s. |
 | `lift_heavy` | 4.6 | Bend down, grip something with the mouth and heave it up, slowly, trembling with the strain: lift, carry something heavy, pick up, struggle. |
 | `look_around` | 3.8 | Scan slowly to one side, then the other, searching: look around, search, where is it?, keep watch. |
 | `look_at_other` | 2.8 | Turn the head toward the other arm, tilt, hold. |
-| `mic_drop` | 6.1 | Hold the mic up high, let it drop (the mouth springs open), look down at it, then a smug head tilt: mic drop, nailed it, the punchline, boom. |
 | `nod` | 2.5 | Nod twice (yes). |
 | `point_at_audience` | 2.8 | Reach forward and point the prop at the audience. |
 | `pounce` | 3.5 | Crouch low, wiggle, then leap forward with the mouth open and snap it shut on the prey: pounce, leap out, lunge, attack, catch. |
@@ -134,28 +157,32 @@ Every gesture is checked on **both** arms at load (the server and bring-up refus
 | `push` | 3.4 | Lower the head and shove forward, twice, straining: push, shove, ram, butt, move a boulder. |
 | `rest` | 3.0 | Fold back down to rest. |
 | `revive` | 5.5 | Back from the dead: a twitch, another, the head lifts groggily, shakes it off and stands ready again (after die_dramatically). **Table contact.** |
-| `roar` | 3.6 | Rise up tall, lunge at the audience and shake the head. |
+| `roar` | 3.6 | Rise up tall, lunge at the audience and shake the head. Sound: roar at 0.90 s. |
 | `shake_head` | 2.9 | Shake the head side to side (no). |
-| `shoot` | 5.0 | Aim the gripper like a gun barrel and fire twice, each shot kicking the head up in recoil, then blow the smoke away: shoot, fire, blast, zap, a laser. |
+| `shoot` | 3.4 | Aim the gripper like a gun barrel, the arm out straight, sight along it, hold still, fire: the recoil kicks the barrel up: shoot, fire, blast, zap, a laser. Sound: gunshot at 1.60 s. |
 | `sigh` | 4.4 | Breathe in, rising, then let it all out and sag, head drooping: sigh, tired, bored, sad, oh well. |
-| `slash` | 3.9 | Wind up high and outside, chop down and across toward the front. |
-| `slow_turn` | 6.0 | Freeze, then turn the head slowly to the audience and stare, deadpan, saying nothing: after a bad joke, deadpan, awkward silence, really?, the slow turn. |
+| `slash` | 3.9 | Wind up high and outside, chop down and across toward the front. Sound: whoosh at 1.95 s. |
+| `slow_turn` | 5.9 | Freeze, side-eye the other one, then turn the head slowly to the audience and stare, deadpan, saying nothing: after a bad joke, deadpan, awkward silence, really?, the slow turn. |
+| `smell_flower` | 5.2 | Mime: pluck a flower, sniff it, sniff again, and melt into a blissful head tilt: smell, a flower, a perfume, love, spring. |
 | `sneak` | 4.6 | Crouch low and creep across, head bobbing. |
 | `sneeze` | 3.5 | Ah... ah... head tilting back twice, mouth open, then ACHOO, a sharp snap forward: sneeze, cough, an allergy, a cold. |
-| `snore` | 6.2 | Nod off, head drooping to one side, and snore, the mouth opening on every slow breath: sleep, snore, doze, yawn, bored to sleep. |
+| `snore` | 5.8 | Nod off, head drooping to one side, and snore, the mouth opening on every slow breath: sleep, snore, doze, yawn, bored to sleep. |
 | `stage` | 3.0 | Rise from rest into the stage pose. |
 | `startle` | 3.0 | Jump up and back in fright, mouth wide, trembling, then calm down: a scare, startle, jump back, gasp, eek! |
-| `stir_frantic` | 8.2 | Stir a pot fast and frantically, head bobbing: whisking, cooking in a hurry, mixing a potion before it boils over. |
-| `stir_lazy` | 10.5 | Hold a spoon down in a pot and stir slow, lazy circles, then look up content: cooking, brewing a potion, mixing, waiting. |
-| `stomp` | 4.6 | Lift high and stamp down hard, twice: stomp, march, land heavily, stamp in anger, a giant's step. |
-| `ta_da` | 4.1 | Gather in, then swing up and out to the audience with a flourish, mouth wide: ta-da, presenting, voila, here it is, a big reveal, a magic trick. |
-| `throw` | 2.9 | Wind back and up, then fling forward, letting go at the top: throw, toss, hurl, fling, cast a spell. |
+| `stir_frantic` | 3.6 | Stir a pot fast and frantically, head bobbing, on and on until the next move: whisking, cooking in a hurry, mixing a potion before it boils over. **Loops** until the next move. |
+| `stir_lazy` | 4.4 | Hold a spoon down in a pot and stir slow, lazy circles, on and on until the next move: cooking, brewing a potion, mixing, waiting. **Loops** until the next move. |
+| `stomp` | 4.6 | Lift high and stamp down hard, twice: stomp, march, land heavily, stamp in anger, a giant's step. Sound: (hits only) at 1.55, 3.74 s. |
+| `ta_da` | 4.1 | Gather in, then swing up and out to the audience with a flourish, mouth wide: ta-da, presenting, voila, here it is, a big reveal, a magic trick. Sound: tada at 1.99 s. |
+| `taste_sour` | 3.6 | Mime: take a sip, freeze, then jerk back, the mouth puckered shut, shuddering: sour, a lemon, yuck, disgusting, bitter medicine. |
+| `throw` | 2.9 | Wind back and up, then fling forward, letting go at the top: throw, toss, hurl, fling, cast a spell. Sound: whoosh at 1.32 s. |
 | `thrust` | 3.0 | Raise the prop, then stab straight forward. |
+| `tightrope` | 6.0 | Mime: balance on a tightrope, swaying wider and wider, a slip, and it saves itself: balance, a tightrope, wobble, careful steps, a circus. |
+| `trapped_in_box` | 5.6 | Mime: the flat hand finds a wall in front, then one at the side, then the ceiling, each a dead stop; then panic, patting all around: trapped, stuck, locked in, a box, a cage. |
 | `tremble_excited` | 3.1 | Pop up and quiver all over with excitement, mouth chattering: so excited!, can't wait, oh oh oh!, yes yes yes. |
-| `ufo_crash` | 11.5 | The UFO loses control: it wobbles harder and harder, spirals down and crashes, tilted (stopping well above the table): crash, shot down, spin out, out of fuel. **Needs the ufo.** |
-| `ufo_fly` | 13.6 | Holding the UFO, fly it in a wobbly figure-eight, rocking and spinning: fly, zoom, an alien ship, invade, cruise through space. **Needs the ufo.** |
-| `ufo_hover` | 8.0 | The UFO stops in mid-air and hovers, pulsing up and down and slowly turning: beam up, abduct, scan, hover, the aliens watch. **Needs the ufo.** |
-| `ufo_land` | 13.0 | The UFO comes down slowly, wobbling, lands on the table, sits a moment, then takes off again: land, arrive, touch down, visit Earth. **Table contact.** **Needs the ufo.** |
+| `ufo_crash` | 5.5 | The UFO loses control: it wobbles harder and harder, spirals down and crashes, tilted (stopping well above the table), and lies there: crash, shot down, spin out, out of fuel. **Needs the ufo.** Sound: crash at 4.90 s. |
+| `ufo_fly` | 5.9 | Holding the UFO, fly it in a wobbly figure-eight, rocking and spinning: fly, zoom, an alien ship, invade, cruise through space. **Needs the ufo.** |
+| `ufo_hover` | 4.0 | The UFO stops in mid-air and hovers, pulsing up and down and slowly turning: beam up, abduct, scan, hover, the aliens watch. **Needs the ufo.** |
+| `ufo_land` | 5.7 | The UFO comes down slowly, wobbling, lands on the table, sits a moment, then takes off again: land, arrive, touch down, visit Earth. **Table contact.** **Needs the ufo.** |
 | `wave` | 4.7 | Raise the head and wave it side to side, three times. |
 
 Lean-back rework (Nov 7, pose-only; same requested move times, stretched where the joint deltas grew): minimum COM x per arm before → after, cm (limit −0.7;
@@ -175,12 +202,16 @@ cd ~/physical-ai-hacks && .venv/bin/python ~/dial/stage.py --real     # real arm
 python robot/stage.py --backend kin                                   # anywhere: kinematic stand-in
 ```
 - Listens on `127.0.0.1:8770` (`--port`). JSON in/out; `arm` = `left|right|both` (default both).
-- `GET /gestures` → list of `{name, duration_s, arms, about, hold, loop, max_speed, uses_gripper}` (the agent
-  reads `name` and `duration_s`).
+- `GET /gestures` → list of `{name, duration_s, arms, about, hold, loop, max_speed, uses_gripper, stances, sound}`
+  (the agent reads `name`, `duration_s`, `about` and `sound`).
 - `GET /state` → per arm `playing`, `pose` (last plan), `progress`, `queue`, `after` (idle|hold), `grip`, `joints`,
   `measured`, `tracking_error`, `last_error`; plus `backend`, `fault`, `rejected`, `unsafe_pairs`.
 - `POST /play {"arm","gesture","speed":1,"mode":"now"|"queue"}`: `now` (default) = newest wins, blends from the
-  current command; `queue` = after the current gesture (starts at once if idle/holding).
+  current command; `queue` = after the current gesture (starts at once if idle/holding). Answers `speed` (clamped
+  to `max_speed`) and `starts_in`: seconds until the gesture's own t = 0, after the blend into it (`/duet` too). The
+  agent times hit sounds from them. Sim latency (kin backend, Mac, Nov 7): POST round trip 5 ms median (8 max),
+  POST to the first commanded sample 12 ms median (22 max, one 50 Hz tick). The real arm's tracking lag and the room
+  audio come on top: `SFX_SYNC_MS` in agent/.env, tuned by ear on the real arms.
 - `POST /freeze` brakes to a stop in 0.15 s and holds; clears queues and idle mode (interrupting the narrator).
 - `POST /idle` blends to stage and loops `idle_breathe`; gestures then return to idle unless `hold`.
 - `POST /stage {"speed"}`, `POST /rest {"speed"}` plan a smooth move from wherever the arm is (speed ≤ 1).
@@ -232,7 +263,10 @@ idle); a gesture failing one is refused only there (`look_at_other` in `each_oth
 Two-arm moves where the arms come close and touch, with synchronized keyframes for both arms (absolute joints,
 solved by IK at build time). They start and end at the audience stage pose; the server blends in from wherever the
 arms are and back to the current stance pose. Format: `{"name","about","contact":[{"left":[parts],"right":[parts],
-"min":m}],"keys":[{"t","left":[6],"right":[6],"gl","gr"}]}`; parts are `prop`, `fingers`, `gripper`, `wrist`
+"min":m}],"props","sound","keys":[{"t","left":[6],"right":[6],"gl","gr"}]}`; `"props"` is `true` (sticks or
+empty hands, the default), `false` (empty hands) or per arm, e.g. `{"left":"ufo","right":false}` (a
+`show.PROP_SHAPES` toy kind, `true` or `false`: played only while exactly those are held, each arm checked with its
+own); `"sound"` is `{"name": sfx or null, "at": s or [s]}` from the build's hit frames; parts are `prop`, `fingers`, `gripper`, `wrist`
 (link4+link5). `DuetChecker` checks every 50 Hz frame with both arms at the same instant, with exact
 geom-to-geom distances (`mj_geomDistance`, meshes as convex hulls):
 - each arm passes the usual per-arm rules (limits, speed/accel, table clearance with the prop, lean-back);

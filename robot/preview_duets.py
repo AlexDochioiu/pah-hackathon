@@ -22,8 +22,6 @@ def main(names):
     m, d = sc.m, sc.d
     m.vis.global_.offwidth, m.vis.global_.offheight = W, H
     big, small = mujoco.Renderer(m, H, W), mujoco.Renderer(m, IH, IW)
-    props = {s: m.geom(duets.PRE[s] + "prop").id for s in show.SIDES}
-    rgba = {s: m.geom_rgba[g].copy() for s, g in props.items()}
     OUT.mkdir(exist_ok=True)
     for f in sorted(duets.DUET_DIR.glob("*.json")):
         du = duets.load(f)
@@ -41,12 +39,12 @@ def main(names):
         look = (d.site_xpos[sc.site["left"]] + d.site_xpos[sc.site["right"]]) / 2
         cam = mujoco.MjvCamera(); cam.lookat[:] = look; cam.distance = 0.42; cam.azimuth = 180; cam.elevation = -12
         frames = []
-        step = int(show.HZ / FPS)
+        step = max(int(show.HZ / FPS), int(np.ceil(len(tq) / 90)))  # long ones: fewer fps, GIFs stay < ~1.5 MB
         for i in list(range(0, len(tq), step)) + [len(tq) - 1] * 5:
             for s in show.SIDES:
                 Q, G = smp[s]
                 sc.set(s, Q[i], duets.finger_grip(None if G is None else G[i], held[s][i]))
-                m.geom_rgba[props[s]] = rgba[s] if held[s][i] else [0, 0, 0, 0]
+                sc.show_prop(s, du.held(s) if held[s][i] else False)  # the arm's own stick or toy
             mujoco.mj_forward(m, d)
             big.update_scene(d, camera="audience")
             im = Image.fromarray(big.render())
@@ -69,9 +67,9 @@ def main(names):
             dr.text((W - 44, 4), f"{tq[i]:4.1f} s", fill=(200, 200, 200))
             frames.append(im.quantize(64, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE))
         for s in show.SIDES:
-            m.geom_rgba[props[s]] = rgba[s]
+            sc.show_prop(s, True)
         path = OUT / f"{du.kind}_{du.name}.gif"
-        frames[0].save(path, save_all=True, append_images=frames[1:], duration=int(1000 / FPS), loop=0, optimize=True)
+        frames[0].save(path, save_all=True, append_images=frames[1:], duration=int(1000 * step / show.HZ), loop=0, optimize=True)
         print(f"{path}  {len(frames)} frames  {path.stat().st_size // 1024} KB")
 
 
