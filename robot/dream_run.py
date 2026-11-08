@@ -249,6 +249,8 @@ def main():
     ap.add_argument("--raw", action="store_true", help="the stage plays Dream-1's motion unchecked (retimed only)")
     ap.add_argument("--speed", type=float, default=1.0, help="x the stage's 0.3 rad/s cap (0.1..4)")
     ap.add_argument("--exec", type=int, default=0, help="play only each chunk's first N steps (dreamcli ~16); 0: all")
+    ap.add_argument("--cam", action="store_true", help="no Dream Labs: the station finds the green pen in a fresh overhead "
+                    "snap and plans the pick with our IK (robot/cam_pick.py), played like Dream-1's chunks")
     ap.add_argument("--replay", help="a JSON list of chunk events (dream_preview.py output) instead of the station")
     ap.add_argument("--fake", action="store_true", help="the station preview makes up a reach (no Dream call)")
     ap.add_argument("--no-fallback", action="store_true")
@@ -342,6 +344,16 @@ def run(a, stage, s, end):
     missed = None
     cmd = {side: s["arms"][side]["joints"] for side in ARMS}
     try:
+        if a.cam:  # the pen's spot changes between runs: snap and plan now (owner, Nov 8)
+            q = shlex.quote(json.dumps({x: list(s["arms"][x]["joints"])[:6] for x in ARMS}))
+            r = subprocess.run(["ssh", "-o", "ControlPath=none", "-o", "BatchMode=yes", a.station,
+                                "cd ~/physical-ai-hacks && .venv/bin/python ~/dial/snap.py > /dev/null && "
+                                f".venv/bin/python ~/dial/cam_pick.py --q {q}"], capture_output=True, text=True, timeout=60)
+            out(event="info", cam=r.stderr.strip()[-200:])
+            if r.returncode:
+                raise RuntimeError(f"cam_pick: {r.stderr.strip()[-160:]}")
+            a.replay = "/tmp/pah_cam_pick.json"
+            pathlib.Path(a.replay).write_text(r.stdout)
         pre = Preview(a)
         pre.ready()
         pre.ask(cmd)
