@@ -28,6 +28,16 @@ once (the host's quip and a sad trombone), and the arm plays a short "ah, damn i
 normal checked /play): right away when its hand is empty and the stage takes it from where the arm is, else after
 the way back. Then our own pick, as above. While Lars is held the stage keeps the grip, gestures too.
 
+--handover (act 2's wand, Nov 8): Dream-1 picks up the green pen through our checker (whole chunks, no --raw, no
+Lars prop: the stage never thinks an arm holds the pen), then our own IK takes over from where Dream-1 left the arm:
+present, wrist roll, the handover to the other arm and the other arm laying it down (robot/dream_hand.py on the
+station, cam_pick.py's handover(); played raw like --cam's). A fresh overhead snap before Dream-1 starts gives the
+pen's spot, so the claw's grasp says where the pen sits in it. A grip is judged by the measured gripper: the fingers
+stopped GRIP_BLOCK short of the command (the pen is in there); under EMPTY_GRIP: closed on nothing; open again, or
+lifted without that stop: a miss. A lift is RISE_MM. A miss, a refusal or a Dream error
+all end in the oops line (kinds as below, plus refused), the way back and the facepalm. No handover plan: the same
+arm rolls it and puts it back the way Dream-1 came (checked).
+
 --patter S: while nothing has been said for S s (the preview opening, still chunks, a slow chunk playing), a filler
 line goes out (PATTER), so a show never has dead air. --hold: the fallback plays pick_lars only, so it ends holding
 Lars like a Dream-1 pick (the caller puts him back with place_lars).
@@ -35,7 +45,7 @@ Lars like a Dream-1 pick (the caller puts him back with place_lars).
 Output: JSON lines on stdout, for agent/gestures.py ([dream:pick_lars]):
     {"event": "say", "text": "..."}      a line for the host, the "let me ask Dream-1... let's see" beat
     {"event": "oops", "kind", "reaction", "sfx", "text"}   Dream-1 missed (kind: empty_grip, dropped, not_lifted,
-                                         timeout); text is a default quip (the show picks its own from DREAM_OOPS)
+                                         timeout, no_plan; --handover: refused too); text is a default quip (the show picks its own from DREAM_OOPS)
     {"event": "info", ...}               what happened, for the log
     {"event": "done", "ok", "held", "dream_chunks", "fallback", "reason", "missed", "latency_s"}
 """
@@ -63,11 +73,14 @@ MAX_CHUNKS = 60
 ARMS = ("left", "right")
 EMPTY_GRIP = 0.07   # measured gripper (0 closed .. 1 open) below this while "holding": it closed on nothing. Lars
                     # stops the fingers at 0.09-0.3 (the real picks, Nov 7). ponytail: knob, check on the real arms
+GRIP_BLOCK = 0.015  # --handover: the measured gripper this far above the command: the fingers stopped on something
+                    # (the pen, ~1 cm, stops them near 0.1 of the 95 mm stroke). ponytail: knob, check on the real arms
 REACTION = "facepalm"   # the arm's "ah, damn it" after a miss: an existing gesture (head into the hand, shaking)
 OOPS_SFX = "sad_trombone"   # agent/sounds/sfx/crowd, CC0
 OOPS_LINES = {"empty_grip": "It grabbed thin air. Very magical.", "dropped": "And it dropped my wand. Typical.",
               "not_lifted": "Close. The wand stays put. It's shy.", "timeout": "Dream-1 ran out of time. Brave try.",
-              "no_plan": "Dream-1 took one look at the table and called in sick. Honestly? Relatable."}
+              "no_plan": "Dream-1 took one look at the table and called in sick. Honestly? Relatable.",
+              "refused": "Dream-1 had an idea. My safety code had a better one: no."}
 PATTER = ["Every move you see is Dream-1's own idea, worked out from the cameras, right now.",
           "It's looking for the green pen. Green, like me. Easy mistake.",
           "Robots move slowly when they're thinking. So do I, before coffee.",
@@ -79,7 +92,12 @@ PATTER = ["Every move you see is Dream-1's own idea, worked out from the cameras
           "Still thinking. Big brain, small table.",
           "If this works, we're calling it magic.",
           "Okay, Dream-1. The audience is getting hungry."]
+OURS_PATTER = ["Dream-1 did the grab. Our own code takes it from here."]  # --handover, after the lift: no "Dream-1's
+HAND_PATTER = ["Left hand, meet right hand. Be nice.",                   # own idea" now; HAND_PATTER while it hands over
+               "Hands are complicated. I wouldn't know, I'm a frog.",
+               "Almost there. Nobody sneeze."]
 _lock, _said = threading.Lock(), [time.monotonic()]
+_lines = [PATTER]  # the patter's lines: --handover swaps in HAND_PATTER once our own code takes over
 
 
 def out(**kw):
@@ -94,12 +112,12 @@ def say(text):
 
 def patter(every, stop):
     """A filler line whenever nothing has been said for `every` s, until stop is set."""
-    k = 0
+    k, lines = 0, _lines[0]
     while not stop.wait(0.25):
-        if time.monotonic() - _said[0] >= every:
-            if k >= len(PATTER):  # each line once: a repeat sounds broken (owner, Nov 8)
-                return
-            say(PATTER[k])
+        if _lines[0] is not lines:
+            k, lines = 0, _lines[0]
+        if time.monotonic() - _said[0] >= every and k < len(lines):  # each line once: a repeat sounds broken (owner, Nov 8)
+            say(lines[k])
             k += 1
 
 
@@ -201,6 +219,34 @@ def moves(ch, side):
     return max(abs(a - b) for a, b in zip(q[-1], q[0])) + max(max(abs(x - y) for x, y in zip(r, q[0])) for r in q)
 
 
+def grasp_row(g):
+    """The row where the gripper closed: the first at or below CLOSED_G after its last open one (>= 0.6)."""
+    last_open = max((i for i, x in enumerate(g) if x >= 0.6), default=-1)
+    return next((i for i in range(last_open + 1, len(g)) if g[i] <= CLOSED_G), len(g) - 1)
+
+
+def station_json(a, cmd, timeout):
+    """`cmd` on the station in ~/physical-ai-hacks; its stdout as JSON, or None (the reason goes out as info)."""
+    try:
+        r = subprocess.run(["ssh", "-o", "ControlPath=none", "-o", "BatchMode=yes", a.station,
+                            f"cd ~/physical-ai-hacks && {cmd}"], capture_output=True, text=True, timeout=timeout)
+        out(event="info", station=r.stderr.strip()[-200:])
+        return json.loads(r.stdout) if r.returncode == 0 else None
+    except (subprocess.SubprocessError, OSError, ValueError) as e:
+        out(event="info", station=f"{type(e).__name__}: {e}"[:200])
+        return None
+
+
+def hand_plan(a, stage, arm, start, grasp, pen):
+    """--handover after the lift: dream_hand.py's present, roll and handover chunks from where the arm is now; []
+    without a plan (then the wand wiggle and the way back)."""
+    st = stage.state()["arms"][arm]
+    q = shlex.quote(json.dumps({"arm": arm, "now": {x: list(start["arms"][x]["joints"])[:6] for x in ARMS},
+                                "q": list(st["joints"])[:6], "g": st.get("grip", 0.0), "grasp": grasp, "pen": pen}))
+    plan = station_json(a, f"nice -n 10 .venv/bin/python ~/dial/dream_hand.py plan --q {q}", 90)
+    return plan if isinstance(plan, list) else []
+
+
 def play(stage, arm, name, t, q, g, speed, carry, raw=False):
     """POST /trajectory (it starts; wait_done waits for its end). Returns (None, reply) or (reason, reply)."""
     code, r = stage.call("/trajectory", {"arm": arm, "t": t, "q": q, "g": g, "speed": speed, "name": name,
@@ -252,6 +298,8 @@ def main():
     ap.add_argument("--exec", type=int, default=0, help="play only each chunk's first N steps (dreamcli ~16); 0: all")
     ap.add_argument("--cam", action="store_true", help="no Dream Labs: the station finds the green pen in a fresh overhead "
                     "snap and plans the pick with our IK (robot/cam_pick.py), played like Dream-1's chunks")
+    ap.add_argument("--handover", action="store_true", help="Dream-1 picks the pen (checked chunks, no Lars prop), then "
+                    "our IK presents it, rolls it and hands it to the other arm (robot/dream_hand.py on the station)")
     ap.add_argument("--replay", help="a JSON list of chunk events (dream_preview.py output) instead of the station")
     ap.add_argument("--fake", action="store_true", help="the station preview makes up a reach (no Dream call)")
     ap.add_argument("--no-fallback", action="store_true")
@@ -259,10 +307,12 @@ def main():
     ap.add_argument("--patter", type=float, default=0.0, help="s of silence before a filler line (0: none)")
     ap.add_argument("--hold", action="store_true", help="the fallback only picks Lars up (ends held, like Dream-1)")
     a = ap.parse_args()
+    if a.cam and a.handover:
+        ap.error("--cam or --handover, not both")
     a.chunks = max(1, min(a.chunks, MAX_CHUNKS))
     stage, t0 = Stage(a.stage), time.monotonic()
     end = t0 + a.pick_s
-    if a.cam:  # an earlier run that never put the pen down left a stuck "holds lars": open that gripper where it is
+    if a.cam or a.handover:  # an earlier run that never put the pen down left a stuck "holds lars": open that gripper where it is
         st = stage.state()
         for side in ARMS:
             if st["props"].get(side) == "lars" and not str(st["arms"][side].get("playing") or "").startswith("dream"):
@@ -311,13 +361,13 @@ def wave(stage, arm, c, secs=2.6):
         wait_done(stage, arm, "dream_wave", time.monotonic() + r["duration_s"] + 5)
 
 
-def steps(stage, arm, name, t, q, g, a):
+def steps(stage, arm, name, t, q, g, a, raw=None):
     """Play one piece once the arm is free (Nov 8: the way back was refused while the wave still finished); a reason
-    if it was refused or stopped."""
+    if it was refused or stopped. raw: a.raw unless given."""
     t_free = time.monotonic() + 10
     while time.monotonic() < t_free and str(stage.state()["arms"][arm].get("playing") or "").startswith("dream"):
         time.sleep(0.1)
-    reason, r = play(stage, arm, name, t, q, g, a.speed, None, a.raw)
+    reason, r = play(stage, arm, name, t, q, g, a.speed, None, a.raw if raw is None else raw)
     reason = reason or wait_done(stage, arm, name, time.monotonic() + 2 * r["duration_s"] + 10)  # Nov 8: a turn to the audience outlasted duration + 5 s
     if reason:
         out(event="info", piece=name, refused=str(reason)[:160])
@@ -362,8 +412,16 @@ def run(a, stage, s, end):
     low = float("inf")  # raw: the lowest fingertip since the gripper closed
     opened = False
     missed = None
+    pen = grasp = None  # --handover: the pen's spot before Dream-1 starts (dream_hand.py locate); the arm's joints at the close
+    gripped = False     # --handover: the measured gripper showed something between the fingers
     cmd = {side: s["arms"][side]["joints"] for side in ARMS}
     try:
+        if a.handover:
+            a.carry = None  # as --cam: the pen isn't the stage's Lars prop, so no stuck "holds lars" after a run
+            if not a.replay:  # the cameras free before the preview opens them; no pen seen: Dream-1 still tries, no handover
+                pen = station_json(a, ".venv/bin/python ~/dial/snap.py > /dev/null && "
+                                      ".venv/bin/python ~/dial/dream_hand.py locate", 60)
+                out(event="info", pen=pen)
         if a.cam:  # the pen's spot changes between runs: snap and plan now (owner, Nov 8)
             a.carry = None  # the pen isn't the stage's Lars prop: a stuck "holds lars" refused the next run (Nov 8)
             q = shlex.quote(json.dumps({x: list(s["arms"][x]["joints"])[:6] for x in ARMS}))
@@ -418,12 +476,14 @@ def run(a, stage, s, end):
             played.append(c)
             if len(played) == 1:
                 say("Here it comes. Gently, please!")
-            if a.raw:  # the stage's prop only notices a close inside one chunk: go by Dream-1's own gripper and height
+            if a.raw or a.handover:  # the stage's prop only notices a close inside one chunk (--handover: no prop at
+                # all): go by Dream-1's own gripper and height
                 opened = opened or max(c["g"]) >= 0.6  # the arms rest with the gripper shut: a grab opens first
                 if opened and c["g"][-1] <= CLOSED_G:  # (Nov 8: it lifted Lars in the left arm and nothing noticed)
                     low = min(low, r.get("tip_mm", low))
                     if not held:
                         held = True
+                        grasp = c["q"][grasp_row(c["g"])]
                         say("Got it!")
                 else:
                     held, low = False, float("inf")
@@ -449,8 +509,21 @@ def run(a, stage, s, end):
             if now_held and grip is not None and grip < EMPTY_GRIP and not a.raw:  # a squeezed Lars reads 0.05
                 missed, reason = "empty_grip", f"the gripper closed on nothing ({grip:.2f} measured)"
                 break
-            if held and not now_held and not a.raw:  # raw: the stage's prop isn't how we track it
+            if held and not now_held and not a.raw and not a.handover:  # raw, --handover: the stage's prop isn't how we track it
                 missed, reason, held, lifted = "dropped", "the hold was lost before the lift", False, False
+                break
+            if a.handover and held:  # no stage prop: the measured gripper tells (no reading: trust Dream-1's close)
+                if grip is not None and grip < EMPTY_GRIP:
+                    missed = "dropped" if gripped else "empty_grip"
+                    reason, held, lifted = f"the gripper closed on nothing ({grip:.2f} measured)", False, False
+                    break
+                # the fingers stopped short of the command: something is between them
+                gripped = gripped or grip is None or grip >= st["arms"][arm].get("grip", 0.0) + GRIP_BLOCK
+            if a.handover and gripped and not held:
+                missed, reason, lifted = "dropped", "Dream-1 opened its gripper before the lift", False
+                break
+            if a.handover and lifted and not gripped:  # e.g. closed to 0.3 (~28 mm): a 1 cm pen isn't in there
+                missed, reason, held, lifted = "empty_grip", f"lifted, nothing between the fingers ({grip} measured)", False, False
                 break
             if lifted:
                 break
@@ -470,17 +543,28 @@ def run(a, stage, s, end):
         missed = "no_plan"
     if missed is None and reason and reason.startswith("no pick"):  # Dream-1's own time or chunks ran out
         missed = "not_lifted" if held else "timeout"
+    if a.handover and reason and missed is None:  # our checker said no, or Dream-1 broke off: a joke all the same
+        missed = "refused" if refused else "timeout" if played else "no_plan"
     n_played = len(played)
     out(event="info", dream_reason=reason, played=len(played), held=held, lifted=lifted, missed=missed,
         latency_s=latency)
-    if lifted and not reason and a.raw:  # nothing else can put him down from where Dream-1 lifted him: back the way it came
+    if lifted and not reason and (a.raw or a.handover):  # nothing else can put him down from where Dream-1 lifted him
         say("Behold! The robot is now a wizard. I, sadly, am still a frog.")
-        pieces = [c for c in json.loads(pathlib.Path(a.replay).read_text()) if c.get("event") in ("wave", "hand")] if a.cam else []
+        if a.cam:
+            pieces = [c for c in json.loads(pathlib.Path(a.replay).read_text()) if c.get("event") in ("wave", "hand")]
+        elif a.handover:  # planned now, from where Dream-1 left the arm; the patter stops crediting Dream-1
+            _lines[0] = list(OURS_PATTER)
+            pieces = [c for c in hand_plan(a, stage, arm, s, grasp, pen) if c.get("event") in ("wave", "hand")]
+            if any(c["event"] == "hand" for c in pieces):
+                _lines[0] = list(HAND_PATTER)
+        else:
+            pieces = []
+        ours = a.raw or a.handover  # our own planned pieces play raw, as --cam's (handover() checks the arms' clearance)
         waves, hand = [c for c in pieces if c["event"] == "wave"], [c for c in pieces if c["event"] == "hand"]
         stopped = None
         if waves:  # cam_pick's: the claw turns to the audience, the wrist rolls the pen left and right
             for i, c in enumerate(waves):
-                if (stopped := steps(stage, arm, f"dream_wave{i + 1}", c["t"], c[arm]["q"], c[arm]["g"], a)):
+                if (stopped := steps(stage, arm, f"dream_wave{i + 1}", c["t"], c[arm]["q"], c[arm]["g"], a, ours)):
                     break
         else:
             wave(stage, arm, played[-1])  # 2-3 s of a wizard's flourish with the wand, then back the way it came
@@ -488,7 +572,7 @@ def run(a, stage, s, end):
             say("Teamwork! Pass it to the other hand.")
             for i, c in enumerate(hand):
                 side = c.get("arm", arm)
-                if (stopped := steps(stage, side, f"dream_hand{i + 1}", c["t"], c[side]["q"], c[side]["g"], a)):
+                if (stopped := steps(stage, side, f"dream_hand{i + 1}", c["t"], c[side]["q"], c[side]["g"], a, ours)):
                     say("I'm stuck halfway. Can someone at the robot help?")
                     break
             if not stopped:
@@ -511,7 +595,8 @@ def run(a, stage, s, end):
         out(event="oops", kind=missed, reaction=REACTION, sfx=OOPS_SFX, text=OOPS_LINES[missed])
         _said[0] = time.monotonic()  # the host says the quip: no filler line right on top of it
         react_arm = arm or "right"
-        if not any(stage.state()["props"].values()):  # empty hands: react from where the arm is, if the stage lets it
+        # empty hands: react from where the arm is, if the stage lets it (--handover holding the pen: back first)
+        if not any(stage.state()["props"].values()) and not (a.handover and held):
             reacted, tried = react(stage, react_arm), True
             if reacted:
                 played = []  # the reaction ends at the stage pose: no way back needed
