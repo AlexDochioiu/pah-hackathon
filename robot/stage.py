@@ -110,8 +110,9 @@ def _lowest(ck, arm, Q):
     return tip, body
 
 
-def _traj_check(ck, ck_props, arm, name, tk, Qk, Gk, span, shape, vcap):
-    """Retime a /trajectory's keys under vcap, TRAJ_AMAX and TRAJ_GRIP_VMAX, then check it (see Stage.trajectory).
+def _traj_check(ck, ck_props, arm, name, tk, Qk, Gk, span, shape, vcap, raw=False):
+    """Retime a /trajectory's keys under vcap, TRAJ_AMAX and TRAJ_GRIP_VMAX, then check it (see Stage.trajectory);
+    raw: retimed only, no table/lean/joint-speed checks (owner, Nov 8: play Dream-1's motion as it is, e-stop manned).
     Returns (d, Q, G, probs, tip, body, sweep), or a str: why it can't be retimed."""
     ck.set_props(ck_props)
     for _ in range(8):  # pchip scales with time, but its 50 Hz samples only roughly: a few stretches
@@ -134,6 +135,9 @@ def _traj_check(ck, ck_props, arm, name, tk, Qk, Gk, span, shape, vcap):
     if gest.duration > TRAJ_MAX_S:
         return (f"{arm} {name}: {gest.duration:.0f} s once slowed to {vcap:.2f} rad/s "
                 f"(> {TRAJ_MAX_S:.0f} s): too much motion for one trajectory")
+    if raw:
+        tip, body = _lowest(ck, arm, Q)
+        return d, Q, G, [], tip, body, ck.swept.pop(show.key(name, arm), None)
     floor = show.TABLE_FLOOR
     show.TABLE_FLOOR = TRAJ_TIP_FLOOR  # ponytail: module global swapped (the stage holds its lock; the worker is
     try:                               # single-threaded); a floor argument on check_side if that ever changes
@@ -353,7 +357,7 @@ class Stage:
                 raise
             return Plan("rest", np.vstack([p1.Q, BQ]), np.concatenate([p1.G, BG]), show.join(p1.sweep, sw), hold=True)
 
-    def _commit(self, plans):
+    def _commit(self, plans, raw=False):
         """Start {side: Plan} at once if each clears the other arm's motion (new or committed) by GAP. A pick/place
         runs to its end: nothing else starts on its arm meanwhile (/freeze still stops it)."""
         for side in plans:
@@ -364,7 +368,7 @@ class Stage:
             other = SIDES[1 - SIDES.index(side)]
             osweep = plans[other].sweep if other in plans else self._sweep(other)
             d = show.gap(p.sweep, osweep)
-            if d < show.GAP:
+            if d < show.GAP and not raw:
                 raise StageError(f"{side} {p.name} would come {d*100:.0f} cm from the {other} arm "
                                  f"({self.plan[other].name if other not in plans else plans[other].name}); "
                                  f"needs {show.GAP*100:.0f} cm")
@@ -694,7 +698,7 @@ class Stage:
             self._commit(plans)
             return {"ok": True}
 
-    def trajectory(self, arm, t, q, g=None, speed=1.0, name="dream", carry=None):
+    def trajectory(self, arm, t, q, g=None, speed=1.0, name="dream", carry=None, raw=False):
         """An external joint trajectory on one arm (Dream-1's action chunk, robot/dream_run.py): absolute joints q
         (N, 6) at times t (N,), gripper g (N,) 0..1 or None (keep the grip). It starts from the arm's current command
         (a key at t = 0, held TRAJ_HOLD_S, and held again at the end), each segment stretched to TRAJ_VMAX * speed and
@@ -765,7 +769,7 @@ class Stage:
                 dt[-1 - m:-1] *= TRAJ_RAMP[:m][::-1]
             tk = np.r_[0.0, np.cumsum(dt)]
             asked = TRAJ_HOLD_S * 2 + t[-1]
-            job = (self._ck_props(self.props), arm, name, tk, Qk, Gk, span, shape, vcap)
+            job = (self._ck_props(self.props), arm, name, tk, Qk, Gk, span, shape, vcap, raw)
             if self.pool:  # the real arms: off this process, so i2rt's motor threads keep the CPU (see _CK)
                 res = self.pool.submit(_traj_check_worker, *job).result()
             else:
@@ -782,7 +786,7 @@ class Stage:
             if probs:
                 raise StageError(f"{arm} {name}: " + "; ".join(probs))
             plan = Plan(name, Q, G, self.ck.swept[show.key(name, arm)], gest, hold=True)
-            self._commit({arm: plan})
+            self._commit({arm: plan}, raw)
             self.mouth[arm].on = False
             self.queue[arm].clear()
             self.after[arm] = "hold"
@@ -1044,7 +1048,8 @@ def serve(st, port):
                     "/rest": lambda: st.go_rest(arm, float(b.get("speed", 1.0))),
                     "/grip": lambda: st.grip(arm, float(b["value"])),
                     "/trajectory": lambda: st.trajectory(arm, b["t"], b["q"], b.get("g"), float(b.get("speed", 1.0)),
-                                                         str(b.get("name") or "dream"), b.get("carry") or None),
+                                                         str(b.get("name") or "dream"), b.get("carry") or None,
+                                                         bool(b.get("raw"))),
                 }
                 if self.path not in routes:
                     return self._send(404, {"ok": False, "error": "unknown path"})

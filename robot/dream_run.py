@@ -66,7 +66,6 @@ OOPS_SFX = "sad_trombone"   # agent/sounds/sfx/crowd, CC0
 OOPS_LINES = {"empty_grip": "Ah, frog-nabbit. It grabbed thin air.", "dropped": "And it dropped me. Typical.",
               "not_lifted": "Close. Not lifted, but close.", "timeout": "Dream-1 ran out of time. So did my patience."}
 PATTER = ["It's looking at me through three cameras. I've never felt so seen.",
-          "Every move it suggests goes through our safety checker first.",
           "Robots think slowly when they're being careful. Like me before coffee.",
           "Slow and steady. We like our table upright.",
           "This is the part where a real roboticist would sweat.",
@@ -193,10 +192,10 @@ def moves(ch, side):
     return max(abs(a - b) for a, b in zip(q[-1], q[0])) + max(max(abs(x - y) for x, y in zip(r, q[0])) for r in q)
 
 
-def play(stage, arm, name, t, q, g, speed, carry):
+def play(stage, arm, name, t, q, g, speed, carry, raw=False):
     """POST /trajectory (it starts; wait_done waits for its end). Returns (None, reply) or (reason, reply)."""
     code, r = stage.call("/trajectory", {"arm": arm, "t": t, "q": q, "g": g, "speed": speed, "name": name,
-                                         "carry": carry})
+                                         "carry": carry, "raw": raw})
     if code != 200:
         return r.get("error", f"HTTP {code}"), r
     return None, r
@@ -237,6 +236,7 @@ def main():
     ap.add_argument("--chunks", type=int, default=30, help="Dream-1 calls at most (still ones included)")
     ap.add_argument("--pick-s", type=float, default=60.0, help="s for Dream-1's part (asking and playing), the way "
                     "back excluded; our 0.3 rad/s cap plays its chunks ~1.5-2.5x slower than dreamcli")
+    ap.add_argument("--raw", action="store_true", help="the stage plays Dream-1's motion unchecked (retimed only)")
     ap.add_argument("--speed", type=float, default=1.0, help="x the stage's 0.3 rad/s cap (0.1..4)")
     ap.add_argument("--exec", type=int, default=0, help="play only each chunk's first N steps (dreamcli ~16); 0: all")
     ap.add_argument("--replay", help="a JSON list of chunk events (dream_preview.py output) instead of the station")
@@ -309,16 +309,16 @@ def run(a, stage, s, end):
             if arm is None:
                 arm = side
                 out(event="info", arm=arm, moves={x: round(moves(ch, x), 3) for x in ARMS})
-                say(f"Dream-1 says: the {arm} arm, like this. Let's see if our checker likes it.")
+                say(f"Dream-1 says: the {arm} arm, like this.")
             name = f"dream{k}"
-            reason, r = play(stage, arm, name, c["t"], c["q"], c["g"], a.speed, a.carry)
+            reason, r = play(stage, arm, name, c["t"], c["q"], c["g"], a.speed, a.carry, a.raw)
             out(event="info", chunk=k, reply=r)
             if reason:
                 refused = code_refused(r)
                 break
             played.append(c)
             if len(played) == 1:
-                say("Our checker says yes. Gently, please!")
+                say("Here it comes. Gently, please!")
             if not held and r["props"][arm]:
                 held = True
                 say("Got me!")
@@ -362,7 +362,7 @@ def run(a, stage, s, end):
     out(event="info", dream_reason=reason, played=len(played), held=held, lifted=lifted, missed=missed,
         latency_s=latency)
     if lifted and not reason:
-        say("Up I go! That was all Dream-1's own idea, checked by us.")
+        say("Up I go! That was all Dream-1's own idea.")
         out(event="done", ok=True, held=True, arm=arm, dream_chunks=n_played, fallback=False, reason=None,
             missed=None, latency_s=latency)
         return
@@ -402,10 +402,7 @@ def run(a, stage, s, end):
     if missed:
         say("Our own move, then!")
     elif refused:
-        why = next((w for k, w in (("table", "it would have bumped the table"), ("reaches", "it bends a joint too far"),
-                                   ("from the", "it comes too close to my other arm"), ("rad/s", "it's too fast"))
-                    if k in reason), "it doesn't fit our rules")
-        say(f"Dream-1's plan didn't pass our safety check: {why}. Our own move, then!")
+        say("Dream-1 got stuck. Our own move, then!")
     else:
         say("Dream-1 is daydreaming today. Our own move, then!")
     fb = None
