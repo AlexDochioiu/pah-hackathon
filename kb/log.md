@@ -172,3 +172,4 @@
 - Nov 7 ~20:20: dimos twin parked: the owner saw no value in it ("we don't need the Dimensional thing at all"). The
   code stays in `dimos/` for reference. `stage.py` `/state` gains `grip_measured` per arm (the gripper as read back,
   `/talk` flaps included); check_gestures asserts it flaps.
+- Nov 7 ~20:50: comedy set made edgy on the owner's ask ("so dull it's not funny"): a roast with bite (hackathon life, tech hype, the room, themselves), no puns or dad jokes; hard lines kept (no slurs, identity, looks, sexual, politics). Stories stay family-friendly.
