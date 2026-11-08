@@ -157,7 +157,9 @@ quote, the span its mouth flaps for) by that character's own voice. A quote with
   closes the player (cancels every sound and unpublishes the track).
 - Sound on the hit (round 3b): a gesture or duet whose stage entry has `sound` (`{"name", "at"}`, see gestures.md)
   plays it on its visible hits, not at its start: `Hit` in `gestures.py` schedules each at `t0 + at / speed +
-  SFX_SYNC_MS`, where `t0` is the reply's arrival + its `starts_in` and `speed` the stage's (clamped) speed. An
+  SFX_SYNC_MS`, where `t0` is the reply's arrival + its `starts_in` and `speed` the stage's (clamped) speed. Each
+  sound starts its own lead early (`sfx_lead`: from the file's start to its first 25 ms within 6 dB of its loudest;
+  sword_swing 0.4 s, body_fall 0.35, bonk and roar 0.2, most others ≤ 0.05), so its peak lands on the hit. An
   `[sfx:x]` in the same sentence (or right after it, before the next word) replaces the default on the first
   upcoming hit; one in a later sentence plays when spoken, as before. Refused gesture: a pending `[sfx]` plays at
   once. A hit already past plays now unless that sound already played. `SFX_SYNC_MS` (agent/.env, default 0)

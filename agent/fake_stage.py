@@ -19,12 +19,12 @@ GESTURES = {
     "facepalm": 4.4, "flick": 4.1, "gallop": 3.0, "grab": 2.5, "gripper_clap": 2.4, "hop": 4.7, "idle_breathe": 4.0,
     "invisible_wall": 5.2, "italian": 5.9, "italian_exasperated": 6.0, "juggle": 4.7, "knee_slap": 5.9, "knock":
     5.6, "laugh": 4.2, "laugh_hard": 5.7, "lean_on_nothing": 4.9, "lift_heavy": 4.6, "look_around": 3.8,
-    "look_at_other": 2.8, "nod": 2.5, "point_at_audience": 2.8, "pounce": 3.5, "pull": 3.2, "push": 3.4, "rest":
-    3.0, "revive": 5.5, "roar": 3.6, "shake_head": 2.9, "shoot": 3.4, "sigh": 4.4, "slash": 3.9, "slow_turn": 5.9,
-    "smell_flower": 5.2, "sneak": 4.6, "sneeze": 3.5, "snore": 5.8, "stage": 3.0, "startle": 3.0, "stir_frantic":
-    3.6, "stir_lazy": 4.4, "stomp": 4.6, "ta_da": 4.1, "taste_sour": 3.6, "throw": 2.9, "thrust": 3.0, "tightrope":
-    6.0, "trapped_in_box": 5.6, "tremble_excited": 3.1, "ufo_crash": 5.5, "ufo_fly": 5.9, "ufo_hover": 4.0,
-    "ufo_land": 5.7, "wave": 4.7
+    "look_at_other": 2.8, "nod": 2.5, "pick_lars": 16.8, "place_lars": 17.3, "point_at_audience": 2.8, "pounce":
+    3.5, "pull": 3.2, "push": 3.4, "rest": 3.0, "revive": 5.5, "roar": 3.6, "shake_head": 2.9, "shoot": 3.4, "sigh":
+    4.4, "slash": 3.9, "slow_turn": 5.9, "smell_flower": 5.2, "sneak": 4.6, "sneeze": 3.5, "snore": 5.8, "stage":
+    3.0, "startle": 3.0, "stir_frantic": 3.6, "stir_lazy": 4.4, "stomp": 4.6, "ta_da": 4.1, "taste_sour": 3.6,
+    "throw": 2.9, "thrust": 3.0, "tightrope": 6.0, "trapped_in_box": 5.6, "tremble_excited": 3.1, "ufo_crash": 5.5,
+    "ufo_fly": 5.9, "ufo_hover": 4.0, "ufo_land": 5.7, "wave": 4.7
 }
 DUETS = {
     "car_chase": 8.0, "cheers": 7.5, "copycat": 7.3, "cross_swords": 7.7, "elbow_nudge": 7.5, "hand_through_wall":
@@ -39,17 +39,15 @@ ENSEMBLES = {
 }
 # name -> the stage's "sound" ({"name", "at"}), copied from robot/gestures and robot/duets
 SOUNDS: dict[str, dict] = {
-    "bang_table": {'name': 'punch', 'at': [1.485, 4.122]}, "bite": {'name': 'chomp', 'at': [1.138, 1.947]},
-    "chef_kiss": {'name': None, 'at': 2.22}, "die_dramatically": {'name': None, 'at': 1.528}, "flick": {'name':
-    'whoosh', 'at': 1.55}, "knock": {'name': None, 'at': [0.87, 1.34, 1.81]}, "lean_on_nothing": {'name': None,
-    'at': 2.82}, "roar": {'name': 'roar', 'at': 0.9}, "shoot": {'name': 'gunshot', 'at': 1.6}, "slash": {'name':
-    'whoosh', 'at': 1.95}, "stomp": {'name': None, 'at': [1.554, 3.738]}, "ta_da": {'name': 'tada', 'at': 1.992},
-    "throw": {'name': 'whoosh', 'at': 1.317}, "ufo_crash": {'name': 'crash', 'at': 4.9}, "cheers": {'name': None,
-    'at': 4.36}, "chomp": {'name': 'chomp', 'at': [2.7, 4.01, 5.6]}, "cross_swords": {'name': 'sword_clash', 'at':
-    3.94}, "drum_roll": {'name': 'drum_roll', 'at': 1.38}, "elbow_nudge": {'name': None, 'at': [1.96, 3.48, 5.0]},
-    "explosion": {'name': 'explosion', 'at': 3.1}, "fist_bump": {'name': None, 'at': 3.1}, "high_five": {'name':
-    None, 'at': 3.36}, "place_hat": {'name': None, 'at': 3.54}, "poke": {'name': None, 'at': 4.14}, "quick_draw":
-    {'name': 'gunshot', 'at': 3.64}
+    "bang_table": {'name': 'bonk', 'at': [1.485, 4.122]}, "bite": {'name': 'chomp', 'at': [1.138, 1.947]},
+    "chef_kiss": {'name': 'kiss', 'at': 2.22}, "die_dramatically": {'name': 'body_fall', 'at': 1.528},
+    "double_take": {'name': 'record_scratch', 'at': 2.342}, "flick": {'name': 'whoosh', 'at': 1.55}, "knock":
+    {'name': None, 'at': [0.87, 1.34, 1.81]}, "lean_on_nothing": {'name': None, 'at': 2.82}, "roar": {'name':
+    'roar', 'at': 0.9}, "shoot": {'name': 'gunshot', 'at': 1.6}, "slash": {'name': 'sword_swing', 'at': 1.95},
+    "stomp": {'name': None, 'at': [1.554, 3.738]}, "ta_da": {'name': 'tada', 'at': 1.992}, "throw": {'name':
+    'whoosh', 'at': 1.317}, "ufo_crash": {'name': 'crash', 'at': 4.9}, "chomp": {'name': 'chomp', 'at': [2.7, 4.01,
+    5.6]}, "cross_swords": {'name': 'sword_clash', 'at': 3.94}, "drum_roll": {'name': 'drum_roll', 'at': 1.38},
+    "explosion": {'name': 'explosion', 'at': 3.1}, "quick_draw": {'name': 'gunshot', 'at': 3.64}
 }
 T0 = time.monotonic()
 state = {"mode": "rest", "stance": "audience", "props": {"left": False, "right": False}, "arms": {"left": None, "right": None}}  # arm -> {"gesture", "until"} while playing
