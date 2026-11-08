@@ -103,7 +103,8 @@
   <ul id="acts"></ul>
   <div id="prompter"></div>
   <div id="edgebox" style="position:fixed;right:14px;bottom:10px;z-index:50;background:rgba(0,0,0,.55);color:#fff;padding:6px 10px;border-radius:8px;font:600 14px system-ui">
-    Edge: soft <input type="range" id="edge" min="0" max="4" step="1" style="vertical-align:middle"> based <span id="edgev"></span></div>
+    Edge: soft <input type="range" id="edge" min="0" max="4" step="1" style="vertical-align:middle"> based <span id="edgev"></span>
+    <label style="margin-left:10px"><input type="checkbox" id="ask" style="vertical-align:middle"> Ask the audience</label></div>
   <div id="built"><h2>Built with</h2><ul></ul></div>
   <div id="keys">Next: → · PageDown · Space &nbsp;|&nbsp; Back: ← · PageUp &nbsp;|&nbsp; Jump: 1–9 (0: start over)
     &nbsp;|&nbsp; STOP: Esc. The talk button works in the demo act.
@@ -149,7 +150,10 @@ $("auto").checked = autoOn;
 // the edge slider (owner, Nov 8): 0 soft .. 4 very based; the agent reads it at every reply (participant attribute)
 $("edge").value = localStorage.getItem("edge") || "2";
 $("edgev").textContent = $("edge").value;
-function sendEdge() { if (room) room.localParticipant.setAttributes({ edge: $("edge").value }).catch(() => {}); }
+$("ask").checked = localStorage.getItem("ask") === "1";  // experimental (owner, Nov 8): off by default
+function sendEdge() { if (room) room.localParticipant.setAttributes({ edge: $("edge").value, ask: $("ask").checked ? "1" : "0" }).catch(() => {}); }
+$("ask").addEventListener("change", () => { localStorage.setItem("ask", $("ask").checked ? "1" : "0"); sendEdge(); });
+$("edgebox").addEventListener("click", (e) => e.stopPropagation());
 $("edge").addEventListener("input", () => { $("edgev").textContent = $("edge").value; localStorage.setItem("edge", $("edge").value); sendEdge(); });
 $("edge").addEventListener("click", (e) => e.stopPropagation());
 $("dream").checked = localStorage.getItem("show.dream") === "1";  // a fresh room: act 2 is primed with or without the pick
@@ -292,7 +296,7 @@ async function measurePlayout() {
   const ms = (d) => String(Math.round((d + extra) * 1000));
   if (Math.abs(ms(delays.voice) - playoutSent) < 15) return;  // only real changes
   playoutSent = +ms(delays.voice);
-  room.localParticipant.setAttributes({ playout_ms: ms(delays.voice), playout_bg_ms: delays.bg === undefined ? "" : ms(delays.bg), edge: $("edge").value });
+  room.localParticipant.setAttributes({ playout_ms: ms(delays.voice), playout_bg_ms: delays.bg === undefined ? "" : ms(delays.bg), edge: $("edge").value, ask: $("ask").checked ? "1" : "0" });
 }
 setInterval(() => measurePlayout().catch((e) => console.debug("playout", e)), 2000);
 

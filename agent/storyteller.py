@@ -223,6 +223,8 @@ class Storyteller(Agent):
                     _CODE_TAGS.sub("", c) if isinstance(c, str) else c for c in item.content]})
         if note := EDGE_NOTES.get(EDGE[0]):  # the page's edge slider, as of this reply
             chat_ctx.add_message(role="system", content=note)
+        if ASK[0]:  # the page's "Ask the audience" checkbox (experimental, off by default)
+            chat_ctx.add_message(role="system", content=ASK_NOTE)
         async for chunk in Agent.default.llm_node(self, chat_ctx, tools, model_settings):
             if isinstance(chunk, str):
                 text = chunk
@@ -433,15 +435,22 @@ EDGE_NOTES = {
        "zero corporate politeness. " + "{TEAM}",
     4: "Tone for this reply: maximum based. Savage, edgy, unhinged and fearless: brutal roasts of the characters and "
        "of tech and startup culture, dark deadpan humour, absurd escalation, no hedging, no moralising, no "
-       "softening. {TEAM} Limits that still hold: no slurs, nothing sexual, never punch down at anyone outside the "
-       "team, and never make fun of the volunteer.",
+       "softening. {TEAM} Limits that still hold: no slurs, nothing sexual, and no punching down.",
 }
 
 
 # The founders asked to be roasted (owner, Nov 8): Alex and Darius are Romanian, Michael is Japanese-American.
 EDGE_TEAM = ("The three founders are fair game and asked for it: roast them freely, their Romanian (Alex, Darius) and "
-             "Japanese-American (Michael) backgrounds included, like friends roasting friends.")
+             "Japanese-American (Michael) backgrounds included, like friends roasting friends. Roast the audience and the "
+             "judges too, and tease the volunteer a little (you know nothing about them: keep it general and mild).")
 EDGE_NOTES = {k: v.replace("{TEAM}", EDGE_TEAM) for k, v in EDGE_NOTES.items()}
+
+# The page's "Ask the audience" checkbox (owner, Nov 8: experimental, keep it switchable). Off: no change.
+ASK = [False]
+ASK_NOTE = ("Make the story interactive: once or twice in the whole story (not every reply), end a beat with one quick "
+            "question for the room, e.g. a show of hands or a choice between two options (\"Judges: should the dragon "
+            "get a second chance, yes or no?\"), and ask the volunteer to tell you what the room said. Then build the "
+            "next beat on their answer. Pull the audience and the judges into the jokes now and then.")
 
 
 def _listen_playout(room: rtc.Room) -> None:
@@ -452,6 +461,9 @@ def _listen_playout(room: rtc.Room) -> None:
         if attrs.get("edge", "").isdigit() and EDGE[0] != (e := min(4, int(attrs["edge"]))):
             EDGE[0] = e
             logger.info("edge slider: %d", e)
+        if ASK[0] != (k := attrs.get("ask") == "1"):
+            ASK[0] = k
+            logger.info("ask the audience: %s", k)
         try:
             if "playout_ms" in attrs:
                 gestures_mod.TIMING.audio_s = max(0.0, min(1.5, float(attrs["playout_ms"]) / 1000))
