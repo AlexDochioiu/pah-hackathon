@@ -70,11 +70,17 @@ def test_tags_first_leaves_sound_tags_where_they_are():
 
 
 def test_library_and_fuzzy_names():
-    assert len(LIBRARY.sfx) >= 25 and len(LIBRARY.music) >= 6
-    for name in ("explosion", "laugh_track", "rimshot", "crickets", "sad_trombone", "applause"):
+    assert len(LIBRARY.sfx) >= 60 and len(LIBRARY.music) >= 15
+    assert all(len(tracks) >= 2 for tracks in LIBRARY.music.values()), {m: len(t) for m, t in LIBRARY.music.items()}
+    for name in ("explosion", "laugh_track", "laugh_big", "rimshot", "crickets", "sad_trombone", "applause", "kiss",
+                 "frog", "gunshot", "cannon"):
         assert name in LIBRARY.sfx
+    assert all(len(n) <= 16 and n.replace("_", "").isalpha() for n in LIBRARY.sfx)  # short, tag-safe names
     assert LIBRARY.resolve_sfx("explosion") == "explosion"
-    assert LIBRARY.resolve_sfx("big explosion") == "explosion"
+    assert LIBRARY.resolve_sfx("big explosion") == "explosion_big"
+    assert LIBRARY.resolve_sfx("loud gunshot") == "gunshot"
+    assert LIBRARY.resolve_sfx("ribbit") == "frog"
+    assert LIBRARY.resolve_sfx("mwah") == "kiss"
     assert LIBRARY.resolve_sfx("kaboom") == "explosion"
     assert LIBRARY.resolve_sfx("laughter") == "laugh_track"
     assert LIBRARY.resolve_sfx("ba-dum-tss") == "rimshot"
@@ -83,14 +89,17 @@ def test_library_and_fuzzy_names():
     assert LIBRARY.resolve_music("Spooky") == "spooky"
     assert LIBRARY.resolve_music("scary") == "spooky"
     assert LIBRARY.resolve_music("polka") is None
-    total = sum(p.stat().st_size for p in [*LIBRARY.sfx.values(), *LIBRARY.music.values()])
-    assert total < 15e6
+    assert LIBRARY.resolve_music("jazz club") == "lounge" and LIBRARY.resolve_music("cowboy") == "western"
+    tracks = [p for ps in LIBRARY.music.values() for p in ps]
+    total = sum(p.stat().st_size for p in [*LIBRARY.sfx.values(), *tracks])
+    assert total < 40e6
+    assert max(p.stat().st_size for p in tracks) < 3e6
 
 
 def test_prompt_lists_the_library():
     text = build_instructions(BOOK, LIBRARY)
     assert "{{SFX}}" not in text and "{{MUSIC}}" not in text
-    assert "- explosion: a big boom" in text and "- spooky:" in text
+    assert "- weapons: " in text and "rimshot (ba-dum-tss)" in text and "- spooky:" in text
 
 
 def test_soundboard_cues():
@@ -115,6 +124,20 @@ def test_soundboard_cues():
         ("play", "music"), ("play", "sfx:laugh_track"), ("stop", "music")]
     assert sorted(log[8:]) == [("stop", "sfx:explosion"), ("stop", "sfx:laugh_track")]  # STOP silences the sfx too
     assert board.music_name is None and all(h.stopped for h in player.handles)
+
+
+def test_mood_tracks_take_turns():
+    async def run():
+        player = FakePlayer()
+        board = Soundboard(LIBRARY, player)
+        paths = []
+        board._music_frames = lambda path, track: paths.append(path) or object()
+        for _ in range(2):
+            board.cue("music", "spooky")
+            board.cue("music", "none")
+        return paths
+    paths = asyncio.run(run())
+    assert len(paths) == 2 and paths[0] != paths[1] and all(p.parent.name == "spooky" for p in paths)
 
 
 def test_music_loops_ducks_and_cuts():
@@ -228,10 +251,15 @@ async def test_sounds_fire_at_their_spot_in_the_speech():
     assert [(k, w) for _, k, w in log] == [("play", "music"), ("play", "sfx:stomp"), ("play", "sfx:explosion"),
                                           ("stop", "music")]
     music_on, stomp, boom, music_off = (t for t, _, _ in log)
-    assert 0 <= music_on < 0.5  # the first word
-    assert 1.2 < stomp < 3.2 < boom  # mid-sentence, where it was written (the synchronizer paces by syllables)
-    assert 2.8 < boom < 4.3  # near the end of the 4 s of speech, where it was written, not when the LLM wrote it
-    assert boom <= music_off < 4.5
+    # The LLM wrote the whole scene at once, so sounds fired on arrival would all land together. They must land
+    # where they were written, spread across the 4 s of speech. Only relative positions are checked (no wall-clock
+    # bounds), so a busy machine that stretches playout doesn't fail the test.
+    assert music_on <= stomp <= boom <= music_off and music_off - music_on > 2.0
+    spoken = strip_tags(SCENE)
+    expected = {w: len(strip_tags(SCENE.split(f"[sfx:{w}]")[0])) / len(spoken) for w in ("stomp", "explosion")}
+    at = {"stomp": (stomp - music_on) / (music_off - music_on), "explosion": (boom - music_on) / (music_off - music_on)}
+    for w in at:  # within a fifth of the speech of where the tag sits in the text (pacing is by syllables, not chars)
+        assert abs(at[w] - expected[w]) < 0.2, (w, at, expected)
     assert "[" not in tts_text and "sfx" not in tts_text and "KA-BOOM" in tts_text
 
 

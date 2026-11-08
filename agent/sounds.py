@@ -6,7 +6,7 @@ stops it). gestures.py's GestureSink fires them as the spoken words reach them, 
 `tags_first` leaves them where they were written (a laugh track belongs after its punchline, not before).
 
 - One-shots play at the library's level (`SFX_VOLUME`) and overlap freely.
-- Music loops forever and is ducked: `MUSIC_DUCKED` while Sparky or the listener speaks, `MUSIC_VOLUME` in the
+- `[music:mood]` picks one of that mood's tracks (they take turns, so stories don't repeat). It loops and is ducked: `MUSIC_DUCKED` while Sparky or the listener speaks, `MUSIC_VOLUME` in the
   gaps, gliding between the two. A new track crossfades with the old one.
 - The files in sounds/ are trimmed and loudness-normalised (sfx peak at -16 LUFS momentary, music at -20 LUFS
   integrated); sounds/LICENSES.md says where each came from.
@@ -18,6 +18,7 @@ import contextlib
 import difflib
 import logging
 import os
+import random
 import re
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -41,53 +42,73 @@ MUSIC_DUCKED = float(os.getenv("MUSIC_DUCKED", "0.15"))  # under speech: ~17 dB 
 MUSIC_FADE_S = 1.5  # crossfade between tracks, fade-in of the first one
 DUCK_S, UNDUCK_S = 0.25, 1.2  # glide time down to MUSIC_DUCKED and back up
 
-# What each sound is, for the prompt. Files without a line here still play; they just get no description.
+# Short notes for the prompt, only where the name alone doesn't say it. Every file is listed either way.
 ABOUT = {
-    "explosion": "a big boom", "crash": "something heavy smashes", "sword_clash": "two swords clang",
-    "laser": "a laser shot, pew", "gunshot": "one bang, a cowboy or pirate pistol", "punch": "a cartoon punch, thwack",
-    "magic": "a sparkly spell", "thunder": "a thunder clap", "roar": "a monster or dragon roar",
-    "door_creak": "a slow creaky door", "splash": "a big splash into water", "whoosh": "something flies past fast",
-    "boing": "a cartoon spring bounce", "car_horn": "beep beep", "car_engine": "a car starts and revs",
-    "spaceship": "a rocket or spaceship engine", "stomp": "a giant's heavy footsteps", "chomp": "one big bite",
-    "evil_laugh": "a villain's mwa-ha-ha", "drum_roll": "a drum roll before a reveal", "tada": "a tada fanfare",
-    "applause": "the audience claps", "cheer": "the crowd cheers",
-    "laugh_track": "a sitcom audience laughs", "laugh_big": "the audience roars with laughter",
-    "rimshot": "ba-dum-tss", "crickets": "crickets chirp: nobody laughed", "sad_trombone": "wah-wah-waaah, a flop",
+    "blaster": "a retro sci-fi blaster", "laser_small": "a small pew", "cannon": "a pirate cannon",
+    "rifle": "a machine-gun burst", "unsheathe": "a sword drawn from its sheath", "clang": "a metal clang",
+    "crash": "something heavy smashes", "debris": "an explosion, then rubble falling", "body_fall": "someone falls, thud",
+    "stomp": "a giant's heavy steps", "flyby": "a spaceship zooms past", "teleport": "beam in or out",
+    "skid": "tyres screech", "roar": "a dragon roar", "growl": "a monster growl", "chomp": "one big bite",
+    "evil_laugh": "a villain's mwa-ha-ha", "magic": "a sparkle", "spell": "a spell is cast", "poof": "vanish in smoke",
+    "zip": "a quick cartoon zip", "kiss": "a cartoon mwah", "tada": "a tada fanfare", "drum_roll": "before a reveal",
+    "laugh_track": "a sitcom laugh, after a small joke", "laugh_big": "the audience roars, after the best joke",
+    "rimshot": "ba-dum-tss", "crickets": "nobody laughed", "sad_trombone": "wah-wah-waaah, a flop",
+    "record_scratch": "wait, what?", "slide_whistle": "a cartoon fall", "gasp": "the crowd gasps",
     "audience_ooh": "the audience goes ooooh", "audience_aww": "the audience goes awww",
-    "record_scratch": "a record scratch: wait, what?", "slide_whistle": "a cartoon slide whistle falling",
 }
 MUSIC_ABOUT = {
-    "adventure": "a cheerful journey or quest", "calm": "a gentle fairytale, a village, once upon a time",
-    "spooky": "a dark forest, ghosts, a mystery", "battle": "a fight, a chase, danger",
-    "sad": "a sad or tender moment", "victory": "the heroes win, a celebration", "space": "outer space, robots, the future",
-    "comedy": "a silly, quirky scene", "lounge": "a comedy club: the stand-up show",
+    "adventure": "a cheerful journey or quest", "calm": "a gentle village, a peaceful morning",
+    "fairytale": "once upon a time, princesses and magic", "spooky": "ghosts, a dark forest",
+    "mystery": "a detective, a puzzle, sneaking", "battle": "a fight, danger", "chase": "running, racing, escaping",
+    "epic": "a huge, heroic moment", "sad": "a sad or tender moment", "romantic": "love, a sweet moment",
+    "victory": "the heroes win, a celebration", "space": "outer space, robots, the future",
+    "underwater": "under the sea", "medieval": "castles, knights, a tavern", "pirate": "ships and pirates",
+    "western": "cowboys, the wild west", "funny": "a silly, cartoonish scene", "lounge": "the comedy club: stand-up",
 }
 SFX_SYNONYMS = {
-    "boom": "explosion", "kaboom": "explosion", "blast": "explosion", "bomb": "explosion", "smash": "crash",
-    "bang": "crash", "clang": "sword_clash", "sword": "sword_clash", "clash": "sword_clash", "pew": "laser",
-    "zap": "laser", "blaster": "laser", "shot": "gunshot", "gun": "gunshot", "pistol": "gunshot", "hit": "punch",
-    "thwack": "punch", "bonk": "punch", "spell": "magic", "sparkle": "magic", "wand": "magic", "lightning": "thunder",
-    "storm": "thunder", "growl": "roar", "door": "door_creak", "creak": "door_creak", "water": "splash",
-    "swoosh": "whoosh", "swish": "whoosh", "bounce": "boing", "spring": "boing", "jump": "boing", "horn": "car_horn",
-    "honk": "car_horn", "beep": "car_horn", "car": "car_engine", "engine": "car_engine", "rocket": "spaceship",
-    "ufo": "spaceship", "footsteps": "stomp", "steps": "stomp", "giant": "stomp", "bite": "chomp", "nom": "chomp",
+    "boom": "explosion", "kaboom": "explosion", "blast": "explosion", "bomb": "explosion", "big_explosion": "explosion_big",
+    "huge_explosion": "explosion_big", "small_explosion": "explosion_small", "little_explosion": "explosion_small",
+    "smash": "crash", "bang": "crash", "rubble": "debris", "collapse": "debris", "shatter": "glass", "window": "glass",
+    "break": "wood_break", "snap": "wood_break", "crack": "wood_break", "metal": "clang", "thud": "body_fall",
+    "fall": "body_fall", "faint": "body_fall", "cartoon_fall": "slide_whistle",
+    "sword": "sword_clash", "clash": "sword_clash", "swing": "sword_swing", "slash": "sword_swing",
+    "draw": "unsheathe", "blade": "unsheathe", "pew": "laser", "zap": "laser", "beam": "laser", "shot": "gunshot",
+    "gun": "gunshot", "pistol": "gunshot", "machine_gun": "rifle", "burst": "rifle", "ricochet": "ricochet",
+    "arrows": "arrow", "bow": "arrow", "crossbow": "arrow", "thunk": "arrow_hit", "shield": "shield_hit",
+    "block": "shield_hit", "hit": "punch", "thwack": "punch", "smack": "punch", "boot": "kick",
+    "spell": "spell", "cast": "spell", "sparkle": "magic", "twinkle": "magic", "wand": "magic", "smoke": "poof",
+    "vanish": "poof", "disappear": "poof", "warp": "teleport", "beam_up": "teleport", "zoom": "zip", "dash": "zip",
+    "plop": "pop", "bubble": "pop", "mwah": "kiss", "smooch": "kiss", "bump": "bonk", "head": "bonk",
+    "lightning": "thunder", "storm": "thunder", "raining": "rain", "drizzle": "rain", "breeze": "wind",
+    "gust": "wind", "flames": "fire", "campfire": "fire", "burn": "fire", "slam": "door_slam", "door": "door_creak",
+    "creak": "door_creak", "ding": "bell", "ring": "bell", "chime": "bell", "tick": "clock", "tock": "clock",
+    "siren": "alarm", "water": "splash", "swoosh": "whoosh", "swish": "whoosh", "bounce": "boing", "spring": "boing",
+    "jump": "boing", "horn": "car_horn", "honk": "car_horn", "beep": "car_horn", "car": "car_engine",
+    "engine": "car_engine", "rev": "car_engine", "screech": "skid", "brakes": "skid", "tyres": "skid", "tires": "skid",
+    "rocket": "spaceship", "ufo": "spaceship", "zoom_past": "flyby", "walk": "footsteps", "steps": "footsteps",
+    "giant": "stomp", "horse": "gallop", "flap": "wings", "wing": "wings", "fly": "wings", "bite": "chomp",
+    "nom": "chomp", "growling": "growl", "monster": "growl", "dragon": "roar", "howl": "wolf", "tweet": "bird",
+    "chirp": "bird", "meow": "cat", "bark": "dog", "woof": "dog", "ribbit": "frog", "croak": "frog",
     "villain": "evil_laugh", "mwahaha": "evil_laugh", "drumroll": "drum_roll", "fanfare": "tada", "clap": "applause",
     "claps": "applause", "clapping": "applause", "hooray": "cheer", "crowd": "cheer", "cheering": "cheer",
     "laugh": "laugh_track", "laughs": "laugh_track", "laughter": "laugh_track", "sitcom": "laugh_track",
     "roaring_laughter": "laugh_big", "big_laugh": "laugh_big", "badumtss": "rimshot", "ba_dum_tss": "rimshot",
     "drum": "rimshot", "cricket": "crickets", "silence": "crickets", "trombone": "sad_trombone", "fail": "sad_trombone",
-    "wah_wah": "sad_trombone", "ooh": "audience_ooh", "oooh": "audience_ooh", "gasp": "audience_ooh",
-    "aww": "audience_aww", "awww": "audience_aww", "scratch": "record_scratch", "whistle": "slide_whistle",
-    "fall": "slide_whistle",
+    "wah_wah": "sad_trombone", "ooh": "audience_ooh", "oooh": "audience_ooh", "aww": "audience_aww",
+    "awww": "audience_aww", "scratch": "record_scratch", "whistle": "slide_whistle",
 }
 MUSIC_SYNONYMS = {
     "quest": "adventure", "journey": "adventure", "happy": "adventure", "scary": "spooky", "creepy": "spooky",
-    "horror": "spooky", "mystery": "spooky", "ghost": "spooky", "fight": "battle", "action": "battle", "epic": "battle",
-    "chase": "battle", "danger": "battle", "fairytale": "calm", "fairy_tale": "calm", "gentle": "calm",
-    "peaceful": "calm", "lullaby": "calm", "village": "calm", "tender": "sad", "melancholy": "sad",
-    "win": "victory", "triumph": "victory", "celebration": "victory", "party": "victory", "scifi": "space",
-    "sci_fi": "space", "future": "space", "robots": "space", "funny": "comedy", "silly": "comedy", "quirky": "comedy",
-    "jazz": "lounge", "club": "lounge", "comedy_club": "lounge", "standup": "lounge", "stand_up": "lounge",
+    "horror": "spooky", "ghost": "spooky", "detective": "mystery", "suspense": "mystery", "sneaky": "mystery",
+    "fight": "battle", "action": "battle", "danger": "battle", "run": "chase", "race": "chase", "escape": "chase",
+    "heroic": "epic", "grand": "epic", "fairy_tale": "fairytale", "magic": "fairytale", "princess": "fairytale",
+    "gentle": "calm", "peaceful": "calm", "lullaby": "calm", "village": "calm", "tender": "sad",
+    "melancholy": "sad", "love": "romantic", "romance": "romantic", "win": "victory", "triumph": "victory",
+    "celebration": "victory", "party": "victory", "scifi": "space", "sci_fi": "space", "future": "space",
+    "robots": "space", "ocean": "underwater", "sea": "pirate", "ship": "pirate", "pirates": "pirate",
+    "castle": "medieval", "knight": "medieval", "tavern": "medieval", "cowboy": "western", "wild_west": "western",
+    "comedy": "funny", "cartoon": "funny", "silly": "funny", "quirky": "funny", "jazz": "lounge", "club": "lounge",
+    "comedy_club": "lounge", "standup": "lounge", "stand_up": "lounge",
 }
 
 
@@ -95,8 +116,8 @@ def _norm(name: str) -> str:
     return re.sub(r"[\s-]+", "_", name.strip().lower())
 
 
-def _resolve(name: str, known: dict[str, Path], synonyms: dict[str, str]) -> str | None:
-    """Exact name, then a synonym, then a close spelling, then any word of it ("big_explosion" -> explosion)."""
+def _resolve(name: str, known: dict, synonyms: dict[str, str]) -> str | None:
+    """Exact name, then a synonym, then a close spelling, then any word of it ("loud_gunshot" -> gunshot)."""
     name = _norm(name)
     if name in known:
         return name
@@ -113,16 +134,21 @@ def _resolve(name: str, known: dict[str, Path], synonyms: dict[str, str]) -> str
 
 
 class SoundBook:
-    """The sound library on disk: sounds/sfx/*.ogg one-shots and sounds/music/*.ogg loops, named by file."""
+    """The library on disk. One-shots: sounds/sfx/<group>/<name>.ogg (the name is the tag; the group only sorts
+    the prompt's list). Music: sounds/music/<mood>/<track>.ogg, several tracks per mood."""
 
-    def __init__(self, sfx: dict[str, Path], music: dict[str, Path]) -> None:
-        self.sfx, self.music = dict(sfx), dict(music)
+    def __init__(self, sfx: dict[str, Path], music: dict[str, list[Path]], groups: dict[str, str] | None = None) -> None:
+        self.sfx, self.music = dict(sfx), {m: list(t) for m, t in music.items()}
+        self.groups = dict(groups or {})  # sfx name -> group
 
     @classmethod
     def load(cls, root: Path = SOUNDS_DIR) -> SoundBook:
-        def scan(sub: str) -> dict[str, Path]:
-            return {p.stem: p for p in sorted((root / sub).glob("*.ogg"))}
-        return cls(scan("sfx"), scan("music"))
+        sfx, groups, music = {}, {}, {}
+        for p in sorted((root / "sfx").glob("*/*.ogg")):
+            sfx[p.stem], groups[p.stem] = p, p.parent.name
+        for p in sorted((root / "music").glob("*/*.ogg")):
+            music.setdefault(p.parent.name, []).append(p)
+        return cls(sfx, music, groups)
 
     def resolve_sfx(self, name: str) -> str | None:
         return _resolve(name, self.sfx, SFX_SYNONYMS)
@@ -131,7 +157,11 @@ class SoundBook:
         return _resolve(name, self.music, MUSIC_SYNONYMS)
 
     def describe_sfx(self) -> str:
-        return "\n".join(f"- {n}: {ABOUT[n]}" if n in ABOUT else f"- {n}" for n in self.sfx) or "none today"
+        """One line per group: `- weapons: gunshot, rifle (a machine-gun burst), ...`."""
+        by_group: dict[str, list[str]] = {}
+        for n in self.sfx:
+            by_group.setdefault(self.groups.get(n, "other"), []).append(f"{n} ({ABOUT[n]})" if n in ABOUT else n)
+        return "\n".join(f"- {g}: {', '.join(names)}" for g, names in by_group.items()) or "none today"
 
     def describe_music(self) -> str:
         return "\n".join(f"- {n}: {MUSIC_ABOUT[n]}" if n in MUSIC_ABOUT else f"- {n}" for n in self.music) or "none today"
@@ -158,6 +188,7 @@ class Soundboard:
         self._music: tuple[PlayHandle, _Track] | None = None
         self._sfx: set[PlayHandle] = set()
         self._ducked = {"agent": False, "user": False}
+        self._next_track: dict[str, int] = {}  # mood -> which of its tracks plays next (they take turns)
 
     async def start(self, room: rtc.Room, session: AgentSession) -> None:
         player = BackgroundAudioPlayer()
@@ -209,12 +240,16 @@ class Soundboard:
             return
         if resolved == self.music_name:
             return  # already playing: keep it going rather than restarting it
-        logger.info("music %s", resolved)
+        tracks = self.book.music[resolved]
+        turn = self._next_track.get(resolved, random.randrange(len(tracks)))
+        self._next_track[resolved] = (turn + 1) % len(tracks)
+        path = tracks[turn % len(tracks)]
+        logger.info("music %s (%s)", resolved, path.stem)
         self.stop_music(fade=True)  # fades out while the new one fades in: a crossfade
         self.music_name = resolved
         if self.player is not None:
             track = _Track(self.target())
-            source = self._music_frames(self.book.music[resolved], track)
+            source = self._music_frames(path, track)
             self._music = (self.player.play(AudioConfig(source, fade_in=MUSIC_FADE_S, fade_out=MUSIC_FADE_S)), track)
 
     def stop_music(self, fade: bool = True) -> None:

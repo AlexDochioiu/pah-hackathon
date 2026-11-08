@@ -18,8 +18,8 @@ Update this page when a piece is added or a connection changes. Details live on 
 ## The chain, one sentence at a time
 1. The user holds the button and talks. The web page sends the audio to the LiveKit room.
 2. The storyteller (`agent/storyteller.py`) runs STT → LLM. The LLM writes narration with inline tags
-   (`[left:roar]`, `[duet:hug]`, `[talk:left] "…"`, `[face:each_other]`, `[props:right]`, and soon `[sfx:x]`,
-   `[music:x]`, `[pick:lars]`). The prompt is `agent/prompt.md`; the gesture list in it comes from the stage server.
+   (`[left:roar]`, `[duet:hug]`, `[talk:left] "…"`, `[face:each_other]`, `[props:right]`, `[sfx:x]`,
+   `[music:x]`, and soon `[pick:lars]`). The prompt is `agent/prompt.md`; the gesture list in it comes from the stage server.
 3. `tags_first` moves gesture tags to the start of their sentence; `Storyteller.tts_node` (`agent/voices.py`)
    removes all tags before speech and gives each character's quoted lines its own TTS voice; `GestureSync` fires
    each tag when playback reaches it (the transcript is time-stamped at every voice switch).
