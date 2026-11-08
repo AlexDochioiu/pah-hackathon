@@ -40,7 +40,7 @@ LARS_PUT_DOWN = place:lars | right:nod
 # Off until it works on the real arms. on: act 2's pick is Dream-1's ([dream:pick_lars], robot/dream_run.py; it wins
 # over LARS_PICK). About 90 s: its own lines and the patter fill it, so act 2 runs well over budget.
 # A miss: the arm facepalms, a sad trombone, one DREAM_OOPS quip, then our own pick_lars. Needs someone at the e-stop.
-DREAM_PICK = on
+DREAM_PICK = off
 DREAM_ARGS = --raw --no-fallback --speed 0.5 --exec 16 --pick-s 90 --patter 8   # raw: Dream-1 unchecked, its own timing at half speed (like dreamcli's ~/dream-test.yaml); the arms stay ours
 DREAM_OOPS = Ah, frog-nabbit. | Nobody saw that. | That was a practice grab.
 # The "Built with" card: the /show page shows it during act BUILT_WITH_ACT. One line per tool,
