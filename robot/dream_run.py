@@ -232,6 +232,8 @@ def main():
     ap.add_argument("--task", default="pick up the soft green plush toy frog and hold it up")
     ap.add_argument("--stage", default="http://127.0.0.1:8770")
     ap.add_argument("--station", default="nuck9")
+    ap.add_argument("--cli", action="store_true", help="hand the arms to `dreamcli robot run` for --pick-s (stage server "
+                    "stopped meanwhile, restarted after): Dream-1 raw, none of our code in the loop")
     ap.add_argument("--remote-dir", default="~/dream-ghost")
     ap.add_argument("--head", choices=["joint", "eef"], default="eef", help="eef: the head dreamcli's real picks used")
     ap.add_argument("--arm", choices=["auto", *ARMS], default="auto")
@@ -268,9 +270,49 @@ def main():
     if a.patter > 0:
         threading.Thread(target=patter, args=(a.patter, stop), daemon=True).start()
     try:
-        run(a, stage, s, end)
+        (cli if a.cli else run)(a, stage, s, end)
     finally:
         stop.set()
+
+
+STAGE_PAT = "[b]in/python -u /home/pah/dial/stage.py"
+STAGE_STOP = (f'for p in $(pgrep -f "{STAGE_PAT}"); do kill -INT $p; done; '
+              f'for i in $(seq 40); do pgrep -f "{STAGE_PAT}" >/dev/null || exit 0; sleep 0.5; done; exit 1')
+STAGE_START = ('cd ~/physical-ai-hacks && setsid -f sh -c "exec .venv/bin/python -u ~/dial/stage.py --real '
+               '> ~/dial/stage_after_dreamcli.out 2>&1 < /dev/null"')
+
+
+def cli(a, stage, s, end):
+    """--cli (owner, Nov 8: raw dreamcli picks far better than our /trajectory path): stop the stage server (it folds
+    the arms), run `dreamcli robot run` until --pick-s is up, Ctrl-C it (it homes the arms and switches them off),
+    start the stage server again and wait for it. We can't see a grab from here: the person watching judges it."""
+    ssh = ["ssh", "-o", "ControlPath=none", "-o", "BatchMode=yes", a.station]
+    sh = lambda cmd, t=90: subprocess.run(ssh + [cmd], capture_output=True, text=True, timeout=t)
+    say("Dream-1, the arms are yours. No script, no safety net.")
+    if sh(STAGE_STOP).returncode:
+        out(event="done", ok=False, held=False, dream_chunks=0, fallback=False, reason="the stage server didn't stop")
+        return
+    run_cmd = ("cd ~ && setsid -f sh -c 'echo $$ > /tmp/dreamcli_show.pid; exec ~/dream-env/bin/dreamcli robot run "
+               f"--config ~/dream-test.yaml --action-space joint --task \"{''.join(ch for ch in a.task if ch not in '\'"$`\\')}\" "
+               "> ~/dial/dreamcli_show.out 2>&1 < /dev/null'")
+    sh(run_cmd)
+    out(event="info", cli="dreamcli robot run started", task=a.task)
+    while time.monotonic() < end:
+        time.sleep(1)
+    sh('kill -INT $(cat /tmp/dreamcli_show.pid); for i in $(seq 60); do kill -0 $(cat /tmp/dreamcli_show.pid) 2>/dev/null || exit 0; sleep 0.5; done; exit 1')
+    say("Time's up, Dream-1. Arms back to me.")
+    sh(STAGE_START)
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < 90:
+        try:
+            stage.state()
+            break
+        except Exception:
+            time.sleep(2)
+    else:
+        out(event="done", ok=False, held=False, dream_chunks=0, fallback=False, reason="the stage server didn't come back")
+        return
+    out(event="done", ok=True, held=False, arm=None, dream_chunks=0, fallback=False, reason=None, missed=None)
 
 
 def run(a, stage, s, end):
