@@ -102,6 +102,8 @@
   <div><div id="act-title">…</div><div id="act-state"></div><div id="act-note"></div></div>
   <ul id="acts"></ul>
   <div id="prompter"></div>
+  <div id="edgebox" style="position:fixed;right:14px;bottom:10px;z-index:50;background:rgba(0,0,0,.55);color:#fff;padding:6px 10px;border-radius:8px;font:600 14px system-ui">
+    Edge: soft <input type="range" id="edge" min="0" max="4" step="1" style="vertical-align:middle"> based <span id="edgev"></span></div>
   <div id="built"><h2>Built with</h2><ul></ul></div>
   <div id="keys">Next: → · PageDown · Space &nbsp;|&nbsp; Back: ← · PageUp &nbsp;|&nbsp; Jump: 1–9 (0: start over)
     &nbsp;|&nbsp; STOP: Esc. The talk button works in the demo act.
@@ -144,6 +146,12 @@ function liveNow() { const a = actOf(current); return !SHOW || (a && a.kind === 
 // auto-advance (show.py ShowRunner.auto): the worker plays acts 2-5 on its own; the page follows its cursor
 let autoOn = localStorage.getItem("show.auto") !== "0", lastAdvanced = null, autoSent = null;
 $("auto").checked = autoOn;
+// the edge slider (owner, Nov 8): 0 soft .. 4 very based; the agent reads it at every reply (participant attribute)
+$("edge").value = localStorage.getItem("edge") || "2";
+$("edgev").textContent = $("edge").value;
+function sendEdge() { if (room) room.localParticipant.setAttributes({ edge: $("edge").value }).catch(() => {}); }
+$("edge").addEventListener("input", () => { $("edgev").textContent = $("edge").value; localStorage.setItem("edge", $("edge").value); sendEdge(); });
+$("edge").addEventListener("click", (e) => e.stopPropagation());
 $("dream").checked = localStorage.getItem("show.dream") === "1";  // a fresh room: act 2 is primed with or without the pick
 $("dream").addEventListener("change", () => { localStorage.setItem("show.dream", $("dream").checked ? "1" : "0"); location.reload(); });
 $("auto").addEventListener("change", () => { autoOn = $("auto").checked; localStorage.setItem("show.auto", autoOn ? "1" : "0"); render(); });
@@ -284,7 +292,7 @@ async function measurePlayout() {
   const ms = (d) => String(Math.round((d + extra) * 1000));
   if (Math.abs(ms(delays.voice) - playoutSent) < 15) return;  // only real changes
   playoutSent = +ms(delays.voice);
-  room.localParticipant.setAttributes({ playout_ms: ms(delays.voice), playout_bg_ms: delays.bg === undefined ? "" : ms(delays.bg) });
+  room.localParticipant.setAttributes({ playout_ms: ms(delays.voice), playout_bg_ms: delays.bg === undefined ? "" : ms(delays.bg), edge: $("edge").value });
 }
 setInterval(() => measurePlayout().catch((e) => console.debug("playout", e)), 2000);
 
@@ -331,6 +339,7 @@ async function connect() {
     });
     await r.connect(t.url, t.token);
     room = r; parked = false; joinedAt = Date.now();
+    sendEdge();
     if (transcript.children.length) transcript.appendChild(document.createElement("hr"));  // a new story starts
     $("f-room").textContent = "room " + t.room;
     chip("c-room", "room: joined", "ok");

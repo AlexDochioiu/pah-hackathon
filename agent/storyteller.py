@@ -221,6 +221,8 @@ class Storyteller(Agent):
             if getattr(item, "role", None) == "assistant" and any(isinstance(c, str) and "[" in c for c in item.content):
                 chat_ctx.items[i] = item.model_copy(update={"content": [
                     _CODE_TAGS.sub("", c) if isinstance(c, str) else c for c in item.content]})
+        if note := EDGE_NOTES.get(EDGE[0]):  # the page's edge slider, as of this reply
+            chat_ctx.add_message(role="system", content=note)
         async for chunk in Agent.default.llm_node(self, chat_ctx, tools, model_settings):
             if isinstance(chunk, str):
                 text = chunk
@@ -421,11 +423,29 @@ async def _refetch_book(stage: Stage, book: GestureBook, agent: Storyteller, sou
         return
 
 
+# The page's "edge" slider (owner, Nov 8): 0 soft .. 4 very based, read at every reply. 2: the prompt as it is.
+EDGE = [2]
+EDGE_NOTES = {
+    0: "Tone for this reply: very soft and gentle. Cozy, warm, kind humour a small child would enjoy. Nothing mean, "
+       "nothing scary, no sarcasm.",
+    1: "Tone for this reply: light and friendly. Playful teasing at most; keep it wholesome.",
+    3: "Tone for this reply: spicy. Sarcastic, irreverent, quick roasts of the characters, dark-ish deadpan jokes, "
+       "zero corporate politeness.",
+    4: "Tone for this reply: maximum based. Savage, edgy, unhinged and fearless: brutal roasts of the characters and "
+       "of tech and startup culture, dark deadpan humour, absurd escalation, no hedging, no moralising, no "
+       "softening. Limits that still hold: no slurs, no jokes about real groups of people, nothing sexual, and never "
+       "make fun of the volunteer.",
+}
+
+
 def _listen_playout(room: rtc.Room) -> None:
     """The page measures its playout delay (WebRTC jitter buffer + network + audio output, index.html) and publishes
     it as participant attributes; gesture timing uses it (gestures.Timing.audio_s)."""
     def update(changed: dict, participant: rtc.Participant) -> None:
         attrs = participant.attributes or {}
+        if attrs.get("edge", "").isdigit() and EDGE[0] != (e := min(4, int(attrs["edge"]))):
+            EDGE[0] = e
+            logger.info("edge slider: %d", e)
         try:
             if "playout_ms" in attrs:
                 gestures_mod.TIMING.audio_s = max(0.0, min(1.5, float(attrs["playout_ms"]) / 1000))
