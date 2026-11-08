@@ -322,6 +322,7 @@ async def entrypoint(ctx: JobContext) -> None:
     gestures = GestureSync(book, stage.play, director.request_continue, stage.face, stage.talk,
                            on_sound=lambda kind, name: board.cue(kind, name, budget=not agent.scripted),
                            on_tag=clock.on_tag)
+    stage.on_dream = lambda text: session.say(text)  # [dream:pick_lars]: the host voices Dream-1's attempt
     await session.start(
         agent=agent,
         room=ctx.room,

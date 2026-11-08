@@ -20,9 +20,11 @@ from __future__ import annotations
 import asyncio
 import difflib
 import functools
+import json
 import logging
 import os
 import re
+import shlex
 import time
 import weakref
 from collections.abc import AsyncIterable, Callable
@@ -133,6 +135,11 @@ FACE_TAG = "face"  # [face:each_other] / [face:audience] -> POST /stance
 PROPS_TAG = "props"  # [props:left|right|both] -> POST /props on for that arm ([props:left car]: a known toy, its
 # own gestures); [props:none] -> off for both
 PICK_TAG, PLACE_TAG = "pick", "place"  # [pick:lars] / [place:lars] -> POST /play pick_lars / place_lars (its arm)
+DREAM_TAG = "dream"  # [dream:pick_lars] -> robot/dream_run.py: Dream-1 picks Lars through our checker, else pick_lars
+DREAM_TASKS = {"pick_lars": "pick up the green frog"}  # its task text for Dream-1; other names: "pick_x" -> "pick x"
+DREAM_BUSY_S = 60.0  # no fills meanwhile
+# DREAM_ARGS (env): more dream_run.py options, e.g. "--replay robot/lars/dream_chunks.json" for a rehearsal, no Dream call
+DREAM_RUN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "robot", "dream_run.py")
 FACINGS = {"each_other": "each_other", "other": "each_other", "eachother": "each_other", "together": "each_other",
            "audience": "audience", "front": "audience", "us": "audience", "out": "audience", "forward": "audience"}
 MAX_TAG_LEN = 48  # a "[" left open longer than this is prose, not a tag
@@ -691,6 +698,8 @@ class Stage:
         self.hit_at = {"left": 0.0, "right": 0.0}  # each arm's last gesture's first visible hit (monotonic)
         self.idling = False  # /idle sent since the last freeze: arms breathe between gestures instead of holding
         self._delayed: set[asyncio.Task] = set()  # sends waiting their turn (a freeze cancels them)
+        self.dreaming = False  # robot/dream_run.py running ([dream:...])
+        self.on_dream: Callable[[str], None] | None = None  # speaks its lines (storyteller wires session.say)
 
     def _session(self) -> aiohttp.ClientSession:
         if self._http is None or self._http.closed:
@@ -769,6 +778,9 @@ class Stage:
              on_start: Callable[[float | None, float], None] | None = None) -> None:
         """on_start(t0, speed): once the stage answers, the monotonic time the gesture's own t = 0 comes (after the
         stage's blend into it, its "starts_in") and the speed it plays at; t0 None if refused."""
+        if arm == DREAM_TAG:
+            self.dream(gesture)
+            return
         if speed is None:  # STAGE_SPEED: every gesture and duet (read per call: .env loads after this import)
             speed = float(os.getenv("STAGE_SPEED", "1.0"))
         now = time.monotonic()
@@ -814,6 +826,37 @@ class Stage:
         if wait > 0.05:
             logger.info("gesture %s:%s waits %.2f s for the last one's hit", arm, gesture, wait)
         self.send("/play", {"arm": arm, "gesture": gesture, "speed": speed}, delay=wait, on_reply=cb)
+
+    def dream(self, name: str) -> None:
+        """[dream:pick_lars]: robot/dream_run.py asks Dream-1 (no motion), our checker passes or refuses each chunk,
+        and on a refusal our own pick_lars plays. Its "say" lines go to on_dream (the host speaks them)."""
+        if self.dreaming:
+            logger.info("dropped dream:%s: one is running", name)
+            return
+        self.dreaming = True
+        task = asyncio.create_task(self._dream(name))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def _dream(self, name: str) -> None:
+        text = DREAM_TASKS.get(name, name.replace("_", " "))
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "python3", DREAM_RUN, "--stage", self.url, "--task", text, *shlex.split(os.getenv("DREAM_ARGS", "")),
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+            async for line in proc.stdout:
+                try:
+                    msg = json.loads(line)
+                except ValueError:
+                    continue
+                logger.info("dream %s", msg)
+                if msg.get("event") == "say" and self.on_dream:
+                    self.on_dream(str(msg.get("text", "")))
+            await proc.wait()
+        except Exception as e:  # noqa: BLE001 - the show goes on
+            logger.warning("dream:%s failed: %s", name, e)
+        finally:
+            self.dreaming = False
 
     def talk(self, arm: str, on: bool) -> None:
         if on and self.duet_from <= time.monotonic() < self.duet_until:
@@ -983,6 +1026,9 @@ class GestureSink(io.TextOutput):
                     self._play(side, name, self._book.guests[name])
                 else:
                     logger.info("dropped %s: no such guest on the stage", p.raw)
+            elif p.arm == DREAM_TAG:
+                self._busy("both", DREAM_BUSY_S)
+                self._play(DREAM_TAG, p.name.strip().lower(), 0.0)
             elif p.arm in (DUET_TAG, ENSEMBLE_TAG):
                 if name := self._book.resolve_duet(p.name):
                     self._fire(DUET_TAG, name, self._book.duets[name])

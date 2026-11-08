@@ -32,6 +32,9 @@ Update this page when a piece is added or a connection changes. Details live on 
    sound (its stage `sound`, or an `[sfx]` from its sentence) is scheduled on its visible hit from the stage's
    `starts_in` reply.
 4. Fired tags become HTTP calls to the stage server (`agent/gestures.py` `Stage`), through the ssh tunnel.
+   `[dream:pick_lars]` instead runs `robot/dream_run.py`: it asks Dream-1 on the station for a move (cameras and
+   `GET /state` only), plays it through `POST /trajectory` if our checker passes it, else our `pick_lars`, and its
+   lines are spoken in the host's voice ([dream-1.md](dream-1.md)).
 5. The stage server (`robot/stage.py`) plays pre-built, pre-checked trajectories from `robot/gestures/` and
    `robot/duets/` on the arms. Anything that fails the checker is refused, not played.
 6. TTS audio goes back through the room to the web page's speaker, and so do the sound effects and music
@@ -44,6 +47,7 @@ Update this page when a piece is added or a connection changes. Details live on 
 | Duets and ensembles | `robot/make_duets.py` → `robot/duets/*.json` | `duets.DuetChecker` | [gestures.md](gestures.md) |
 | Previews (GIFs) | `robot/preview*.py` → `robot/previews/` | owner review pages | |
 | Lars pick | `robot/lars.py` (`--bake` from the fixed table dock `DOCK_RIGHT`, in the right arm's frame; live `--dry`/`--go` through `calib.json`) | its own sim checks + checker; the stage's `--dock-check` maps the dock into the camera through `calib.json` | [props.md](props.md) |
+| Dream-1 pick (`[dream:pick_lars]`) | `robot/dream_preview.py` (station `~/dream-ghost/`: cameras + `GET /state` → Dream-1, no motion) → `robot/dream_run.py` (laptop) → `POST /trajectory` | the stage: `show.Checker`, ≤ 0.3 rad/s; else our `pick_lars` | [dream-1.md](dream-1.md) |
 | dimos digital twin (parked: the owner saw no value; reference only) | `dimos/twin.py` (runs dimos from `/tmp/dimos-src`) | `dimos/check_model.sh` (FK vs `show.py`, side-by-side shots) | [dimos.md](dimos.md) |
 | Narration, tags, voices, sounds | `agent/` | `agent/tests` (`uv run --group dev pytest -q`), `fake_stage.py` | [storyteller.md](storyteller.md) |
 

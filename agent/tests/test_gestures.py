@@ -182,11 +182,12 @@ def test_guest_pick_and_place_tags():
     sink = GestureSink(book, lambda a, g, d, **k: played.append((a, g, d)), lambda: None, next_in_chain=Collect())
 
     async def run():
-        await sink.capture_text("Here comes Lars [pick:Lars] hello [place:lars] [pick:bob] [right:wave]")
+        await sink.capture_text("Here comes Lars [pick:Lars] hello [place:lars] [pick:bob] [right:wave] [dream:pick_lars]")
         sink.flush()
         await asyncio.sleep(0)
     asyncio.run(run())
-    assert played == [("right", "pick_lars", 5.0), ("right", "place_lars", 5.2), ("right", "wave", 2.0)]
+    assert played == [("right", "pick_lars", 5.0), ("right", "place_lars", 5.2), ("right", "wave", 2.0),
+                      ("dream", "pick_lars", 0.0)]  # Stage.play runs robot/dream_run.py for it
 
 
 def test_toy_moves_fall_back_without_the_toy():

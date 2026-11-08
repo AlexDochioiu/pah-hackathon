@@ -1,7 +1,7 @@
 # Driving the arms
 
-We don't use Dream-1 ([dream-1.md](dream-1.md)); our scripts command joint targets directly through the kit
-([station.md](station.md)).
+Our scripts command joint targets directly through the kit ([station.md](station.md)). Dream-1 never drives the
+arms itself: its chunks go through the stage's `POST /trajectory` and our checker ([dream-1.md](dream-1.md)).
 
 ## The pattern (see `robot/lift.py`, `robot/home.py`)
 1. `lock = station_lock.acquire("name")`, then `a = arms.open_arms(station, energize=True)`.
@@ -33,6 +33,23 @@ against the lean-back rule before it starts. Joints 4–6 run at a low gain (kp=
   15 cm: its whole plan while it runs or loops (idle breathing, stir), only the pose it holds once a one-shot plan
   (a gesture, `/stance`, `/stage`) has finished. Whatever starts next on that arm (idle, a queued gesture) is checked
   when it starts.
+
+## POST /trajectory (Dream-1's chunks)
+`{"arm", "t": [s], "q": [[6 rad]], "g": [0..1] (optional), "speed": 0.1..1, "name", "carry": "lars" (optional)}`:
+an external joint trajectory on one arm. `robot/dream_run.py` sends Dream-1's chunks here.
+- It starts from the arm's current command, held 0.2 s at both ends, and is retimed so no joint passes
+  0.3 rad/s × speed (`TRAJ_VMAX`, the table cap), 2 rad/s², and the gripper 1.0 per s (a full close over ~1 s), easing
+  in and out over the first and last 8 keys.
+- Checked like a pick (`show.Checker.check_side` with the table rule: limits, 4 cm clearance, 0.3 rad/s and 3 mm
+  within 5 cm of the table), lean-back no further than rest or its start, 15 cm from the other arm's committed
+  motion. A refusal is a 409 with the reason; nothing moves.
+- The arm must be free (done or idling). Like a pick it runs to its end; `/freeze` brakes it on its path and it is
+  never resumed. Answers `{"ok", "name", "duration_s", "peak_rad_s", "slowed", "props"}`; `GET /state` shows it as
+  the arm's `playing`.
+- Props: with `carry`, a trajectory that closes the gripper from ≥ 0.6 to ≤ 0.35 at its end takes the prop, as
+  `pick_lars` does: from then on gestures keep the grip, `/talk` and opening `/grip` are refused, and later
+  trajectories keep the grip (their `g` is ignored) unless they end ≥ 0.6, which puts it down (so does
+  `place_lars`). Any other prop in hand (`/props`, a toy) refuses the trajectory.
 
 ## YAM joint geometry (from FK on i2rt's model)
 - At zero the joint axes are j1 +z (base yaw), j2 +y, j3 −y, j4 −y (pitches), j5 −z (wrist yaw), j6 +x (roll).

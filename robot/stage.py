@@ -44,6 +44,16 @@ API (JSON in and out; "arm" is left | right | both, default both):
                                        request finishes it at half speed first (409). With --dock-check, pick_lars first
                                        looks at the overhead camera and refuses (409) unless Lars lies at his dock
   POST /grip {"arm","value"}           set the gripper 0 closed .. 1 open (close it on a prop)
+  POST /trajectory {"arm","t","q","g","speed","name","carry"}  an external joint trajectory on one arm (Dream-1's
+                                       action chunk, robot/dream_run.py): absolute joints q (rows of 6, rad) at times t
+                                       (s), gripper g (0..1, optional). It starts where the arm is, is retimed so no joint
+                                       passes 0.3 rad/s x speed anywhere, and plays only if show.Checker passes it like a
+                                       pick (limits, lean-back, 4 cm clearance, 0.3 rad/s and 3 mm within 5 cm of the
+                                       table, 15 cm from the other arm). The arm must be free. "carry" (a carried prop's
+                                       name: "lars"): a trajectory that ends with the gripper closed holds it from then on,
+                                       like pick_lars (gestures keep the grip, /talk refused). While it holds one, a
+                                       trajectory keeps the grip, unless it ends open: that puts it down. Answers
+                                       {"ok","name","duration_s","peak_rad_s","slowed","props"}; /freeze stops it dead for good
 Every motion is checked before it starts (limits, table clearance with any props, 15 cm from the other arm's committed
 motion); a refused request returns 409 with the reason and nothing moves.
 """
@@ -57,6 +67,16 @@ REST_TOL = 0.25      # rad from home that counts as resting (same as lift.py)
 FREEZE_S = 0.15      # s to brake to a stop on /freeze
 TALK_MAX_S = 20.0    # s: a mouth left talking stops by itself after this
 TRACK_STOP = 0.35    # rad: tracking error above this freezes everything (something is blocking an arm)
+# POST /trajectory (an external joint trajectory: Dream-1's action chunk). Retimed this slow everywhere, not only near
+# the table: lars.py's 0.3 rad/s table cap (show.TABLE_VMAX), and gentle acceleration for a model's jittery rows.
+TRAJ_VMAX = show.TABLE_VMAX  # rad/s, any joint, at speed 1
+TRAJ_AMAX = 2.0              # rad/s^2, any joint
+TRAJ_GRIP_VMAX = 1.0         # gripper (0..1) per s
+TRAJ_HOLD_S = 0.2            # s of stillness added at both ends, so it starts and stops at zero speed
+TRAJ_MAX_KEYS, TRAJ_MAX_S = 2000, 60.0
+TRAJ_RAMP = np.linspace(4.0, 1.0, 8)  # the first and last keys' segments stretched this much: a gentle start and stop
+TRAJ_CLOSED = 0.35           # a "carry" trajectory ending with the gripper at or below this holds the prop
+TRAJ_OPEN = 0.6              # one ending at or above this, holding a prop, puts it down
 
 
 class StageError(Exception):
@@ -276,7 +296,8 @@ class Stage:
             self.plan[side] = p
             self.last_error[side] = None
             g = p.gesture
-            if g is not None and g.carry:  # pick: holds it from now on; place: empty-handed afterwards
+            if g is not None and g.carry and not g.d.get("external"):  # pick: holds it from now on; place: empty-
+                # handed afterwards (a /trajectory sets its own props: it may carry it all the way)
                 held = g.carry["from"] > 0  # a pick starts empty-handed and ends holding it
                 self.props[side] = g.carry["name"] if held else False
                 self.ck.set_props(self._ck_props(self.props))
@@ -471,7 +492,8 @@ class Stage:
                     u = np.minimum(p.i + np.cumsum(1 - k / (len(k) + 1)), len(p.Q) - 1)
                     Q, j = along(p.Q, u), int(np.ceil(u[-1]))
                     G = np.interp(u, np.arange(len(p.G)), p.G)
-                    self.table_left[s] = {"gesture": p.gesture, "Q": np.vstack([Q[-1:], p.Q[j:]]), "G": np.r_[G[-1], p.G[j:]]}
+                    if not p.gesture.d.get("external"):  # an external trajectory (/trajectory) is never resumed
+                        self.table_left[s] = {"gesture": p.gesture, "Q": np.vstack([Q[-1:], p.Q[j:]]), "G": np.r_[G[-1], p.G[j:]]}
                     self.plan[s] = Plan("freeze", np.vstack([self.cmd_q[s][None], Q]), np.r_[self.cmd_g[s], G],
                                         self.ck.pose_sweep(s, Q[-1]), hold=True)
                     continue
@@ -586,6 +608,108 @@ class Stage:
                 plans[s] = Plan("grip", Q, np.concatenate([[self.cmd_g[s]], BG]), self.ck.pose_sweep(s, self.cmd_q[s]), hold=True)
             self._commit(plans)
             return {"ok": True}
+
+    def trajectory(self, arm, t, q, g=None, speed=1.0, name="dream", carry=None):
+        """An external joint trajectory on one arm (Dream-1's action chunk, robot/dream_run.py): absolute joints q
+        (N, 6) at times t (N,), gripper g (N,) 0..1 or None (keep the grip). It starts from the arm's current command
+        (a key at t = 0, held TRAJ_HOLD_S, and held again at the end), each segment stretched to TRAJ_VMAX * speed and
+        TRAJ_GRIP_VMAX, then the whole uniformly until the spline stays under those and TRAJ_AMAX. Then it must pass
+        show.Checker as a one-arm absolute path with the TABLE_* rule (check_side: limits, speed, acceleration, CLEAR
+        above TABLE_NEAR, TABLE_VMAX and TABLE_FLOOR below it), lean back no further than rest or its start (like a
+        fold), and clear the other arm's committed motion by GAP (_commit). The arm must be free (holding or idling).
+        Like a pick it runs to its end; /freeze brakes it on its path and it is dropped.
+        Props, like pick_lars/place_lars: with carry (a carried prop's name), one that closes the gripper from at
+        or above TRAJ_OPEN to at or below TRAJ_CLOSED at its end takes the prop (props[arm], checked with it in hand from where the gripper last closes).
+        Holding one, the gripper keeps its grip (g ignored) unless g ends at or above TRAJ_OPEN: that puts it down
+        (checked with it in hand until the gripper last leaves TRAJ_CLOSED). Any other prop in hand: refused."""
+        if arm not in SIDES:
+            raise StageError(f"arm must be left or right, not {arm!r}")
+        if not (isinstance(name, str) and 0 < len(name) <= 32) or name in self.lib or name in show.FOLD:
+            raise StageError(f"name must be 1..32 characters and not a gesture's, not {name!r}")
+        t, q = np.asarray(t, float), np.asarray(q, float)
+        if t.ndim != 1 or not 1 <= len(t) <= TRAJ_MAX_KEYS or q.shape != (len(t), 6):
+            raise StageError(f"t must be 1..{TRAJ_MAX_KEYS} times and q one row of 6 joints (rad) per time; "
+                             f"got t {t.shape}, q {q.shape}")
+        if not (np.isfinite(t).all() and np.isfinite(q).all()) or t[0] < 0 or np.any(np.diff(t) <= 0):
+            raise StageError("t must be finite, from >= 0 and increasing, q finite")
+        if g is not None:
+            g = np.asarray(g, float)
+            if g.shape != t.shape or not np.isfinite(g).all() or g.min() < 0 or g.max() > 1:
+                raise StageError("g must be one gripper value in 0..1 per time")
+        if carry is not None and carry not in self.carried:
+            raise StageError(f"carry must be a carried prop ({sorted(self.carried)}), not {carry!r}")
+        speed = float(np.clip(speed, 0.1, 1.0))
+        vcap = TRAJ_VMAX * speed
+        with self.lock:
+            self._guard()
+            cur = self.plan[arm]
+            if not (cur.done or cur.loop) or self.queue[arm]:
+                raise StageError(f"the {arm} arm is busy with {cur.name}; send the trajectory after it")
+            held = self.props[arm]
+            if held and held not in self.carried:
+                raise StageError(f"a trajectory needs the {arm} arm with empty hands, it holds {held} (POST /props off)")
+            if held and carry not in (None, held):
+                raise StageError(f"the {arm} arm holds {held}, not {carry}")
+            q0, g0 = self.cmd_q[arm].copy(), self.cmd_g[arm]
+            if held and (g is None or g[-1] < TRAJ_OPEN):
+                g = None  # holding a prop: the gripper doesn't move, or it drops it
+            Qk = np.vstack([q0, q0, q, q[-1:]])
+            Gk = np.r_[g0, g0, g if g is not None else np.full(len(t), g0), g[-1] if g is not None else g0]
+            prop = carry or held
+            span = None  # the keys the prop is in hand for the checker: (first, last)
+            if held:
+                closed = np.nonzero(Gk <= TRAJ_CLOSED)[0]
+                span = (0, len(Gk) - 1) if g is None else (0, int(closed[-1]) if len(closed) else 0)
+            elif carry and Gk[-1] <= TRAJ_CLOSED and Gk.max() >= TRAJ_OPEN:  # it closes here, from open: a grasp
+                opened = np.nonzero(Gk > TRAJ_CLOSED)[0]
+                span = (int(opened[-1]) + 1, len(Gk) - 1)
+            after = (False if g is not None else held) if held else (carry if span else False)
+            shape = next((x.carry for x in self.lib.values() if prop and x.carry and x.carry["name"] == prop), None)
+            tk = np.r_[0.0, TRAJ_HOLD_S, TRAJ_HOLD_S + t + (1.0 / show.HZ if t[0] <= 0 else 0.0)]
+            tk = np.r_[tk, tk[-1] + TRAJ_HOLD_S]
+            dt = np.maximum.reduce([np.diff(tk), np.abs(np.diff(Qk, axis=0)).max(1) / vcap,
+                                    np.abs(np.diff(Gk)) / TRAJ_GRIP_VMAX])
+            m = min(len(TRAJ_RAMP), (len(dt) - 2) // 2)  # ease in and out over several keys, not inside one segment
+            if m:
+                dt[1:1 + m] *= TRAJ_RAMP[:m]
+                dt[-1 - m:-1] *= TRAJ_RAMP[:m][::-1]
+            tk = np.r_[0.0, np.cumsum(dt)]
+            asked = TRAJ_HOLD_S * 2 + t[-1]
+            for _ in range(8):  # pchip scales with time, but its 50 Hz samples only roughly: a few stretches
+                d = {"name": name, "side": arm, "near": show.TABLE_NEAR, "external": True,
+                     "about": "an external trajectory (POST /trajectory)",
+                     "keys": [{"t": float(a), "q": [float(x) for x in r], "g": float(b)} for a, r, b in zip(tk, Qk, Gk)]}
+                if span:
+                    d["carry"] = {**shape, "from": float(tk[span[0]]), "to": float(tk[span[1]])}
+                gest = show.Gesture(d)
+                Q, G = gest.samples(arm)
+                v, a = show.peak_rates(Q)
+                gv = float(np.abs(np.diff(G)).max()) * show.HZ if len(G) > 1 else 0.0
+                k = max(v.max() / vcap, float(np.sqrt(a.max() / TRAJ_AMAX)), gv / TRAJ_GRIP_VMAX)
+                if k <= 1.0 + 1e-6:
+                    break
+                tk = tk * k * 1.03
+            else:
+                raise StageError(f"{arm} {name}: could not retime it under {vcap:.2f} rad/s")
+            if gest.duration > TRAJ_MAX_S:
+                raise StageError(f"{arm} {name}: {gest.duration:.0f} s once slowed to {vcap:.2f} rad/s "
+                                 f"(> {TRAJ_MAX_S:.0f} s): too much motion for one trajectory")
+            probs = [p for p in self.ck.check_side(gest) if "leans back" not in p]
+            probs += self.ck.lean_problems(arm, Q, fold=True)  # as far back as rest or where it starts, like a fold
+            if probs:
+                raise StageError(f"{arm} {name}: " + "; ".join(probs))
+            plan = Plan(name, Q, G, self.ck.swept[show.key(name, arm)], gest, hold=True)
+            self._commit({arm: plan})
+            self.mouth[arm].on = False
+            self.queue[arm].clear()
+            self.after[arm] = "hold"
+            if after != held:  # took it or put it down: from now on, as after pick_lars / place_lars
+                self.props[arm] = after
+                self.ck.set_props(self._ck_props(self.props))
+                print(f"{arm} arm {'takes' if after else 'puts down'} {prop} ({name})", flush=True)
+            return {"ok": True, "arm": arm, "name": name, "speed": round(speed, 2),
+                    "duration_s": round((len(Q) - 1) / show.HZ, 2), "peak_rad_s": round(float(v.max()), 3),
+                    "slowed": round(gest.duration / asked, 2), "props": dict(self.props)}
 
     def busy(self, sides=SIDES):
         with self.lock:
@@ -831,6 +955,8 @@ def serve(st, port):
                     "/props": lambda: st.set_props(arm, bool(b.get("on", True)), float(b.get("speed", 1.0)), b.get("kind")),
                     "/rest": lambda: st.go_rest(arm, float(b.get("speed", 1.0))),
                     "/grip": lambda: st.grip(arm, float(b["value"])),
+                    "/trajectory": lambda: st.trajectory(arm, b["t"], b["q"], b.get("g"), float(b.get("speed", 1.0)),
+                                                         str(b.get("name") or "dream"), b.get("carry") or None),
                 }
                 if self.path not in routes:
                     return self._send(404, {"ok": False, "error": "unknown path"})

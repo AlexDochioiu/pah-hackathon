@@ -175,3 +175,9 @@
 - Nov 7 ~20:50: comedy set made edgy on the owner's ask ("so dull it's not funny"): a roast with bite (hackathon life, tech hype, the room, themselves), no puns or dad jokes; hard lines kept (no slurs, identity, looks, sexual, politics). Stories stay family-friendly.
 - Nov 7 ~21:00: stories and the show script get the same edge as comedy (owner): sharp, sarcastic, grown-up hackathon crowd, same hard lines. Show acts 0-3 re-measured at 116.7 s (limit 120).
 - Nov 7 ~21:30: show finale: "It's first prize, or these two end it all" with a `PANIC_REACH` creep toward the e-stop (threat only: a press drops both arms limp), drum roll, "Kidding. Mostly."; finale 19.x s.
+- Nov 7 ~21:15: Dream-1 through our checker. `robot/dream_preview.py` (station, `~/dream-ghost/`) asks Dream-1 from
+  the real cameras and `GET /state` (no motion), `robot/dream_run.py` (laptop) plays its chunks with the new stage
+  `POST /trajectory` (≤ 0.3 rad/s, `show.Checker`, refusals give the reason; `carry` holds Lars like `pick_lars`) or
+  falls back to `pick_lars`; `[dream:pick_lars]` tag. 5 billed calls on real frames: ~1-3 s round trips, and Dream-1
+  stays at rest (≤ 0.06 rad per joint), refused by the checker (j2/j3 jitter past their lower stops), so the show
+  plays our own pick. The left wrist camera is on USB 2 (15 fps max).

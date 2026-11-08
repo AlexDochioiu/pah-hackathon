@@ -23,6 +23,7 @@ Status: 🔨 being built · 👀 waiting for owner review · ⏸ waiting for som
 | Sound on the visible hit: gesture/duet `sound` `{name, at}`, `[sfx]` moves onto the hit, `SFX_SYNC_MS` | 👀 | Done in sim + agent test; mp4s `robot/previews/sound/`; tune `SFX_SYNC_MS` by ear on the real arms |
 | Prop moves: toy car (drive, chase), spaceship (fly, hover/abduct, land, crash) | 👀 | Done in sim: solos, `/props` kinds, car_chase and ufo_abduct duets, previews. Spaceship: the team is finding one with a grip point (the bath-bomb UFO was dropped) |
 | Lars pick from a fixed dock, saved as `pick_lars` / `place_lars` gestures, `[pick:lars]` tag | ✅ sim (the face-up bake picked for real) | Face-down dock (Lars held facing the audience) since Nov 7 evening, sim-checked at speeds 0.3, 0.5, 0.75 and 1.0 ([props.md](props.md)). Real runs start at speed 0.3, ramp 0.5 → 0.75 → 1.0 only after several clean picks |
+| Dream-1 asks, our checker decides, the stage plays (`[dream:pick_lars]`, `POST /trajectory` with `carry`) | ✅ sim · ⏸ real | Built and replayed on the kin stage; on real frames (5 calls) Dream-1 stays at rest, so the show falls back to `pick_lars` ([dream-1.md](dream-1.md#results-on-real-frames-nov-7-2113-no-motion)) |
 | Live prop pick anywhere on the table, 5 s total (detect < 50 ms, plan < 200 ms, move ~4.5 s) | 🔨 after dock | Colour/shape detector on the overhead camera; one grasp template per prop |
 
 ## dimos twin: parked
@@ -36,7 +37,9 @@ Parked Nov 7 ~20:20: the owner saw no value in it. The code stays in `dimos/` fo
 | Deep facing (67°), talk, props on/off, hand ensembles (hug, clap…) | ⏸ | Watch the wrist cable on the big j5 turn; hand gaps sag 1–2 cm |
 | Death collapse, fist bang, car drive (touch the table) | ⏸ someone at e-stop | Never unattended. Re-solved for the Round 3 table (~6 mm higher in the arm frame, the same depth into the table as before): watch the first knock and the car's wheels |
 | Restart the web app (`cd ~/pah-hackathon/agent && uv run app.py`) | ⏸ owner back | Stopped while the station is unattended |
-| wrist_l camera fails ("Couldn't resolve requests") | ⏸ owner | Reseat its USB |
+| wrist_l camera fails ("Couldn't resolve requests") | ⏸ owner | Reseat its USB. It is on a USB 2.1 link (Nov 7 21:13): 1280x720 at 15 fps max, so dreamcli at 30 fps can't open it. Re-plug it into USB 3, or `fps: 15` in a dreamcli config |
+| Dream-1 real test (dream.check, dry run, real run with dreamcli) | ⏸ owner + stage stopped | Steps in [dream-1.md](dream-1.md#dream-1-real-test-dreamcli-with-the-owner-at-the-e-stop) |
+| Dream-1 through the show path on the real arms | ⏸ someone at e-stop | Needs sync + stage restart for `/trajectory`; steps in [dream-1.md](dream-1.md#real-arm-steps-for-the-show-path-preview--checker--play) |
 
 ## Launch
 | What | Status | Notes |
@@ -45,7 +48,8 @@ Parked Nov 7 ~20:20: the owner saw no value in it. The code stays in `dimos/` fo
 | Site deploy, demo video, social images | 💤 after the demo works | |
 
 ## Parked
-- Dream-1 fine-tune on Lars demos: not needed with the dock/live pick ([dream-1.md](dream-1.md) has the recipe).
+- Dream-1 fine-tune on Lars demos: the base model stays at rest on our scene; a fine-tune is the way to make it
+  reach (~$200, 50+ demos, 7-8 h; [dream-1.md](dream-1.md) has the recipe).
 
 ## Done (recent)
 - fist_bump renamed `kiss` (the owner saw a kiss), sound on the contact; rub_hands and ufo_abduct under 8 s (Nov 7 ~20:30).

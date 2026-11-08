@@ -290,6 +290,89 @@ with st.lock:
         assert "from the" in str(e), e
 print("arm-to-arm clash refused")
 
+# External trajectories (POST /trajectory: Dream-1's action chunks, robot/dream_run.py): slowed to <= 0.3 rad/s,
+# checked like a pick, refused with the reason when they dive into the table, break a limit or reach the other arm.
+st.wait()
+q0 = st.cmd_q["right"].copy()
+reach = [q0 + show.mirror([0.15, 0.3, 0.1, -0.1, 0.2, 0.0], "right") * f for f in np.linspace(0.2, 1, 5)]
+
+
+def traj(Qs, ts, **kw):
+    return call("/trajectory", dict({"arm": "right", "t": list(ts), "q": [[float(x) for x in r] for r in Qs]}, **kw))
+
+
+code, r = traj(reach, [0.05, 0.1, 0.15, 0.2, 0.25], g=[0.9, 0.7, 0.5, 0.3, 0.2])  # asked far too fast
+assert code == 200 and r["peak_rad_s"] <= stage.TRAJ_VMAX + 1e-6 and r["slowed"] > 1.5 and r["name"] == "dream", r
+time.sleep(0.2)
+assert call("/state")[1]["arms"]["right"]["playing"] == "dream"
+assert traj(reach, [1, 2, 3, 4, 5])[0] == 409  # one at a time
+pv = np.abs(np.diff(st.plan["right"].Q, axis=0)).max() * show.HZ
+assert pv <= stage.TRAJ_VMAX + 1e-6, pv
+st.wait()
+assert np.allclose(st.cmd_q["right"], reach[-1]) and abs(st.cmd_g["right"] - 0.2) < 1e-6
+assert traj([reach[2], q0], [1.0, 2.0], g=[0.6, 1.0])[0] == 200  # and back
+st.wait()
+assert np.allclose(st.cmd_q["right"], q0)
+code, r = traj([q0 + show.mirror([0, 1.3, -0.6, -0.8, 0, 0], "right")], [3.0])  # dives into the table
+assert code == 409 and "table" in r["error"], r
+code, r = traj([np.r_[q0[:3], 1.9, q0[4:]]], [3.0])  # j4 past its limit
+assert code == 409 and "j4 reaches" in r["error"], r
+code, r = traj([q0 + np.array([1.4, 1.2, 0.6, 0, 0, 0])], [4.0])  # the right hand swung over to the left arm
+assert code == 409 and "from the" in r["error"], r
+assert traj([q0[:5]], [1.0])[0] == 409 and traj([q0, q0], [1.0, 1.0])[0] == 409
+assert call("/trajectory", {"arm": "both", "t": [1], "q": [list(q0)]})[0] == 409
+assert traj([q0], [1.0], name="wave")[0] == 409 and traj([q0], [1.0], g=[1.5])[0] == 409
+assert traj(reach, [2, 4, 6, 8, 10])[0] == 200
+time.sleep(1.5)
+assert call("/freeze", {"arm": "right"})[0] == 200  # brakes on its path and stays there: never resumed
+time.sleep(0.4)
+q = st.cmd_q["right"].copy(); time.sleep(0.2)
+assert np.allclose(q, st.cmd_q["right"]) and not st.table_left["right"] and not np.allclose(q, q0)
+assert traj([q0], [1.0])[0] == 200  # from wherever it stopped, straight away
+st.wait()
+assert np.allclose(st.cmd_q["right"], q0)
+assert not st.props["right"]  # the first reach closed to 0.2 without "carry": nothing held
+# "carry": a trajectory that ends closed holds the prop, like pick_lars; holding, the gripper never moves until a
+# trajectory that ends open (or place_lars) puts it down.
+assert traj(reach, [2, 4, 6, 8, 10], g=[1.0, 0.8, 0.5, 0.2, 0.0], carry="block")[0] == 409  # not a carried prop
+code, r = traj([q0], [1.0], g=[0.3], carry="lars")  # closes from open: takes him
+assert code == 200 and r["props"]["right"] == "lars", r
+st.wait()
+code, r = traj([q0], [1.0], g=[1.0])  # opens: puts him down
+assert code == 200 and r["props"]["right"] is False, r
+st.wait()
+assert traj([q0], [1.0], g=[0.3])[0] == 200; st.wait()  # closed without "carry": nothing held
+code, r = traj([q0], [1.0], g=[0.2], carry="lars")  # stays closed, never opened (Dream-1's idle grip): not a grasp
+assert code == 200 and r["props"]["right"] is False, r
+st.wait()
+assert traj([q0], [1.0], g=[1.0])[0] == 200; st.wait()
+code, r = traj(reach, [2, 4, 6, 8, 10], g=[1.0, 0.8, 0.5, 0.2, 0.0], carry="lars")
+assert code == 200 and r["props"]["right"] == "lars" and st.props["right"] == "lars", r
+assert st.plan["right"].gesture.carry["from"] > 0  # checked with him in hand from where the gripper closes
+st.wait()
+held_g = st.cmd_g["right"]
+assert held_g <= 1e-6, held_g
+code, r = call("/talk", {"arm": "right"})
+assert code == 409, r  # no mouth flaps while holding
+assert call("/grip", {"arm": "right", "value": 1.0})[0] == 409  # opening would drop him
+assert call("/play", {"arm": "right", "gesture": "pick_lars"})[0] == 409  # already holding
+assert traj(reach[::-1][:2], [1.0, 2.0], g=[0.9, 0.1])[0] == 200  # the gripper wobbles but ends closed: grip kept
+assert np.allclose(st.plan["right"].G, held_g) and st.props["right"] == "lars"
+st.wait()
+code, r = call("/play", {"arm": "right", "gesture": "nod"})
+assert code == 200, r
+assert np.allclose(st.plan["right"].G, held_g), "a gesture moved the gripper of a holding arm"
+st.wait()
+assert abs(st.cmd_g["right"] - held_g) < 1e-6
+code, r = traj([reach[2], q0], [1.0, 2.0], g=[0.0, 1.0])  # back and open: puts him down
+assert code == 200 and r["props"]["right"] is False and not any(st.props.values()), r
+st.wait()
+assert np.allclose(st.cmd_q["right"], q0) and abs(st.cmd_g["right"] - 1.0) < 1e-6
+assert call("/talk", {"arm": "right"})[0] == 200 and call("/talk", {"arm": "right", "on": False})[0] == 200
+print("trajectories ok: slowed to 0.3 rad/s, played like a pick; table dive, limit, other arm, bad input refused; freeze;"
+      " carry: held from a trajectory closing from open (grip kept by gestures and trajectories, /talk and /grip refused), "
+      "put down by an opening one")
+
 assert call("/duet", {"name": "cheers"})[0] == 200
 time.sleep(0.5)
 httpd.shutdown()
