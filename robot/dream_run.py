@@ -69,7 +69,7 @@ OOPS_LINES = {"empty_grip": "It grabbed thin air. Very magical.", "dropped": "An
               "not_lifted": "Close. The wand stays put. It's shy.", "timeout": "Dream-1 ran out of time. So did my patience."}
 PATTER = ["Dream-1 has never seen this table before. It's working it out from the cameras, right now.",
           "No script and no rehearsal. Every move you see is Dream-1's own idea.",
-          "It's looking for the green stick. Green, like me. Easy mistake.",
+          "It's looking for the green pen. Green, like me. Easy mistake.",
           "Robots move slowly when they're thinking. So do I, before coffee.",
           "This is the part where a real roboticist would start sweating.",
           "Any moment now. Any. Moment.",

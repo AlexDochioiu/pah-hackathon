@@ -10,6 +10,7 @@ logic in director.py.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -29,7 +30,7 @@ import gestures as gestures_mod
 from director import CONTINUE_INSTRUCTIONS, Director, PushToTalk
 from gestures import DEFAULT_GESTURES, GestureBook, GestureSync, Stage, tags_first
 from live import LiveTurns, interruption_options, is_live
-from show import Script, ShowRunner, is_show
+from show import SHOW_MD, Script, ShowRunner, is_show
 from sounds import SoundBook, Soundboard
 from voices import (DEFAULT_CAST, HOST_VOICE, PALETTE, STORY_VOICE, RunMarks, Tidy, describe_palette, stream_tts,
                     timestamp_runs, voice_gain, voiced_tts, with_gain)
@@ -281,6 +282,9 @@ async def entrypoint(ctx: JobContext) -> None:
     live = is_live(ctx.job.metadata)  # the story page's "Live chat" toggle: open mic (live.py)
     ptt = PTT and not live
     script = Script.load(book=book)
+    if show and (dream := json.loads(ctx.job.metadata or "{}").get("dream")) is not None:  # the page's Dream-1 checkbox
+        text = re.sub(r"(?m)^DREAM_PICK *=.*$", f"DREAM_PICK = {'on' if dream else 'off'}", SHOW_MD.read_text())
+        script = Script.parse(text, book=book)
     voice = narrator_voice(show)
     gestures_mod.SESSION_T0 = time.monotonic()  # sync log times from here
 

@@ -174,9 +174,12 @@ class Worker:
 
 # --- web ----------------------------------------------------------------------------------------------------------
 
-def dispatch_metadata(mode: str | None) -> str:
-    """The job metadata for a page's mode: show (show.is_show), live chat (live.is_live), or "" for push-to-talk."""
-    return json.dumps({"mode": mode}) if mode in ("show", "live") else ""
+def dispatch_metadata(mode: str | None, dream: str | None = None) -> str:
+    """The job metadata for a page's mode: show (show.is_show), live chat (live.is_live), or "" for push-to-talk.
+    `dream` (the /show page's Dream-1 checkbox, "1"/"0") overrides show.md's DREAM_PICK for that room."""
+    if mode not in ("show", "live"):
+        return ""
+    return json.dumps({"mode": mode, **({"dream": dream == "1"} if dream in ("0", "1") else {})})
 
 
 class App:
@@ -196,7 +199,7 @@ class App:
         """A fresh room per page join, with the PTT worker dispatched into it. The previous room is closed, so
         only one story drives the arms at a time. `?mode=show` (the /show page) starts the worker in show mode,
         `?mode=live` (the story page's toggle) in live chat (live.py); anything else is push-to-talk."""
-        metadata = dispatch_metadata(req.query.get("mode"))
+        metadata = dispatch_metadata(req.query.get("mode"), req.query.get("dream"))
         self.rooms += 1
         old, self.room = self.room, f"story-{BOOT}-{self.rooms}"
         if old:

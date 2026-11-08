@@ -105,7 +105,8 @@
   <div id="built"><h2>Built with</h2><ul></ul></div>
   <div id="keys">Next: → · PageDown · Space &nbsp;|&nbsp; Back: ← · PageUp &nbsp;|&nbsp; Jump: 1–9 (0: start over)
     &nbsp;|&nbsp; STOP: Esc. The talk button works in the demo act.
-    &nbsp;|&nbsp; <label><input type="checkbox" id="auto" checked> auto-advance</label> (acts 2–5 follow on their own; the finale is always a cue)</div>
+    &nbsp;|&nbsp; <label><input type="checkbox" id="auto" checked> auto-advance</label> (acts 2–5 follow on their own; the finale is always a cue)
+    &nbsp;|&nbsp; <label><input type="checkbox" id="dream"> Dream-1 pick in act 2</label> (reloads the page)</div>
 </section>
 <div id="say">Starting…</div>
 <button id="talk" disabled>HOLD TO TALK<small>or hold the space bar</small><span id="level"><i></i></span></button>
@@ -143,6 +144,8 @@ function liveNow() { const a = actOf(current); return !SHOW || (a && a.kind === 
 // auto-advance (show.py ShowRunner.auto): the worker plays acts 2-5 on its own; the page follows its cursor
 let autoOn = localStorage.getItem("show.auto") !== "0", lastAdvanced = null, autoSent = null;
 $("auto").checked = autoOn;
+$("dream").checked = localStorage.getItem("show.dream") === "1";  // a fresh room: act 2 is primed with or without the pick
+$("dream").addEventListener("change", () => { localStorage.setItem("show.dream", $("dream").checked ? "1" : "0"); location.reload(); });
 $("auto").addEventListener("change", () => { autoOn = $("auto").checked; localStorage.setItem("show.auto", autoOn ? "1" : "0"); render(); });
 function syncAuto() {
   if (!SHOW || !room || !agent || showAttr("auto") === undefined) return;
@@ -289,7 +292,7 @@ async function connect() {
   connecting = true;
   chip("c-room", "room: joining", "wait");
   try {
-    const t = await (await fetch(SHOW ? "/token?mode=show" : LIVE ? "/token?mode=live" : "/token", { cache: "no-store" })).json();
+    const t = await (await fetch(SHOW ? "/token?mode=show&dream=" + (localStorage.getItem("show.dream") === "1" ? "1" : "0") : LIVE ? "/token?mode=live" : "/token", { cache: "no-store" })).json();
     // the voice plays from the laptop speaker in the same room: the browser's echo cancellation keeps it off the mic
     const r = new LK.Room({ audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     r.on(LK.RoomEvent.ParticipantConnected, findAgent)

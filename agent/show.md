@@ -72,12 +72,12 @@ We'll take it from here. [left:nod]
 Good evening, humans! I'm {HOST_NAME}. Down here. {LARS_POINT} Yes. The frog.
 
 ## Act 2: The stage hands and the wand
-<!-- Its own cue, so the clicker can jump straight here. With DREAM_PICK on, Dream-1 fetches the green stick (about 90 s, Lars talks over it), then the show name. -->
+<!-- Its own cue, so the clicker can jump straight here. With DREAM_PICK on, Dream-1 fetches the green pen (about 90 s, Lars talks over it), then the show name. -->
 [face:audience]
 I host the show, I tell the stories, and these two are my stage hands. [both:present]
 Stage hands. Because they're hands. That joke cost forty dollars in API credits. [right:tremble_excited] [left:eye_roll] [sfx:rimshot]
 {?LARS_PICK}{?!DREAM_PICK} A little higher, please. {LARS_PICK_UP} Higher. Higher! Thank you. Hello, back row! I can see all your laptops from up here. Okay, down again, I get dizzy. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know. A tiny bit to the left. Perfect.
-{?DREAM_PICK} Every host needs a magic wand. Mine is that green stick on the table. Tonight, one of my stage hands lets Dream-1 drive: a robot brain from Dream Labs that has never seen this table. Dream-1, fetch me my wand. Live, no rehearsal. [dream:pick_lars]
+{?DREAM_PICK} Every host needs a magic wand. Mine is that green pen on the table. Close enough. Tonight, one of my stage hands lets Dream-1 drive: a robot brain from Dream Labs that has never seen this table. Dream-1, fetch me my wand. Live, no rehearsal. [dream:pick_lars]
 Please welcome... [sfx:tada] {SHOW_NAME}! [both:ta_da] [sfx:applause] [music:funny]
 
 ## Act 3: The founders
