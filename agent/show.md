@@ -61,22 +61,21 @@ It's kind of hard to expl—
 <!-- Cut in mid-sentence: the snap to the audience is instant and Lars starts at once. -->
 [face:audience]
 Stop. Stop, stop, stop. [both:shake_head]
-Thirty hours awake, and they call us, like, a robot? [right:facepalm]
+Thirty hours awake, and the pitch is: it's like... a robot? [right:facepalm]
 We'll take it from here. [left:flick]
 Good evening, humans! I'm {HOST_NAME}. Down here. {LARS_POINT} Yes. The frog.
 {?LARS_PICK} A little higher, please. {LARS_PICK_UP} Higher. Higher! Thank you. Hello, back row! I can see all your laptops from up here. Okay, down again, I get dizzy. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know. A tiny bit to the left. Perfect.
 I host the show, I tell the stories, and these two are my stage hands. [both:present]
-Stage hands. Because they're hands. On a stage. [right:tremble_excited] [left:eye_roll] [sfx:rimshot]
-Built in one weekend, on no sleep. Please welcome... [sfx:tada] {SHOW_NAME}! [both:ta_da] [sfx:applause] [music:funny]
+Stage hands. Because they're hands. That joke cost forty dollars in API credits. [right:tremble_excited] [left:eye_roll] [sfx:rimshot]
+Please welcome... [sfx:tada] {SHOW_NAME}! [both:ta_da] [sfx:applause] [music:funny]
 
 ## Act 2: The founders
 <!-- The founders stand behind the arms. Each name gets a point (a placeholder look or nod until the point gestures exist). -->
 [face:audience]
-Our crew is standing right behind us.
 First, {FOUNDER_1}! {POINT_1} Hasn't blinked since Friday. We checked: we have cameras. [right:double_take]
-{FOUNDER_2}! {POINT_2} Keeps telling these two to act natural. They are two arms, bolted to a table. [left:slow_turn]
-And {FOUNDER_3}! {POINT_3} Calls them the kids, when they think nobody's listening. They are always listening. [both:nod]
-On day one, the table tipped over. With them on it. [both:cower] We don't talk about the table. [left:shake_head]
+{FOUNDER_2}! {POINT_2} Keeps telling these two to act natural. They are two arms, bolted to a table, with no legal rights. [left:slow_turn]
+And {FOUNDER_3}! {POINT_3} Calls them the kids. Kids working thirty hours unpaid: that's not parenting, that's a startup. [both:nod]
+On day one, the table tipped over. With them on it. [both:cower] Nobody filed a report. [left:shake_head]
 Give it up for {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}! [ensemble:clap] [sfx:applause]
 
 ## Act 3: The pitch
@@ -85,9 +84,9 @@ Give it up for {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}! [ensemble:clap] [sfx:ap
 Here's how it works. You say any story out loud, I make it up on the spot, and these two act it out, live.
 A dragon? [left:roar] [sfx:roar]
 A knight? [right:slash] [sfx:sword_clash]
-Space wars? [right:shoot] [sfx:laser] Legally distinct space wars. [left:nod]
+Space wars? [right:shoot] [sfx:laser] [left:nod]
 Anyone can jump in, mid-story, and the story bends. Last night someone made the dragon vegan. [right:double_take]
-It ate a salad. Menacingly. [left:eat]
+It ate a salad. Menacingly. Then it raised a seed round. [left:eat]
 It's all up on the screen: every move checked in simulation first, and a digital twin of both arms in Dimensional's simulator. [both:present]
 
 ## Act 4: The demo (live)
@@ -99,7 +98,7 @@ Come up, hold the big yellow button, and tell me what happens. [right:tremble_ex
 ## Act 5: The finale
 <!-- Works from any state: it stops a story politely. Esc (STOP) afterwards folds the arms and ends the music. -->
 [face:audience] [music:victory]
-And that's where we have to stop: the judges have a schedule, and the frog has a curfew.
+And that's where we stop: the judges have a schedule, and we have an API bill.
 We were {SHOW_NAME}: {HOST_NAME}, the stage hands, and {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}!
 Thank you, and goodnight! [duet:tip_hats] [sfx:applause]
 

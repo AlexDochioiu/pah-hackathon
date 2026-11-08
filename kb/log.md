@@ -173,3 +173,4 @@
   code stays in `dimos/` for reference. `stage.py` `/state` gains `grip_measured` per arm (the gripper as read back,
   `/talk` flaps included); check_gestures asserts it flaps.
 - Nov 7 ~20:50: comedy set made edgy on the owner's ask ("so dull it's not funny"): a roast with bite (hackathon life, tech hype, the room, themselves), no puns or dad jokes; hard lines kept (no slurs, identity, looks, sexual, politics). Stories stay family-friendly.
+- Nov 7 ~21:00: stories and the show script get the same edge as comedy (owner): sharp, sarcastic, grown-up hackathon crowd, same hard lines. Show acts 0-3 re-measured at 116.7 s (limit 120).
