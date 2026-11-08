@@ -15,8 +15,19 @@ and not Dimensional (dropped Nov 7). dreamcli needs the stage server stopped (it
 |---|---|---|
 | Preview | `robot/dream_preview.py`, on the station in `~/dream-ghost/` (not `~/dial`), run with `~/dream-env/bin/python` | Opens the three cameras through dreamcli's readers (`~/.dreamlabs/station.yaml`, face blur on) and the client (`_record` off), feeds the observation window at 5 Hz from the cameras and `GET /state` (measured joints). One `get_action` per "next": 48 rows per arm, played at 20 Hz (dreamcli's pace). Never opens an arm, never POSTs. Each call goes to `~/dream-ghost/calls.jsonl`; frames and chunks to `~/dream-ghost/runs/HHMMSS/`. A camera frame older than 1 s skips the tick; 8 s without a full set gives up. Warming errors are retried as the server says (capped). The left wrist camera is on a USB 2 link: it opens at 15 fps |
 | Stage endpoint | `POST /trajectory` in `robot/stage.py` ([arm-control.md](arm-control.md#post-trajectory-dream-1s-chunks)) | Retimes to ≤ 0.3 rad/s on every joint (ease in and out), gripper ≤ 1.0 per s (a full close over about 1 s, slow and deliberate), checks with `show.Checker` like a pick, refuses with the reason. `carry: "lars"` makes a closing chunk hold Lars like `pick_lars` |
-| Driver | `robot/dream_run.py`, laptop, stdlib only | Runs the preview over ssh, skips still chunks, picks the arm that moves most, POSTs each chunk with `carry` lars, fetches the next one 1.5 s before the current one ends (a round trip is ~1 s). Done when the stage holds Lars and a chunk ends with the fingertips 40 mm up: Lars stays held, the arm is the stage's again. On a refusal, a tracking error over 0.2 rad, a fault, a Dream error or `--pick-s`/`--chunks`, it goes back along the played chunks, reversed, and plays `pick_lars` + `place_lars`. JSON lines out: `say` (Lars's lines), `info`, `done` |
-| Agent hook | `[dream:pick_lars]` (`agent/gestures.py` `Stage.dream`, voiced by `storyteller.py`'s `stage.on_dream`) | Runs `dream_run.py` against the stage URL, speaks each `say` line in the host's voice. Extra flags in `DREAM_ARGS` (e.g. `--speed 0.5 --chunks 2`). Put the literal tag in a show act line: `show.py`'s `book_knows` drops `dream:` options from config chains |
+| Driver | `robot/dream_run.py`, laptop, stdlib only | Runs the preview over ssh, skips still chunks, picks the arm that moves most, POSTs each chunk with `carry` lars, fetches the next one 1.5 s before the current one ends (a round trip is ~1 s). Done when the stage holds Lars and a chunk ends with the fingertips 40 mm up: Lars stays held, the arm is the stage's again. On a refusal, a tracking error over 0.2 rad, a fault, a Dream error or `--pick-s`/`--chunks`, it goes back along the played chunks, reversed, and plays `pick_lars` + `place_lars` (`--hold`: `pick_lars` only, so it ends held either way). A **miss** (below) plays the "ah, damn it" first. `--patter S`: a filler line after S s of silence. JSON lines out: `say` (Lars's lines), `oops`, `info`, `done` |
+| Agent hook | `[dream:pick_lars]` (`agent/gestures.py` `Stage.dream`, voiced by `storyteller.py`'s `stage.on_dream`) | Runs `dream_run.py` against the stage URL, speaks each `say` line in the host's voice. Extra flags in `DREAM_ARGS` (e.g. `--speed 0.5 --chunks 2`). Put the literal tag in a show act line: `show.py`'s `book_knows` drops `dream:` options from config chains. `Stage.on_dream_oops` gets a miss: live mode cues the sad trombone and asks the LLM for one line about it; show mode says a `DREAM_OOPS` quip. A show cut ends `dream_run.py` (`stop_dream`) |
+| In the show | `agent/show.md` `DREAM_PICK = off` (on: act 1's pick line is `[dream:pick_lars]`, it wins over `LARS_PICK`), `DREAM_ARGS`, `DREAM_OOPS` | `show.py` cuts the act after the tag: the runner says the part before, waits while the stage is dreaming and its lines are spoken (patter fills the silences), then says the rest (`{LARS_PUT_DOWN}`). The estimate adds 90 s per tag: act 1 runs well over budget with it on |
+
+**A miss** (owner, Nov 7 night): Dream-1 messing up, not our checker saying no. Detected after each played chunk
+from `GET /state`: the stage holds Lars but the measured gripper is under `EMPTY_GRIP` 0.05 (closed on nothing;
+on Lars the real fingers stop at 0.09–0.3), the hold was lost before the lift, or the chunks or `--pick-s` ran out
+(`not_lifted` if held, else `timeout`). Then: no more chunks, an `oops` line (kind, `facepalm`, `sad_trombone`, a
+default quip), the arm's `facepalm` through the normal checked `/play` (right away with an empty hand, else after
+the way back), "Our own move, then!" and our `pick_lars`. Laptop checks: kin stage with a crafted empty-grip replay
+(oops → way back → facepalm → fallback, ended held, 63 s with patter 5) and an opening closing chunk (timeout →
+facepalm at once → fallback); `agent/tests/test_dream_run.py` (stub stage) and the show test in `test_show.py`.
+`EMPTY_GRIP` needs a check on the real arms.
 
 ## Real picks with dreamcli (Nov 7, ~21:45, the owner at the e-stop)
 After the cameras were reseated (all three on USB 3.2), `dream.check` passed (a borderline 1.0° lag on the left
@@ -82,7 +93,8 @@ new: `./sync.sh` and a stage restart, ~20 s of checks). `~/dream-ghost/dream_pre
    page's STOP) brakes a chunk for good. Success: `"done", "ok": true, "held": true`: the right arm holds Lars where
    Dream-1 lifted him, and gestures play with him in hand.
 4. Put him back: `curl -s -X POST http://127.0.0.1:8770/play -d '{"arm": "right", "gesture": "place_lars"}'`.
-5. In the show: `[dream:pick_lars]` in an act line, `DREAM_ARGS="--speed 0.5 --pick-s 90"` for the agent.
+5. In the show: `DREAM_PICK = on` in `agent/show.md` (its `DREAM_ARGS` already has `--speed 0.5 --hold --pick-s 90
+   --patter 6`), then rehearse act 1 with someone at the e-stop.
 
 ## Dreamcli basics
 `dreamcli robot run --task "<instruction>" [--dry-run] [--config file] [--view]` homes the arms first, runs until

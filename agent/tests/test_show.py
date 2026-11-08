@@ -10,7 +10,8 @@ import pytest
 from director import Director
 from gestures import FACINGS, GestureBook, GestureSync, Tag, TagParser, strip_tags_for_tts, talk_arm
 from lkfakes.fake_session import FakeActions, create_session
-from show import HUMAN, LETTERS_PER_S, LIVE, SCRIPTED, SHOW_MD, Cursor, Script, ShowRunner, is_show, resolve_chain
+from show import (HUMAN, LETTERS_PER_S, LIVE, SCRIPTED, SHOW_MD, Cursor, Script, ShowRunner, dream_parts, is_show,
+                  resolve_chain)
 from sounds import SoundBook
 from storyteller import Storyteller, build_instructions, narrator_voice
 
@@ -428,3 +429,74 @@ async def test_a_manual_jump_mid_chain_takes_over_and_the_chain_goes_on_from_the
         show.runner.play(2)
         await asyncio.sleep(1.2)
         assert played == [1, 3, 4, 2] and show.runner.state == "done"
+
+
+# --- Dream-1 in the show (DREAM_PICK, off by default) ----------------------------------------------------------
+
+def test_dream_pick_variant_parses_and_resolves():
+    book = stage_book()
+    assert "[dream:" not in Script.load(SHOW_MD, book).act(1).text  # off by default
+    text = SHOW_MD.read_text().replace("DREAM_PICK = off", "DREAM_PICK = on").replace("LARS_PICK = off", "LARS_PICK = on")
+    s = Script.parse(text, book)
+    assert s.warnings == []
+    act1 = s.act(1)
+    # Dream-1's pick wins over LARS_PICK ({?LARS_PICK}{?!DREAM_PICK}); it ends held, our place puts Lars back
+    assert "[dream:pick_lars]" in act1.text and "[pick:lars]" not in act1.text and "[place:lars]" in act1.text
+    first, second = dream_parts(act1.split_lead()[1])
+    assert first.endswith("[dream:pick_lars]") and second.startswith("Hello, back row!")
+    assert act1.estimate_s(book.durations | book.duets) > 90  # the Dream-1 run is in the estimate
+    assert s.config["DREAM_ARGS"].split()[:3] == ["--speed", "0.5", "--hold"]
+    assert len(s.config["DREAM_OOPS"].split("|")) == 3
+
+
+class DreamStage(RecStage):
+    """[dream:...] like gestures.Stage: says a line, misses (an oops), says another, ends."""
+
+    def __init__(self):
+        super().__init__()
+        self.dreaming, self.on_dream, self.on_dream_oops, self.dream_args = False, None, None, ""
+
+    def play(self, arm, gesture, duration, **_):
+        super().play(arm, gesture, duration)
+        if arm == "dream":
+            self.dreaming = True
+            asyncio.get_running_loop().create_task(self._dream())
+
+    async def _dream(self):
+        self.on_dream("Let me ask Dream-1 how to pick me up.")
+        await asyncio.sleep(0.6)
+        self.on_dream_oops({"event": "oops", "kind": "empty_grip", "reaction": "facepalm", "sfx": "sad_trombone",
+                            "text": "the default quip"})
+        await asyncio.sleep(0.6)
+        self.on_dream("Our own move, then!")
+        self.dreaming = False
+
+
+DREAM = """## Config
+```ini
+DREAM_ARGS = --speed 0.5 --patter 6
+DREAM_OOPS = Oops one. | Oops two.
+```
+
+## Act 1: One
+Watch this. [dream:pick_lars] Hello, back row! [left:bow]
+"""
+
+
+async def test_a_dream_act_waits_for_dream_1_and_a_miss_gets_a_quip_and_a_trombone(tmp_path):
+    show = Show(Script.parse(DREAM), tmp_path, audio_s=0.4)
+    show.stage = DreamStage()
+    show.sync = GestureSync(show.book, show.stage.play, show.director.request_continue, show.stage.face,
+                            show.stage.talk)
+    async with show:
+        assert show.stage.dream_args == "--speed 0.5 --patter 6"
+        show.runner.play(1)
+        await asyncio.sleep(5.0)
+        said = " ".join(show.tts_inputs)
+        print(said, show.kinds())
+        order = [said.find(x) for x in ("Watch this.", "Let me ask", "Oops", "Our own move", "Hello, back row!")]
+        assert -1 not in order and order == sorted(order), said  # the next part waits for Dream-1's lines
+        assert "the default quip" not in said
+        assert ("sfx", "sad_trombone") in show.kinds()
+        plays = [w for k, w in show.kinds() if k == "play"]
+        assert plays == ["dream:pick_lars", "left:bow"] and show.runner.state == "done"

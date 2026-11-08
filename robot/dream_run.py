@@ -21,10 +21,23 @@ him back). It stops early at a refusal, a tracking error over TRACK_LIMIT, a sta
 the chunks it played, reversed (the same checks; the reversed closing chunk opens the gripper, so Lars goes back
 down where he was), and our own pick_lars and place_lars play instead (--no-fallback skips them).
 
+A miss (owner, Nov 7 night) is Dream-1 messing up, not our checker saying no: the gripper closes almost fully
+(EMPTY_GRIP measured: nothing in it), the hold is lost before the lift (an opening chunk let him go), or the chunks
+or the time run out (held but never lifted, or never held). Then no more Dream-1 chunks; an "oops" line goes out at
+once (the host's quip and a sad trombone), and the arm plays a short "ah, damn it" (REACTION, through the stage's
+normal checked /play): right away when its hand is empty and the stage takes it from where the arm is, else after
+the way back. Then our own pick, as above. While Lars is held the stage keeps the grip, gestures too.
+
+--patter S: while nothing has been said for S s (the preview opening, still chunks, a slow chunk playing), a filler
+line goes out (PATTER), so a show never has dead air. --hold: the fallback plays pick_lars only, so it ends holding
+Lars like a Dream-1 pick (the caller puts him back with place_lars).
+
 Output: JSON lines on stdout, for agent/gestures.py ([dream:pick_lars]):
     {"event": "say", "text": "..."}      a line for the host, the "let me ask Dream-1... let's see" beat
+    {"event": "oops", "kind", "reaction", "sfx", "text"}   Dream-1 missed (kind: empty_grip, dropped, not_lifted,
+                                         timeout); text is a default quip (the show picks its own from DREAM_OOPS)
     {"event": "info", ...}               what happened, for the log
-    {"event": "done", "ok", "held", "dream_chunks", "fallback", "reason", "latency_s"}
+    {"event": "done", "ok", "held", "dream_chunks", "fallback", "reason", "missed", "latency_s"}
 """
 
 import argparse
@@ -46,14 +59,50 @@ STILL = 0.15        # rad: a chunk whose arm moves less (and whose gripper chang
 LIFT_MM = 40.0      # mm: the fingertips this high above the table at a chunk's end, holding Lars: he's picked up
 MAX_CHUNKS = 60
 ARMS = ("left", "right")
+EMPTY_GRIP = 0.05   # measured gripper (0 closed .. 1 open) below this while "holding": it closed on nothing. Lars
+                    # stops the fingers at 0.09-0.3 (the real picks, Nov 7). ponytail: knob, check on the real arms
+REACTION = "facepalm"   # the arm's "ah, damn it" after a miss: an existing gesture (head into the hand, shaking)
+OOPS_SFX = "sad_trombone"   # agent/sounds/sfx/crowd, CC0
+OOPS_LINES = {"empty_grip": "Ah, frog-nabbit. It grabbed thin air.", "dropped": "And it dropped me. Typical.",
+              "not_lifted": "Close. Not lifted, but close.", "timeout": "Dream-1 ran out of time. So did my patience."}
+PATTER = ["It's looking at me through three cameras. I've never felt so seen.",
+          "Every move it suggests goes through our safety checker first.",
+          "Robots think slowly when they're being careful. Like me before coffee.",
+          "Slow and steady. We like our table upright.",
+          "This is the part where a real roboticist would sweat.",
+          "Still thinking. Big brain, small frog.",
+          "No rehearsal for this bit. Truly live.",
+          "Any moment now. Any. Moment."]
+_lock, _said = threading.Lock(), [time.monotonic()]
 
 
 def out(**kw):
-    print(json.dumps(kw), flush=True)
+    with _lock:
+        print(json.dumps(kw), flush=True)
 
 
 def say(text):
+    _said[0] = time.monotonic()
     out(event="say", text=text)
+
+
+def patter(every, stop):
+    """A filler line whenever nothing has been said for `every` s, until stop is set."""
+    k = 0
+    while not stop.wait(0.25):
+        if time.monotonic() - _said[0] >= every:
+            say(PATTER[k % len(PATTER)])
+            k += 1
+
+
+def react(stage, arm):
+    """The miss reaction through the normal checked /play; True once it has played (False: refused or stopped)."""
+    code, r = stage.call("/play", {"arm": arm, "gesture": REACTION})
+    out(event="info", reaction=REACTION, code=code, reply=r)
+    if code != 200:
+        return False
+    time.sleep(0.3)
+    return wait_done(stage, arm, REACTION, time.monotonic() + 20) is None
 
 
 class Stage:
@@ -193,6 +242,8 @@ def main():
     ap.add_argument("--fake", action="store_true", help="the station preview makes up a reach (no Dream call)")
     ap.add_argument("--no-fallback", action="store_true")
     ap.add_argument("--carry", default="lars", help="the prop a closing chunk makes the stage hold; '' for none")
+    ap.add_argument("--patter", type=float, default=0.0, help="s of silence before a filler line (0: none)")
+    ap.add_argument("--hold", action="store_true", help="the fallback only picks Lars up (ends held, like Dream-1)")
     a = ap.parse_args()
     a.chunks = max(1, min(a.chunks, MAX_CHUNKS))
     stage, t0 = Stage(a.stage), time.monotonic()
@@ -204,7 +255,18 @@ def main():
             reason=f"stage not ready: fault {s.get('fault')}, busy {busy}, props {s['props']}")
         return
     say("Let me ask Dream-1 how to pick me up.")
+    stop = threading.Event()
+    if a.patter > 0:
+        threading.Thread(target=patter, args=(a.patter, stop), daemon=True).start()
+    try:
+        run(a, stage, s, end)
+    finally:
+        stop.set()
+
+
+def run(a, stage, s, end):
     played, latency, reason, arm, pre, refused, held, lifted = [], [], None, None, None, False, False, False
+    missed = None
     cmd = {side: s["arms"][side]["joints"] for side in ARMS}
     try:
         pre = Preview(a)
@@ -249,7 +311,17 @@ def main():
                     asked[0] = True
                     pre.ask(cmd)
             reason = wait_done(stage, arm, name, time.monotonic() + r["duration_s"] + 5, prefetch)  # --pick-s: next ask
-            if reason or lifted:
+            if reason:
+                break
+            st = stage.state()
+            now_held, grip = bool(st["props"].get(arm)), st["arms"][arm].get("grip_measured")
+            if now_held and grip is not None and grip < EMPTY_GRIP:
+                missed, reason = "empty_grip", f"the gripper closed on nothing ({grip:.2f} measured)"
+                break
+            if held and not now_held:
+                missed, reason, held, lifted = "dropped", "the hold was lost before the lift", False, False
+                break
+            if lifted:
                 break
             if k == a.chunks:
                 reason = f"no pick in {a.chunks} chunks"
@@ -263,12 +335,26 @@ def main():
     finally:
         if pre:
             pre.close()  # the cameras free again before anything else moves
-    out(event="info", dream_reason=reason, played=len(played), held=held, lifted=lifted, latency_s=latency)
+    if missed is None and reason and reason.startswith("no pick"):  # Dream-1's own time or chunks ran out
+        missed = "not_lifted" if held else "timeout"
+    n_played = len(played)
+    out(event="info", dream_reason=reason, played=len(played), held=held, lifted=lifted, missed=missed,
+        latency_s=latency)
     if lifted and not reason:
         say("Up I go! That was all Dream-1's own idea, checked by us.")
-        out(event="done", ok=True, held=True, arm=arm, dream_chunks=len(played), fallback=False, reason=None,
-            latency_s=latency)
+        out(event="done", ok=True, held=True, arm=arm, dream_chunks=n_played, fallback=False, reason=None,
+            missed=None, latency_s=latency)
         return
+    reacted = tried = False
+    if missed:
+        out(event="oops", kind=missed, reaction=REACTION, sfx=OOPS_SFX, text=OOPS_LINES[missed])
+        _said[0] = time.monotonic()  # the host says the quip: no filler line right on top of it
+        react_arm = arm or "right"
+        if not any(stage.state()["props"].values()):  # empty hands: react from where the arm is, if the stage lets it
+            reacted, tried = react(stage, react_arm), True
+            if reacted:
+                played = []  # the reaction ends at the stage pose: no way back needed
+    went_back = bool(played)
     if played:
         say("That's where we stop Dream-1's idea. Back the way we came.")
         back = None
@@ -282,14 +368,19 @@ def main():
                 break
         if back or any(stage.state()["props"].values()):
             say("I'm stuck halfway. Can someone at the robot help?")
-            out(event="done", ok=False, held=any(stage.state()["props"].values()), dream_chunks=len(played),
-                fallback=False, reason=f"{reason}; the way back stopped: {back or 'still holding'}", latency_s=latency)
+            out(event="done", ok=False, held=any(stage.state()["props"].values()), dream_chunks=n_played,
+                fallback=False, reason=f"{reason}; the way back stopped: {back or 'still holding'}", missed=missed,
+                latency_s=latency)
             return
+    if missed and not reacted and (went_back or not tried):
+        react(stage, arm or "right")  # back where it started, the hand empty: the "ah, damn it" now
     if a.no_fallback:
-        out(event="done", ok=False, held=False, dream_chunks=len(played), fallback=False, reason=reason,
-            latency_s=latency)
+        out(event="done", ok=False, held=False, dream_chunks=n_played, fallback=False, reason=reason,
+            missed=missed, latency_s=latency)
         return
-    if refused:
+    if missed:
+        say("Our own move, then!")
+    elif refused:
         why = next((w for k, w in (("table", "it would have bumped the table"), ("reaches", "it bends a joint too far"),
                                    ("from the", "it comes too close to my other arm"), ("rad/s", "it's too fast"))
                     if k in reason), "it doesn't fit our rules")
@@ -297,7 +388,7 @@ def main():
     else:
         say("Dream-1 is daydreaming today. Our own move, then!")
     fb = None
-    for g in ("pick_lars", "place_lars"):
+    for g in ("pick_lars",) if a.hold else ("pick_lars", "place_lars"):
         code, r = stage.call("/play", {"arm": "right", "gesture": g})
         if code != 200:
             fb = f"{g}: {r.get('error')}"
@@ -306,8 +397,8 @@ def main():
         fb = wait_done(stage, "right", g, time.monotonic() + 60)
         if fb:
             break
-    out(event="done", ok=False, held=False, dream_chunks=len(played), fallback=not fb,
-        reason=reason + (f"; fallback: {fb}" if fb else ""), latency_s=latency)
+    out(event="done", ok=False, held=bool(a.hold and not fb), dream_chunks=n_played, fallback=not fb,
+        reason=reason + (f"; fallback: {fb}" if fb else ""), missed=missed, latency_s=latency)
 
 
 if __name__ == "__main__":

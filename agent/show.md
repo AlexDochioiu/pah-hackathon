@@ -13,7 +13,8 @@ How to write it:
 - Tags before an act's first word fire the instant the cue lands.
 - `(human)`: a person speaks, nothing plays. `(live)`: after its text the live LLM story mode takes over, with
   "Live context" below added to its prompt.
-- `{NAME}` is filled in from the config. A line that starts with `{?KEY}` is kept only when KEY is on.
+- `{NAME}` is filled in from the config. A line that starts with `{?KEY}` is kept only when KEY is on;
+  `{?!KEY}` only when it is off (both may stack).
 - `<!-- comments -->` are never spoken; they show on the page as notes for the presenters.
 - Lars is the host and narrator, never a character. No pronouns for Lars, or for the founders: names or "they".
 - Budget (owner, Nov 7; about 5 minutes with the demo): acts 0-3 together at most 2:00, act 4 at most 10 s, act 5
@@ -39,6 +40,12 @@ LARS_PICK = off                     # on: in act 1 the right arm lifts Lars from
 # sized for the speed-1 bake (pick 4.7 s, place 4.8 s). Check it on the fake stage before turning it on.
 LARS_PICK_UP = pick:lars | right:point_at_lars | right:double_take    # falls back while the stage lacks pick_lars
 LARS_PUT_DOWN = place:lars | right:nod
+# Off until it works on the real arms. on: act 1's pick is Dream-1's ([dream:pick_lars], robot/dream_run.py; it wins
+# over LARS_PICK). About 90 s at half speed: its own lines and the patter fill it, so act 1 runs well over budget.
+# A miss: the arm facepalms, a sad trombone, one DREAM_OOPS quip, then our own pick_lars. Needs someone at the e-stop.
+DREAM_PICK = off
+DREAM_ARGS = --speed 0.5 --hold --pick-s 90 --patter 6         # --hold: it ends holding Lars, so {LARS_PUT_DOWN} puts him back
+DREAM_OOPS = Ah, frog-nabbit. | Nobody saw that. | That was a practice grab.
 # The "Built with" card: the /show page shows it during act BUILT_WITH_ACT. One line per tool,
 # "tool: how we use it". Add a sponsor's tool as the next BUILT_n. List only what the code really uses.
 BUILT_WITH_ACT = 3
@@ -66,7 +73,8 @@ Stop. Stop, stop, stop. [both:shake_head]
 Thirty hours awake, and the pitch is: it's like... a robot? [right:facepalm]
 We'll take it from here. [left:flick]
 Good evening, humans! I'm {HOST_NAME}. Down here. {LARS_POINT} Yes. The frog.
-{?LARS_PICK} A little higher, please. {LARS_PICK_UP} Higher. Higher! Thank you. Hello, back row! I can see all your laptops from up here. Okay, down again, I get dizzy. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know. A tiny bit to the left. Perfect.
+{?LARS_PICK}{?!DREAM_PICK} A little higher, please. {LARS_PICK_UP} Higher. Higher! Thank you. Hello, back row! I can see all your laptops from up here. Okay, down again, I get dizzy. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know. A tiny bit to the left. Perfect.
+{?DREAM_PICK} Tonight, a world first: Dream-1 picks me up, live. No rehearsal. [dream:pick_lars] Hello, back row! I can see all your laptops from up here. Okay, down again. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know.
 I host the show, I tell the stories, and these two are my stage hands. [both:present]
 Stage hands. Because they're hands. That joke cost forty dollars in API credits. [right:tremble_excited] [left:eye_roll] [sfx:rimshot]
 Please welcome... [sfx:tada] {SHOW_NAME}! [both:ta_da] [sfx:applause] [music:funny]

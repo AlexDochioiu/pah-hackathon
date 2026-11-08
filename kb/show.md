@@ -71,6 +71,12 @@ works on the real arms.
   spaced for the speed-1 bake (pick 4.7 s, place 4.8 s since the face-down bake, no other right-arm tag meanwhile); a slower bake needs
   more words, so try it on the fake stage first. Only with someone at the e-stop, and only once the pick works on
   the real arms.
+- `DREAM_PICK = on` (off by default; it wins over `LARS_PICK` through `{?LARS_PICK}{?!DREAM_PICK}`) makes act 1's
+  pick Dream-1's: `[dream:pick_lars]`, then "Hello, back row!…" and `{LARS_PUT_DOWN}`. The runner says the part up
+  to the tag, waits for the Dream-1 run and its lines (`DREAM_ARGS` gives it `--hold --patter 6`, so no dead air),
+  then the rest. A miss: facepalm, sad trombone and one `DREAM_OOPS` quip, then our own pick. About 90 s: act 1 runs
+  far over the 2:00 budget with it on. [dream-1.md](dream-1.md) has the details.
+- `{?!KEY}` keeps a line only when KEY is off; conditionals stack.
 - Reload: save, then STOP and cue again (each session reads `show.md` afresh; no restart needed). `uv run --group dev pytest -q
   tests/test_show.py` checks every tag exists, no arm speaks, one table gag, the card, and the budget.
 

@@ -700,6 +700,11 @@ class Stage:
         self._delayed: set[asyncio.Task] = set()  # sends waiting their turn (a freeze cancels them)
         self.dreaming = False  # robot/dream_run.py running ([dream:...])
         self.on_dream: Callable[[str], None] | None = None  # speaks its lines (storyteller wires session.say)
+        # a Dream-1 miss ({"event": "oops", "kind", "text", "sfx", ...}): show mode quips, live mode lets the LLM riff;
+        # unset, its text goes to on_dream. The reaction gesture already played through /play (dream_run.py).
+        self.on_dream_oops: Callable[[dict], None] | None = None
+        self.dream_args = ""  # more dream_run.py options (the show's DREAM_ARGS config), after the env's DREAM_ARGS
+        self._dream_proc: asyncio.subprocess.Process | None = None
 
     def _session(self) -> aiohttp.ClientSession:
         if self._http is None or self._http.closed:
@@ -843,7 +848,8 @@ class Stage:
         try:
             proc = await asyncio.create_subprocess_exec(
                 "python3", DREAM_RUN, "--stage", self.url, "--task", text, *shlex.split(os.getenv("DREAM_ARGS", "")),
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                *shlex.split(self.dream_args), stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+            self._dream_proc = proc
             async for line in proc.stdout:
                 try:
                     msg = json.loads(line)
@@ -852,11 +858,21 @@ class Stage:
                 logger.info("dream %s", msg)
                 if msg.get("event") == "say" and self.on_dream:
                     self.on_dream(str(msg.get("text", "")))
+                elif msg.get("event") == "oops":
+                    if self.on_dream_oops:
+                        self.on_dream_oops(msg)
+                    elif self.on_dream:
+                        self.on_dream(str(msg.get("text", "")))
             await proc.wait()
         except Exception as e:  # noqa: BLE001 - the show goes on
             logger.warning("dream:%s failed: %s", name, e)
         finally:
-            self.dreaming = False
+            self.dreaming, self._dream_proc = False, None
+
+    def stop_dream(self) -> None:
+        """A show cut: end dream_run.py (its patter and chunks stop; the cut's freeze holds the arms)."""
+        if self._dream_proc and self._dream_proc.returncode is None:
+            self._dream_proc.terminate()
 
     def talk(self, arm: str, on: bool) -> None:
         if on and self.duet_from <= time.monotonic() < self.duet_until:

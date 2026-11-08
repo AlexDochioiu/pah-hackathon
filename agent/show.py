@@ -17,6 +17,7 @@ import inspect
 import json
 import logging
 import os
+import random
 import re
 import time
 import wave
@@ -25,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from gestures import PICK_TAG, PLACE_TAG, GestureBook, GestureSink, Tag, TagParser, strip_tags, talk_arm
+from gestures import DREAM_TAG, PICK_TAG, PLACE_TAG, GestureBook, GestureSink, Tag, TagParser, strip_tags, talk_arm
 from sounds import SFX_TAG
 
 logger = logging.getLogger("storyteller.show")
@@ -41,6 +42,8 @@ CUE_PORT = int(os.getenv("SHOW_CUE_PORT", "8792"))
 # and including the live act; the finale (after it) is always a manual cue. The page's toggle turns it off.
 AUTO_GAP_S = float(os.getenv("SHOW_AUTO_GAP_S", "1.5"))
 WORDS_PER_S = 2.6  # a person's pace (the human acts)
+DREAM_EST_S = 90.0  # a [dream:...] tag in an estimate: Dream-1 at half speed with its patter (kb/dream-1.md)
+_DREAM_SPLIT = re.compile(r"(\[" + DREAM_TAG + r":[a-z_]+\])")
 LETTERS_PER_S = 8.9  # the host voice's pace, for estimates before the audio exists (measured on the cached acts, Nov 7)
 ON = ("on", "yes", "true", "1")
 
@@ -152,6 +155,7 @@ class Act:
                 sounds = max(sounds, sfx.get(t.name, 3.0))
             elif t.arm in ("left", "right", "both"):
                 solos = max(solos, durations.get(t.name, 3.0))
+        speech += DREAM_EST_S * len([p for p in pieces if isinstance(p, Tag) and p.arm == DREAM_TAG])
         return round(speech + max(duets - head_start, solos - head_start, sounds, 0.0), 1)
 
 
@@ -234,6 +238,14 @@ class Script:
                           "note": a.note, "estimate_s": a.estimate_s(durations)} for a in self.acts]}
 
 
+def dream_parts(text: str) -> list[str]:
+    """An act's spoken text cut after each [dream:...] tag: the runner says a part, waits for the Dream-1 run, then
+    says the next. No tag: [text], so a plain act keeps its audio cache key."""
+    bits = _DREAM_SPLIT.split(text)  # [text, tag, text, tag, ..., text]
+    parts = [bits[i] + (bits[i + 1] if i + 1 < len(bits) else "") for i in range(0, len(bits), 2)]
+    return [p.strip() for p in parts if p.strip()]
+
+
 def _letters(text: str) -> int:
     return sum(c.isalnum() for c in text)
 
@@ -261,11 +273,12 @@ def _fill(text: str, values: dict[str, str], config: dict[str, str], warnings: l
         line = line.strip()
         if line.startswith("```"):
             continue
-        if m := re.match(r"^\{\?([A-Za-z_][A-Za-z0-9_]*)\}\s*", line):
-            if config.get(m.group(1), "").lower() not in ON:
-                continue
+        keep = True
+        while m := re.match(r"^\{\?(!?)([A-Za-z_][A-Za-z0-9_]*)\}\s*", line):  # {?KEY}: KEY on; {?!KEY}: KEY off
+            keep &= (config.get(m.group(2), "").lower() in ON) != bool(m.group(1))
             line = line[m.end():]
-        lines.append(line)
+        if keep:
+            lines.append(line)
 
     def sub(m: re.Match) -> str:
         if m.group(1) in values:
@@ -311,6 +324,11 @@ class ShowRunner:
                  on_sound: Callable[[str, str], None] | None = None, cache_dir: Path = CACHE_DIR,
                  voice_key: str = "", room_name: str = "", on_live: Callable[[], None] | None = None) -> None:
         self.session, self.agent, self.script, self.stage, self.director = session, agent, script, stage, director
+        self.on_sound = on_sound
+        # [dream:...] (DREAM_PICK): its lines and a miss's quip queue as say()s; the act's next part waits for them
+        self._dream_says: list[Any] = []
+        stage.on_dream, stage.on_dream_oops = self._dream_say, self._dream_oops
+        stage.dream_args = script.config.get("DREAM_ARGS", "")
         agent.host_only = True  # owner, Nov 7: the show has one voice, the host's; the arms never speak
         self.on_live = on_live  # the live act's text is out: the volunteer's story starts (StoryClock.arm)
         self.cache_dir, self.voice_key, self.room_name = cache_dir, voice_key, room_name
@@ -321,6 +339,7 @@ class ShowRunner:
         self.live = False      # the LLM may speak (after the live act's text)
         self.audio: dict[int, list] = {}  # act -> pre-synthesized frames
         self.marks: dict[int, Any] = {}  # act -> its voice-run marks (voices.RunMarks), pinning gestures to the audio
+        self.parts: dict[tuple[int, int], tuple[list, Any]] = {}  # (act, n): the part after its n-th [dream:...] tag
         self.durations: dict[int, float] = {}
         self.latency_ms: int | None = None  # cue -> first voice frame, last cue
         self.auto = True  # auto-advance (the page's toggle, RPC show_auto)
@@ -447,6 +466,9 @@ class ShowRunner:
         if self._task and not self._task.done():
             self._task.cancel()
         self.director.cut()  # freeze the arms, drop a pending next scene
+        if stop := getattr(self.stage, "stop_dream", None):
+            stop()
+        self._dream_says.clear()
         try:
             self.session.interrupt(force=True)
             self.session.clear_user_turn()
@@ -466,17 +488,48 @@ class ShowRunner:
         if not rest:
             self._finish(act, gen)
             return
-        frames = self.audio.get(act.number)
-        kwargs = {"audio": _replay(frames)} if frames else {}
-        if not frames:
-            logger.info("show: act %d not primed yet, streaming the TTS", act.number)
-        handle = self.session.say(rest, add_to_chat_ctx=True, **kwargs)
-        if frames and (marks := self.marks.get(act.number)) is not None:
-            self.agent._marks[handle] = marks  # what the skipped tts_node would have left for transcription_node
-        logger.info("show: act %d say() at +%d ms", act.number, (time.perf_counter() - self._cue_at) * 1000)
-        await handle
-        if gen == self._gen and not handle.interrupted:
-            self._finish(act, gen)
+        parts = dream_parts(rest)
+        for n, part in enumerate(parts):
+            frames, marks = (self.audio.get(act.number), self.marks.get(act.number)) if n == 0 else \
+                self.parts.get((act.number, n), (None, None))
+            kwargs = {"audio": _replay(frames)} if frames else {}
+            if not frames:
+                logger.info("show: act %d part %d not primed yet, streaming the TTS", act.number, n)
+            handle = self.session.say(part, add_to_chat_ctx=True, **kwargs)
+            if frames and marks is not None:
+                self.agent._marks[handle] = marks  # what the skipped tts_node would have left for transcription_node
+            if n == 0:
+                logger.info("show: act %d say() at +%d ms", act.number, (time.perf_counter() - self._cue_at) * 1000)
+            await handle
+            if gen != self._gen or handle.interrupted:
+                return
+            if n < len(parts) - 1:
+                await self._dream_done()
+                if gen != self._gen:
+                    return
+        self._finish(act, gen)
+
+    async def _dream_done(self) -> None:
+        """After a part ending in [dream:...]: wait for dream_run.py to end and its lines to be spoken."""
+        for _ in range(40):  # the tag fires during the part's last sentence; give it 2 s to start
+            if getattr(self.stage, "dreaming", False):
+                break
+            await asyncio.sleep(0.05)
+        while getattr(self.stage, "dreaming", False):
+            await asyncio.sleep(0.2)
+        while self._dream_says:
+            await self._dream_says.pop(0)
+
+    def _dream_say(self, text: str) -> None:
+        if text:
+            self._dream_says.append(self.session.say(text, add_to_chat_ctx=True))
+
+    def _dream_oops(self, msg: dict) -> None:
+        """A Dream-1 miss: one DREAM_OOPS quip and its sound (the arm's reaction plays through /play)."""
+        quips = [q.strip() for q in self.script.config.get("DREAM_OOPS", "").split("|") if q.strip()]
+        if self.on_sound and msg.get("sfx"):
+            self.on_sound(SFX_TAG, str(msg["sfx"]))
+        self._dream_say(random.choice(quips) if quips else str(msg.get("text", "")))
 
     def _finish(self, act: Act, gen: int) -> None:
         if gen != self._gen:
@@ -519,7 +572,7 @@ class ShowRunner:
                       key=lambda a: (a.number != 1, a.number))
         for act in acts:
             try:
-                frames, marks = await self._audio_for(act.split_lead()[1])
+                frames, marks = await self._audio_for(dream_parts(act.split_lead()[1])[0])
             except asyncio.CancelledError:
                 raise
             except Exception as e:  # noqa: BLE001 - that act streams its TTS when cued
@@ -532,6 +585,13 @@ class ShowRunner:
                 self.durations[act.number] = sum(f.duration for f in frames)
                 logger.info("show: act %d primed (%.1f s)", act.number, self.durations[act.number])
                 self._publish()
+            for n, part in enumerate(dream_parts(act.split_lead()[1])[1:], 1):  # after a [dream:...]: its own audio
+                try:
+                    self.parts[(act.number, n)] = await self._audio_for(part)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:  # noqa: BLE001 - that part streams its TTS
+                    logger.warning("show: could not pre-synthesize act %d part %d: %s", act.number, n, e)
 
     def cache_key(self, text: str) -> str:
         try:  # a new tts_node (per-character voices) changes the audio, so it changes the key too

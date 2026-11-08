@@ -327,6 +327,13 @@ async def entrypoint(ctx: JobContext) -> None:
                            on_sound=lambda kind, name: board.cue(kind, name, budget=not agent.scripted),
                            on_tag=clock.on_tag)
     stage.on_dream = lambda text: session.say(text)  # [dream:pick_lars]: the host voices Dream-1's attempt
+
+    def dream_oops(msg: dict) -> None:  # a Dream-1 miss in a live story: its sound, then the LLM riffs on it
+        board.cue("sfx", str(msg.get("sfx") or "sad_trombone"), budget=False)
+        session.generate_reply(instructions=f"Dream-1's pick just missed ({msg.get('kind', 'a miss')}): the arm "
+                               "facepalmed and our own pick takes over. One short, funny line about it, then go on.")
+
+    stage.on_dream_oops = dream_oops  # show mode: ShowRunner swaps in a DREAM_OOPS quip
     await session.start(
         agent=agent,
         room=ctx.room,

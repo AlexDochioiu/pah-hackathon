@@ -211,3 +211,10 @@
   assumed spots. Turning, not leaning: the upper arm tips back over the base only once the turn has swung its back
   sideways, so the COM stays ≥ −0.3 cm (limit −0.7). check_gestures passes (78 gestures); test_show passes (acts 0-3
   116.7 s). Act 2's last nod is the left arm's only, so the right arm finishes pointing at Darius.
+- Nov 7 night: Dream-1 in the show, off by default (laptop only). `agent/show.md` config `DREAM_PICK = off`,
+  `DREAM_ARGS = --speed 0.5 --hold --pick-s 90 --patter 6`, `DREAM_OOPS` (three quips). On: act 1's pick line is
+  `[dream:pick_lars]` (wins over `LARS_PICK` via the new `{?!KEY}`), and the runner waits for the Dream-1 run and
+  its lines before the rest of the act. `dream_run.py` gained `--patter` (filler lines, no dead air), `--hold` (the
+  fallback ends held) and a miss check after each chunk: an `oops` event, `facepalm` through `/play`, then our own
+  pick. Live mode: sad trombone and one LLM line about the miss. Kin stage: an empty-grip replay and a dropped-in-
+  the-closing-chunk replay (reads as a timeout: the kin stage never took him) both facepalmed and fell back.
