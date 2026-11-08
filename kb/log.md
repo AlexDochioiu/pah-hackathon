@@ -233,3 +233,8 @@
   (JSONs, `make_gestures.py`, previews, synonyms, fake stage, kb); Q9 keeps the 3 mime duets. Act 1's "We'll take
   it from here." nods (was the flick). check_gestures passes: 62 gestures, 14 unsafe pairs; test_show passes
   (acts 0-3 116.7 s, act 4 8.1 s, act 5 19.6 s). Q13 approved the Dream-1 miss reaction (facepalm).
+- Nov 8 (branch `dream-labs-pick`, not merged, not run): `dream_run.py --handover`. Dream-1 picks the green pen
+  through our checker, then `robot/dream_hand.py` (station) plans present, roll and cam_pick's `handover()` from where
+  Dream-1 left the arm, using a pre-pick overhead snap to find where the pen sits in the claw. Misses, refusals and
+  Dream errors all end in the oops line. `agent/show.md` `DREAM_ARGS` switched to it; the `--cam` line kept as a
+  comment. [dream-1.md](dream-1.md)

@@ -29,6 +29,40 @@ the way back), "Our own move, then!" and our `pick_lars`. Laptop checks: kin sta
 facepalm at once → fallback); `agent/tests/test_dream_run.py` (stub stage) and the show test in `test_show.py`.
 `EMPTY_GRIP` needs a check on the real arms.
 
+## Act 2's wand: Dream-1 picks, our IK hands over (`--handover`, branch `dream-labs-pick`, Nov 8, untested)
+`DREAM_ARGS = --handover --no-fallback --speed 0.5 --pick-s 90 --patter 8` (the `--cam` line stays in `agent/show.md`
+as a comment to switch back). Untested on the real arms and on the kin stage: nothing in it has run yet.
+- **Why split it.** Dream-1 has picked the green pen (drun3, and the checked 0.5-speed path at 11:39), but never a
+  handover: dreamcli's hand-over run (drun4) dropped motors, the morning's zero-shot picks missed 4 of 4, and our
+  path plays one arm's chunks at a time, with the stage's 15 cm arm gap that a handover breaks (raw would drop every
+  arm-to-arm check). cam_pick's `handover()` is the move the owner saw run clean. So Dream-1 does the pick and the
+  lift, and our plan does the rest.
+- **Before Dream-1:** `snap.py` and `robot/dream_hand.py locate` on the station: the pen's two ends on the table. No
+  pen seen: Dream-1 still tries; there's just no handover.
+- **Dream-1's part:** the joint head, task `pick up the green pen and hold it up` (`agent/gestures.py` `DREAM_TASKS`),
+  every chunk through `/trajectory` and `show.Checker` (not raw), retimed to 0.15 rad/s, no `carry`: the stage never
+  thinks an arm holds the pen. A close is Dream-1's gripper going to `CLOSED_G` or below after it opened; a grip is
+  the measured gripper stopping `GRIP_BLOCK` (0.015) short of the command (a 1 cm pen stops it near 0.1 of the 95 mm
+  stroke). Misses: measured under `EMPTY_GRIP` 0.07 (closed on nothing; after a grip: dropped), open again after a
+  grip (dropped), lifted with no grip (`empty_grip`). A lift is the fingertips 30 mm above their lowest since the
+  close (`RISE_MM`). The joints at the close are kept as the grasp.
+- **Our part:** `dream_hand.py plan` from the arm's joints now. The pen lay flat along its two ends and turns with the
+  claw from the close, so its axis in the claw's frame is the grasp rotation's transpose times that direction; the
+  longer end is the one farther from the grasp point. Then: rise to `LIFT`, present (the longer end up), four wrist
+  rolls, and `handover()` with `HAND_UP` cut to the longer end minus 1.5 cm (at least 4 cm). Our pieces play raw, as
+  `--cam`'s: they're floor-checked, and arm-to-arm checked here and inside `handover()`.
+- **No handover** when the grasp point is over 2.5 cm from the pen in the snap (it was pushed, or that was something
+  else), the pen is more than ~20° off the claw's x (`AXIS_COS`), the longer end is too short, or there's no pose at the
+  handover spot. Then the same arm rolls it, comes back to where Dream-1 left it, and goes back along Dream-1's chunks
+  (checked: the reversed close opens the gripper where it picked). No plan at all: the 2.6 s wand wiggle, then the same.
+- **A miss** (`empty_grip`, `dropped`, `not_lifted`, `timeout`), a refusal by our checker (`refused`, new) or a
+  Dream error (`timeout` mid-run, `no_plan` before the first chunk) all give the oops line, then the way back and the
+  facepalm. With the pen still in the claw, the way back comes first (it puts the pen down), then the facepalm.
+- **Patter:** after the lift it stops saying the moves are Dream-1's (`OURS_PATTER`, then `HAND_PATTER` during a
+  handover).
+- Knobs to check on the real arms: `EMPTY_GRIP` and `GRIP_BLOCK` against a real close on the pen (about 1 cm
+  thick) and on air, `GRASP_TOL`, `AXIS_COS`.
+
 ## Real picks with dreamcli (Nov 7, ~21:45, the owner at the e-stop)
 After the cameras were reseated (all three on USB 3.2), `dream.check` passed (a borderline 1.0° lag on the left
 hand). Two `dreamcli robot run` at half speed (`~/dream-test.yaml`: station_slow + `action_timeout_s: 5.0`):
