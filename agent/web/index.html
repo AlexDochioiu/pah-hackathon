@@ -124,6 +124,7 @@ let room = null, agent = null, connecting = false, parked = false, stopped = fal
 let boot = null, pageHash = null, serverUp = false, joinedAt = 0;
 let holding = false, holdStart = 0, rpcChain = Promise.resolve();
 const segments = new Map();  // segment id -> <p>
+let agentRun = [];  // agent paragraphs since the last whole line (pah.line)
 // show mode (/show): app.py keeps the act cursor; the worker plays an act on the RPC show_play
 const SHOW = location.pathname.replace(/\/+$/, "") === "/show";
 let script = null, current = 0, pendingCue = null;
@@ -238,10 +239,12 @@ function showSegment(id, who, text, final) {
     p.querySelector(".who").textContent = who === "you" ? "You:" : (SHOW && script ? script.host_name : "Storyteller") + ":";  // Lars hosts only the show
     if (who === "you") p.classList.add("you");
     segments.set(id, p);
+    if (who !== "you") agentRun.push(p);
     transcript.appendChild(p);
     while (transcript.children.length > 60) { segments.forEach((v, k) => { if (v === transcript.firstChild) segments.delete(k); });
                                                transcript.firstChild.remove(); }
   }
+  if (p.dataset.full) return;  // already has its line's whole text (pah.line)
   p.querySelector(".text").textContent = stripTags(text).trim();
   p.classList.toggle("interim", who === "you" && !final);
   if (!p.querySelector(".text").textContent) p.remove(), segments.delete(id);
@@ -311,6 +314,17 @@ async function connect() {
       let text = "";
       for await (const chunk of reader) { text += chunk; showSegment(id, who, text, false); }
       showSegment(id, who, text, a["lk.transcription_final"] === "true");
+    });
+    // ponytail: the synced stream can drop words; the agent sends each spoken line whole once it ends, and it
+    // replaces the line's synced paragraphs (assumes lines don't overlap, true for the host's one voice queue)
+    r.registerTextStreamHandler("pah.line", async (reader) => {
+      const text = stripTags(await reader.readAll()).trim();
+      const ps = agentRun.filter((p) => p.isConnected); agentRun = [];
+      if (!text) return;
+      const p = ps.shift() || (showSegment("line-" + Date.now(), "agent", text, true), agentRun.pop());
+      p.querySelector(".text").textContent = text; p.dataset.full = "1";
+      ps.forEach((q) => q.remove());
+      transcript.scrollTop = transcript.scrollHeight;
     });
     await r.connect(t.url, t.token);
     room = r; parked = false; joinedAt = Date.now();

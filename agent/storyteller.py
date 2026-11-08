@@ -355,6 +355,11 @@ async def entrypoint(ctx: JobContext) -> None:
     await board.start(ctx.room, session)
     _listen_playout(ctx.room)
 
+    def full_line(ev) -> None:  # the page's synced transcript can drop words; each spoken line's whole text follows
+        if getattr(ev.item, "role", None) == "assistant" and (text := ev.item.text_content):
+            asyncio.create_task(ctx.room.local_participant.send_text(text, topic="pah.line"))
+    session.on("conversation_item_added", full_line)
+
     def hush() -> None:  # the listener cut in: sound effects stop with the voice (the music only ducks)
         board.stop_sfx()
         gestures.cancel_sounds()
