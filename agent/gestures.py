@@ -495,10 +495,12 @@ class Stage:
         task.add_done_callback(self._tasks.discard)
         return task
 
-    def play(self, arm: str, gesture: str, duration_s: float, speed: float = 1.0,
+    def play(self, arm: str, gesture: str, duration_s: float, speed: float | None = None,
              on_start: Callable[[float | None, float], None] | None = None) -> None:
         """on_start(t0, speed): once the stage answers, the monotonic time the gesture's own t = 0 comes (after the
         stage's blend into it, its "starts_in") and the speed it plays at; t0 None if refused."""
+        if speed is None:  # STAGE_SPEED: every gesture and duet (read per call: .env loads after this import)
+            speed = float(os.getenv("STAGE_SPEED", "1.0"))
         logger.info("gesture %s:%s", arm, gesture)
 
         def started(reply: dict | None) -> None:
