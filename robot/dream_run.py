@@ -68,12 +68,17 @@ OOPS_SFX = "sad_trombone"   # agent/sounds/sfx/crowd, CC0
 OOPS_LINES = {"empty_grip": "Ah, frog-nabbit. It grabbed thin air.", "dropped": "And it dropped me. Typical.",
               "not_lifted": "Close. Not lifted, but close.", "timeout": "Dream-1 ran out of time. So did my patience."}
 PATTER = ["It's looking at me through three cameras. I've never felt so seen.",
+          "No script, no rehearsal. Dream-1 is figuring this out right now.",
           "Robots think slowly when they're being careful. Like me before coffee.",
-          "Slow and steady. We like our table upright.",
           "This is the part where a real roboticist would sweat.",
           "Still thinking. Big brain, small frog.",
-          "No rehearsal for this bit. Truly live.",
-          "Any moment now. Any. Moment."]
+          "Somewhere a GPU is very worried about me.",
+          "Gently, please. I'm a plush, not a stress ball.",
+          "If this goes wrong, it was the frog's fault. It's always the frog's fault.",
+          "Any moment now. Any. Moment.",
+          "I've been picked up before. Never by a foundation model.",
+          "The back row can't see, but trust me, it's very dramatic.",
+          "Fun fact: frogs can't be fired. I checked."]
 _lock, _said = threading.Lock(), [time.monotonic()]
 
 
@@ -92,7 +97,9 @@ def patter(every, stop):
     k = 0
     while not stop.wait(0.25):
         if time.monotonic() - _said[0] >= every:
-            say(PATTER[k % len(PATTER)])
+            if k >= len(PATTER):  # each line once: a repeat sounds broken (owner, Nov 8)
+                return
+            say(PATTER[k])
             k += 1
 
 
