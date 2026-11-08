@@ -30,8 +30,8 @@ FOUNDER_2 = Michael
 FOUNDER_3 = Darius
 # A gesture option chain: the first the stage has wins; options after "|" are fallbacks for an older stage.
 LARS_POINT = right:point_at_lars | right:double_take        # "Down here.": an arm points at Lars on the table
-# The finale's threat: the left arm creeps to the e-stop and hovers ~5 cm above it, then pulls back. Never a press.
-PANIC_REACH = left:panic_reach | left:slow_turn
+# The finale's threat: the right arm points at the red e-stop (a pose the owner taught by hand, agent/estop_point.json)
+PANIC_REACH = right:estop_point
 LARS_PICK = off                     # on: in act 2 the right arm lifts Lars from the dock (needs someone at the e-stop)
 # The pick line gives ~7 s of talk while Lars goes up and ~6 s while Lars goes down, with no other right-arm tag:
 # sized for the speed-1 bake (pick 4.7 s, place 4.8 s). Check it on the fake stage before turning it on.
