@@ -350,7 +350,9 @@ async def entrypoint(ctx: JobContext) -> None:
     await session.start(
         agent=agent,
         room=ctx.room,
-        room_options=room_io.RoomOptions(audio_input=room_io.AudioInputOptions(noise_cancellation=_noise_cancellation)),
+        room_options=room_io.RoomOptions(audio_input=room_io.AudioInputOptions(noise_cancellation=_noise_cancellation),
+                                         # GestureSync paces the text; a second synchronizer re-paced it and dropped line ends
+                                         text_output=room_io.TextOutputOptions(sync_transcription=False)),
     )
     gestures.install(session.output)  # after start: wraps the outputs start() set up
     if ptt:

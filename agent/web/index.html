@@ -321,8 +321,8 @@ async function connect() {
     // ponytail: the synced stream can drop words; the agent sends each spoken line whole once it ends, and it
     // replaces the line's synced paragraphs (assumes lines don't overlap, true for the host's one voice queue)
     r.registerTextStreamHandler("pah.line", async (reader) => {
+      const ps = agentRun.filter((p) => p.isConnected); agentRun = [];  // before the await: the next line may start meanwhile
       const text = stripTags(await reader.readAll()).trim();
-      const ps = agentRun.filter((p) => p.isConnected); agentRun = [];
       if (!text) return;
       const p = ps.shift() || (showSegment("line-" + Date.now(), "agent", text, true), agentRun.pop());
       p.querySelector(".text").textContent = text; p.dataset.full = "1";
