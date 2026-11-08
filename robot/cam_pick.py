@@ -13,14 +13,15 @@ import cv2, numpy as np
 import pick  # ~/dial/pick.py: calibration, IK, grasp pose
 from pick import DIR, OFFSET, TOP_ZS, closing_dir, solve, to_left, top_down, config, yam, yaml, pathlib
 
-GREEN_LO, GREEN_HI = (35, 60, 40), (90, 255, 255)  # OpenCV HSV: the pen (hue ~55-65); Lars is yellower (28-50)
+GREEN_LO, GREEN_HI = (28, 60, 40), (80, 255, 255)  # OpenCV HSV: the wand's stick is hue 32-65 (Nov 8); a cable shadow ~90
 PEN_Z = 0.016     # ponytail: m below block_top_z the fingers close at (block top 25 mm, pen ~10 mm thick); knob
 LIFT = 0.15       # m above block_top_z after the grasp
 RAD_S = 1.0       # joint speed of the plan; dream_run's --speed 0.5 halves it
 HZ, ROWS = 20.0, 48
 PRESENT_Z = 0.25  # m above block_top_z: the claw points at the audience (+x) there, the pen standing up in it
 GRIP_AT = 0.3     # where along the pen (from the end nearer the arm) the first hand grips
-HAND_UP = 0.05    # m along the pen above the first hand's grip where the second hand grips (fingers ~2 cm wide)
+HAND_Z = 0.08     # m above block_top_z for the handover: top-down reach ends ~0.15 m up near the middle (Nov 8)
+HAND_UP = 0.06    # m along the pen from the first hand's grip to where the second hand grips (fingers ~2 cm wide)
 ROLL = 0.6        # rad of wrist roll each way: the pen sways left and right like a wand (owner, Nov 8)
 
 
@@ -35,8 +36,9 @@ def find_pen(img):
             continue
         ys, xs = np.nonzero(lab == i)
         (cu, cv_), (w, h), ang = cv2.minAreaRect(np.stack([xs, ys], 1).astype(np.float32))
-        if max(w, h) / max(min(w, h), 1) >= 3 and (best is None or st[i, 4] > best[0]):
-            best = (st[i, 4], cu, cv_, np.deg2rad(ang if w >= h else ang + 90), max(w, h))
+        thin = max(w, h) / max(min(w, h), 1)  # the thinnest: the wand (Lars is round, a cable shadow ~3.6)
+        if thin >= 3 and (best is None or thin > best[0]):
+            best = (thin, cu, cv_, np.deg2rad(ang if w >= h else ang + 90), max(w, h))
     if best is None:
         sys.exit("no green pen in the overhead camera")
     return best[1:]
@@ -53,53 +55,76 @@ def segment(q0, q1, g0, g1, hold=0.0):
 
 
 def handover(iks, a_side, b_side, present, now, top):
-    """The other arm (b) takes the standing pen above a's claw from the side, a lets go and goes home, b lays it on the
-    table in front of its own base and goes home. Our own clearance check between the arms (the stage's is off for
-    raw moves): wrist to wrist > 10 cm, wrist to the other's fingers > 7 cm all along. None if anything fails."""
+    """After the wave: a rolls the standing pen level, its long end toward b; b takes that end from above, HAND_UP
+    along the pen from a's claw (a top-down grip, like the pick); a lets go, backs off and goes home; b lays the pen on
+    the table in front of its own base and goes home. Our own clearance check between the arms (the stage's is off for
+    raw moves): wrist to wrist > 10 cm, wrist to the other's fingers > 7 cm, all along. None if anything fails."""
     sh = {"left": np.zeros(3), "right": np.r_[OFFSET[:2], 0.0]}
     ik_a, ik_b = iks[a_side], iks[b_side]
     Fa = ik_a.fk(present)
-    grip_s = Fa[:3, 3] - sh[a_side] + [0, 0, HAND_UP]  # shared frame
-    base_b = -sh[b_side]
-    z = np.array([0.0, np.sign(grip_s[1] - base_b[1]), 0.0])  # b comes in sideways, from its own side
-    G = grip_s + sh[b_side]
-    q_b = None
-    for y in ([1.0, 0, 0], [-1.0, 0, 0]):
-        R = np.column_stack([np.cross(y, z), y, z])
-        T = lambda pnt: np.block([[R, pnt[:, None]], [np.zeros((1, 3)), np.ones((1, 1))]])
-        qs, q = [], now[b_side]
-        for pnt in (G - 0.20 * z + [0, 0, 0.10], G - 0.08 * z, G, G + [0, 0, 0.10]):
-            q = solve(ik_b, q, T(pnt), iters=1500)
-            if q is None:
-                break
-            qs.append(q)
-        if q is not None:
-            q_b = qs
+    long_sign = 1.0 if Fa[2, 0] > 0 else -1.0  # the long end, up at present, is along long_sign * tool x
+    toward = np.sign(-sh[b_side][1] - (Fa[1, 3] - sh[a_side][1]))  # +y or -y: where b's base is from the pen
+    q_turn = dir_ = None
+    for r in (np.pi / 2, -np.pi / 2):
+        Rz = np.array([[np.cos(r), -np.sin(r), 0], [np.sin(r), np.cos(r), 0], [0, 0, 1]])
+        T = Fa.copy()
+        T[:3, :3] = Fa[:3, :3] @ Rz
+        T[2, 3] = top + HAND_Z  # down from the wave to where the other hand reaches from above
+        d = long_sign * T[:3, 0]
+        if d[1] * toward > 0.7 and (q := solve(ik_a, present, T, iters=1500)) is not None:
+            q_turn, dir_, Fa = q, d, T
             break
-    if q_b is None:
-        print("handover: the other arm can't reach the pen", file=sys.stderr)
+    if q_turn is None:
+        print("handover: can't turn the pen toward the other arm", file=sys.stderr)
+        return None
+    G = Fa[:3, 3] - sh[a_side] + HAND_UP * dir_ + sh[b_side]  # b's grip, in b's frame
+    close = np.cross([0.0, 0.0, 1.0], dir_)
+    top_b = TOP_ZS[b_side]
+    flat = np.array([0.0, 1.0, 0.0])
+    home = yaml.safe_load((pathlib.Path.home() / ".dreamlabs/station.yaml").read_text())
+    q_up_b = np.asarray(home["follower_l" if b_side == "left" else "follower_r"]["home"]) + np.array([0, 0.8, 1.2, 0, 0, 0])
+    qs = None
+    for c in (close, -close):  # either finger direction: one of them may need too much wrist roll
+        for seed in (q_up_b, np.zeros(6), now[b_side]):
+            got, q = [], seed
+            def td(pnt, y):  # top_down without its finger-direction flip, which made both tries the same
+                T = np.eye(4)
+                T[:3, :3] = np.column_stack([np.cross(y, [0, 0, -1.0]), y, [0, 0, -1.0]])
+                T[:3, 3] = pnt
+                return T
+            c = c / np.linalg.norm(c)
+            for T in (td(G + [0, 0, 0.05], c), td(G, c), td(G + [0, 0, 0.05], c),
+                      top_down(np.array([0.30, 0.0, top_b + pick.HOVER]), flat),
+                      top_down(np.array([0.30, 0.0, top_b - PEN_Z + 0.008]), flat)):
+                q = next((r for s0 in (q, np.zeros(6), q_up_b) if (r := solve(ik_b, s0, T, iters=1500)) is not None), None)
+                if q is None:
+                    break
+                got.append(q)
+            if q is not None:
+                qs = got
+                break
+        if qs:
+            break
+    if not qs:
+        print(f"handover: the other arm can't reach the pen (grip {np.round(G, 3).tolist()})", file=sys.stderr)
         return None
     Ta = Fa.copy()
     Ta[:3, 3] -= Fa[:3, 2] * 0.08  # a backs off along its claw
-    q_back = solve(ik_a, present, Ta, iters=1500)
-    top_b = TOP_ZS[b_side]
-    q_above = solve(ik_b, q_b[3], top_down(np.array([0.30, 0.0, top_b + pick.HOVER]), np.array([0.0, 1.0, 0.0])), iters=1500)
-    q_down = q_above is not None and solve(ik_b, q_above, top_down(np.array([0.30, 0.0, top_b - PEN_Z + 0.008]),
-                                                                   np.array([0.0, 1.0, 0.0])), iters=1500)
-    if q_back is None or q_above is None or q_down is None or q_down is False:
-        print("handover: no pose to back off or to put it down", file=sys.stderr)
+    q_back = solve(ik_a, q_turn, Ta, iters=1500)
+    if q_back is None:
+        print("handover: no pose to back off", file=sys.stderr)
         return None
-    steps = [(b_side, "b_stage", q_b[0], 1.0, 0.0), (b_side, "b_in", q_b[1], 1.0, 0.0), (b_side, "b_at", q_b[2], 1.0, 0.2),
-             (b_side, "b_grip", q_b[2], 0.0, 0.5), (a_side, "a_open", present, 1.0, 0.3), (a_side, "a_back", q_back, 1.0, 0.0),
-             (a_side, "a_home", now[a_side], 0.05, 0.0), (b_side, "b_up", q_b[3], 0.0, 0.0),
-             (b_side, "b_above", q_above, 0.0, 0.0), (b_side, "b_down", q_down, 0.0, 0.2), (b_side, "b_open", q_down, 1.0, 0.3),
-             (b_side, "b_lift", q_above, 1.0, 0.0), (b_side, "b_home", now[b_side], 0.05, 0.0)]
+    b_above, b_at, b_up, p_above, p_down = qs
+    steps = [(a_side, "a_turn", q_turn, 0.0, 0.3), (b_side, "b_above", b_above, 1.0, 0.0), (b_side, "b_at", b_at, 1.0, 0.2),
+             (b_side, "b_grip", b_at, 0.0, 0.5), (a_side, "a_open", q_turn, 1.0, 0.3), (a_side, "a_back", q_back, 1.0, 0.0),
+             (a_side, "a_home", now[a_side], 0.05, 0.0), (b_side, "b_up", b_up, 0.0, 0.0),
+             (b_side, "b_to_table", p_above, 0.0, 0.0), (b_side, "b_down", p_down, 0.0, 0.2),
+             (b_side, "b_open", p_down, 1.0, 0.3), (b_side, "b_lift", p_above, 1.0, 0.0), (b_side, "b_home", now[b_side], 0.05, 0.0)]
 
     def pts(side, q):
         F = iks[side].fk(q)
         return F[:3, 3] - sh[side], F[:3, 3] - 0.12 * F[:3, 2] - sh[side]  # fingers, wrist (shared frame)
     pose = {a_side: present, b_side: now[b_side]}
-    floor_b = top_b - 0.02
     for arm, name, qj, _, _ in steps:
         o = a_side if arm == b_side else b_side
         og, ow = pts(o, pose[o])
@@ -109,7 +134,7 @@ def handover(iks, a_side, b_side, present, now, top):
             if np.linalg.norm(w - ow) < 0.10 or np.linalg.norm(w - og) < 0.07 or np.linalg.norm(g - ow) < 0.07:
                 print(f"handover: '{name}' comes too close to the other arm", file=sys.stderr)
                 return None
-            if arm == b_side and name.startswith("b_") and name not in ("b_stage",) and iks[arm].fk(q)[2, 3] < floor_b - 0.003:
+            if arm == b_side and iks[arm].fk(q)[2, 3] < top_b - 0.023:
                 print(f"handover: '{name}' dips below the table", file=sys.stderr)
                 return None
         pose[arm] = qj

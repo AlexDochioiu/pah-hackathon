@@ -475,17 +475,29 @@ def run(a, stage, s, end):
         latency_s=latency)
     if lifted and not reason and a.raw:  # nothing else can put him down from where Dream-1 lifted him: back the way it came
         say("Behold! The robot is now a wizard. I, sadly, am still a frog.")
-        waves = [c for c in json.loads(pathlib.Path(a.replay).read_text()) if c.get("event") == "wave"] if a.cam else []
-        if waves:  # cam_pick's: the claw turns to the audience, the wrist rolls the pen left and right, back down
+        pieces = [c for c in json.loads(pathlib.Path(a.replay).read_text()) if c.get("event") in ("wave", "hand")] if a.cam else []
+        waves, hand = [c for c in pieces if c["event"] == "wave"], [c for c in pieces if c["event"] == "hand"]
+        stopped = None
+        if waves:  # cam_pick's: the claw turns to the audience, the wrist rolls the pen left and right
             for i, c in enumerate(waves):
-                if steps(stage, arm, f"dream_wave{i + 1}", c["t"], c[arm]["q"], c[arm]["g"], a):
+                if (stopped := steps(stage, arm, f"dream_wave{i + 1}", c["t"], c[arm]["q"], c[arm]["g"], a)):
                     break
         else:
             wave(stage, arm, played[-1])  # 2-3 s of a wizard's flourish with the wand, then back the way it came
-        say("Thank you, Dream-1. Put it back gently.")
-        for i, c in enumerate(reversed(played)):
-            if steps(stage, arm, f"dream_back{i + 1}", c["t"], c["q"][::-1], c["g"][::-1], a):
-                break
+        if hand and not stopped:  # cam_pick's handover (owner, Nov 8): the other hand takes it and puts it down
+            say("Teamwork! Pass it to the other hand.")
+            for i, c in enumerate(hand):
+                side = c.get("arm", arm)
+                if (stopped := steps(stage, side, f"dream_hand{i + 1}", c["t"], c[side]["q"], c[side]["g"], a)):
+                    say("I'm stuck halfway. Can someone at the robot help?")
+                    break
+            if not stopped:
+                say("Thank you, Dream-1. Back on the table, safe and sound.")
+        else:
+            say("Thank you, Dream-1. Put it back gently.")
+            for i, c in enumerate(reversed(played)):
+                if steps(stage, arm, f"dream_back{i + 1}", c["t"], c["q"][::-1], c["g"][::-1], a):
+                    break
         out(event="done", ok=True, held=False, arm=arm, dream_chunks=n_played, fallback=False, reason=None,
             missed=None, latency_s=latency)
         return
