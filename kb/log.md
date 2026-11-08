@@ -127,3 +127,10 @@
   juggle, smell_flower, taste_sour, knock, tightrope, elevator) and duets mirror, invisible_ball, hand_through_wall.
   Sim latency: POST to first commanded sample 12 ms median.
 - 2026-11-07 18:45: overhead camera re-aimed by the owner and recalibrated (5 blocks, residual ≤ 3.7 mm); the baked Lars dock maps to px (331, 88) ([calibration.md](calibration.md)).
+- 2026-11-07 19:00: Lars dock is now face-down (on the belly): `lars.py --bake` (default) holds Lars head up facing
+  the audience (0°), joints [0, 0.75, 0.89, 0.21, 0, 0]; pick 4.7 s / place 4.8 s at speed 1, committed at 0.3
+  (15.6 / 16.1 s), baked with the 18:45 `calib.json`. `--face-up` gives the old profile hold. The dock is a fixed
+  position in the right arm's frame (`DOCK_RIGHT`, where the real pick took Lars from and put Lars back); its
+  left-frame and pixel position follow `calib.json` (px (331, 86) now). The head end face-down comes from the yellow
+  crown (legs as a second vote); the old width cue picked the feet on every real face-down frame. `retime` now
+  caps speed at corners (the new calib's bake broke j3's acceleration limit without it).

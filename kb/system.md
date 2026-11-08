@@ -37,7 +37,7 @@ Update this page when a piece is added or a connection changes. Details live on 
 | Solo gestures | `robot/make_gestures.py` → `robot/gestures/*.json` | `show.Checker` (sim) | [gestures.md](gestures.md) |
 | Duets and ensembles | `robot/make_duets.py` → `robot/duets/*.json` | `duets.DuetChecker` | [gestures.md](gestures.md) |
 | Previews (GIFs) | `robot/preview*.py` → `robot/previews/` | owner review pages | |
-| Lars pick | `robot/lars.py` (plan, `--bake`, `--go`) | its own sim checks + checker | [arm-control.md](arm-control.md) |
+| Lars pick | `robot/lars.py` (`--bake` from the fixed table dock `DOCK_RIGHT`, in the right arm's frame; live `--dry`/`--go` through `calib.json`) | its own sim checks + checker; the stage's `--dock-check` maps the dock into the camera through `calib.json` | [props.md](props.md) |
 | Narration, tags, voices, sounds | `agent/` | `agent/tests` (`uv run --group dev pytest -q`), `fake_stage.py` | [storyteller.md](storyteller.md) |
 
 ## Rules that cross pieces

@@ -18,13 +18,13 @@ Status: 🔨 being built · 👀 waiting for owner review · ⏸ waiting for som
 | Mime set: invisible wall, trapped in a box, ladder, wind, lean on nothing, juggle, flower, sour, knock, tightrope, elevator; duets mirror, invisible ball, hand through wall | 👀 | Done in sim, previews → next review page |
 | Sound on the visible hit: gesture/duet `sound` `{name, at}`, `[sfx]` moves onto the hit, `SFX_SYNC_MS` | 👀 | Done in sim + agent test; mp4s `robot/previews/sound/`; tune `SFX_SYNC_MS` by ear on the real arms |
 | Prop moves: toy car (drive, chase), spaceship (fly, hover/abduct, land, crash) | 👀 | Done in sim: solos, `/props` kinds, car_chase and ufo_abduct duets, previews. Spaceship: the team is finding one with a grip point (the bath-bomb UFO was dropped) |
-| Lars pick from a fixed dock, saved as `pick_lars` / `place_lars` gestures, `[pick:lars]` tag | ✅ sim | Sim-checked at speeds 0.3, 0.5, 0.75 and 1.0 ([props.md](props.md)). Real runs start at speed 0.3, ramp 0.5 → 0.75 → 1.0 only after several clean picks |
+| Lars pick from a fixed dock, saved as `pick_lars` / `place_lars` gestures, `[pick:lars]` tag | ✅ sim (the face-up bake picked for real) | Face-down dock (Lars held facing the audience) since Nov 7 evening, sim-checked at speeds 0.3, 0.5, 0.75 and 1.0 ([props.md](props.md)). Real runs start at speed 0.3, ramp 0.5 → 0.75 → 1.0 only after several clean picks |
 | Live prop pick anywhere on the table, 5 s total (detect < 50 ms, plan < 200 ms, move ~4.5 s) | 🔨 after dock | Colour/shape detector on the overhead camera; one grasp template per prop |
 
 ## Real-arm tests (need the stage server restarted on new code)
 | What | Status | Notes |
 |---|---|---|
-| Lars pick (unattended allowed, slow) | ⏸ ready | `pick_lars` / `place_lars` baked at speed 0.3; stage server restart needed. Checklist in [props.md](props.md) |
+| Lars pick (unattended allowed, slow) | ⏸ ready | Face-up bake picked and placed a face-down Lars on the real arms (Nov 7 evening). Now rebaked face-down (held facing the audience), sim-checked at 0.3/0.5/0.75/1.0, committed at 0.3: sync + stage server restart, then the checklist in [props.md](props.md). `--face-up` rebake for the old profile hold |
 | Deep facing (67°), talk, props on/off, hand ensembles (hug, clap…) | ⏸ | Watch the wrist cable on the big j5 turn; hand gaps sag 1–2 cm |
 | Death collapse, fist bang, car drive (touch the table) | ⏸ someone at e-stop | Never unattended |
 | Restart the web app (`cd ~/pah-hackathon/agent && uv run app.py`) | ⏸ owner back | Stopped while the station is unattended |

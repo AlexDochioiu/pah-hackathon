@@ -3,11 +3,12 @@ back down (or somewhere new).
 
   lars.py [--dry] [--image PATH] [--hint U,V] [--head U,V] [--place U,V | --random-place] [--face DEG] [--no-gif]
   lars.py --selftest
-  lars.py --bake [--speed 0.25..1.0] [--dock-z M]
+  lars.py --bake [--speed 0.25..1.0] [--dock-z M] [--face-up]
   lars.py --go (--estop-attended | --unattended) [--yes] [--sim] [--place U,V | --random-place] [--repeat N]
 
---bake: plans the pick once from his dock (lars/lars_overhead.jpg) and writes gestures/pick_lars.json and
-place_lars.json for the stage server (/play, checked by show.Checker): reach, grip, lift, hold head up; and back.
+--bake: plans the pick once from his fixed dock (DOCK_RIGHT, right-arm frame; no camera) and writes
+gestures/pick_lars.json and place_lars.json for the stage server (/play, checked by show.Checker): reach, grip, lift,
+hold head up; and back. He lies face-down there and is held facing the audience; --face-up: on his back, in profile.
 --speed scales the whole timing (default 0.3; 1.0 = ~5 s each); restart the stage server to load a new bake.
 Live planning (--dry / --go) is the fallback.
 
@@ -36,7 +37,13 @@ RUNS = DIR / "lars_runs"
 
 # ---- calibration knobs (ponytail: first guesses from one overhead frame, untested on the real doll) ----
 DOLL_TOP = 0.035        # m, Lars lying on his back: belly top above the table
-GRIP_Z = 0.016          # m, grasp-site height above the table when the fingers close (grip depth)
+# m, Lars face-down (on his belly, the default dock): his back above the table. An estimate from the doll model
+# below, not measured: lying on the belly bump and the eyes his axis sits ~2.1 cm up (1.8 on his back), plus the 1.8 cm
+# body radius = 3.9 cm; rounded up because it only sets the hover height (higher is safer). Measure it and set it.
+BACK_TOP = 0.040
+BELLY_AXIS_Z = 0.021    # m, his body axis above the table face-down (model; the preview draws him there)
+GRIP_Z = 0.016          # m, grasp-site height above the table when the fingers close (grip depth). Both ways up: face
+                        # down the axis sits ~3 mm higher, so the fingers close ~5 mm under it instead of ~2 (a deeper wrap)
 GRIP_FROM_HEAD = 0.40   # where to grip, as a fraction of his length from the head tip: just below the head
 GRIP_CLOSE = 0.0        # gripper command closed on the plush (0 = fully closed: squeezes it, it is soft)
 GRIP_MARGIN = 0.03      # m the fingers open wider than his body at the grip line when coming down
@@ -46,6 +53,8 @@ HEAD_UP_ROLL = 0.0      # rad, extra wrist roll about the pointing axis at the p
 DOLL_R, HEAD_R = 0.018, 0.021  # m, body capsule / head radius of the doll model (checks and preview)
 
 FACES = (90, 60, 45, 120, 30, 0)  # deg his face turns from the audience toward the other arm, in order of preference
+# face-down at the dock his face looks out past the fingertips once lifted, so the audience comes first
+FACES_BELLY = (0, 10, -10, 20, -20, 30, -30, 45, 60, 90)
 TILTS = (0, 20, 35, 50)  # deg the approach may lean along his body when straight down is out of reach (first that works)
 HOVER = 0.10            # m above his top for approach/retreat
 CARRY_R = 0.36          # m, the carry pose is at most this far from the base (horizontally)
@@ -67,8 +76,15 @@ LIFTED = 0.085          # m above the grip height he is lifted straight up to be
 V_FAST, A_FAST = 1.1, 4.0  # rad/s, rad/s^2 peak away from the table (the gesture library's 75 % of VMAX)
 GRIP_SECS = 0.3         # s to close / open the fingers (show's GRIP_VMAX turns a full stroke in ~0.3 s)
 GRIP_SETTLE = 0.1       # s still after closing, before lifting
-DOCK_IMG = DIR / "lars" / "lars_overhead.jpg"  # the dock reference frame: Lars where he waits, as he lies
-DOCK_HINT = (377.0, 125.0)                    # px near him in it
+# The dock, fixed on the table in the RIGHT arm's frame (m), the arm that picks him: where the real pick took Lars from
+# and put him back on Nov 7 evening (left frame (0.43599, -0.33469) + the 11:30 right_offset (0.005625, 0.602)). It is
+# not derived from any camera frame or calibration: a recalibration must not move the arm's target. The 18:45
+# recalibration moved right_offset by 1.1 cm (the per-block offsets in calib.py spread +-1.5 cm), so the left-frame
+# dock DOCK_XY (and the dock check's pixel, to_px(DOCK_XY)) follow calib.json instead. To move the dock: change these,
+# rebake.
+DOCK_RIGHT = (0.441615, 0.26731)         # his centre (midway head tip - feet), right-arm frame
+DOCK_AXIS = (0.95459, -0.29792)          # unit, toward his head (-17 deg from +x = toward the audience); both frames
+DOCK_LEN, DOCK_WIDTH = 0.11989, 0.04236  # m, his length, and his width at the grip line (from the same frame)
 DOCK_Z = 0.0            # m, height of his dock surface above the table (0 = on the table; set it for the stand)
 LARS_R = 0.025          # m, radius of the capsule the stage checks him as (body, arms and legs inside it)
 
@@ -77,7 +93,8 @@ H = np.asarray(cal["H"])                  # overhead pixel -> left-arm frame (x,
 HI = np.linalg.inv(H)
 OFFSET = np.array([*cal["right_offset"], 0.0])  # right-arm frame = left-arm frame + OFFSET
 TABLE_Z = {s: cal["block_top_z"][s] - BLOCK_H for s in show.SIDES}  # table, in each arm's frame
-CALIB_PX = (230, 470, 88, 228)            # u0, u1, v0, v1: the area the homography was fitted on (trust it there)
+CALIB_PX = (189, 427, 42, 198)            # u0, u1, v0, v1: the area the homography was fitted on (trust it there)
+DOCK_XY = tuple(np.asarray(DOCK_RIGHT) - OFFSET[:2])  # the dock in the left arm's frame, through the current calib
 
 
 def to_left(u, v):
@@ -98,6 +115,8 @@ def arm_frame(xy_left, side):
 # ===================================================================== detection
 
 GREEN_LO, GREEN_HI = (24, 50, 38), (62, 255, 255)  # OpenCV HSV; Lars is yellow-green (hue 28-50), the yellow block ~22
+# his crown next to the green blob: hue 19-26 on the Nov 7 frames (face down 66-101 px, face up 34 px, all at one end)
+CROWN_H, CROWN_S, CROWN_V, CROWN_N = (14, 27), 90, 70, (8, 220)  # hue range, min S, min V, pixel count (more = not a crown)
 
 
 def detect(img, hint=None, head_hint=None):
@@ -131,7 +150,7 @@ def detect(img, hint=None, head_hint=None):
         cands.sort(key=lambda c: -c[2])
     if not cands:
         return None
-    i = cands[0][0]
+    i, c_px = cands[0][0], cands[0][1]
     comp = (lab == i).astype(np.uint8)
     near = cv2.dilate(comp, np.ones((9, 9), np.uint8)) > 0
     white = near & (V >= 100) & (S <= 90)                    # the eyes
@@ -150,31 +169,57 @@ def detect(img, hint=None, head_hint=None):
     w = (P - c) @ perp
     t0, t1 = np.percentile(t, 1), np.percentile(t, 99)
     L, mid = t1 - t0, (t0 + t1) / 2
-    # Head end. Eyes: the white pixels sit at the head end. Shape: the round head is the wider, heavier end
-    # (the feet end is two thin legs): width of the end thirds and where the mass sits.
+    # Head end. Eyes: the white pixels sit at the head end (face up only). Crown: his yellow crown sits past the head
+    # tip, seen either way up. Legs: face down his two legs show split apart at the feet end. Shape (the wider,
+    # heavier end) is a weak cue only: face down it points at the feet (splayed legs; the crown is not green).
+    def end_of(xs, ys):  # positions along the axis, in half-lengths from the middle (+1 = the +ax tip)
+        return ((to_left(xs, ys) - c) @ ax - mid) / (L / 2)
+
     ey, ex = np.nonzero(white)
     eye = None
     if len(ex) >= 3:
-        te = float(((to_left(ex, ey) - c) @ ax).mean())
-        eye = (te - mid) / (L / 2)
+        eye = float(end_of(ex, ey).mean())
     third = L / 3
     w_pos = np.ptp(w[t > t1 - third]) if np.any(t > t1 - third) else 0
     w_neg = np.ptp(w[t < t0 + third]) if np.any(t < t0 + third) else 0
     shape = 0.5 * (w_pos - w_neg) / max(w_pos + w_neg, 1e-6) + (float(t.mean()) - mid) / (L / 2)
+    cy, cx = np.nonzero(near & (Hh >= CROWN_H[0]) & (Hh <= CROWN_H[1]) & (S >= CROWN_S) & (V >= CROWN_V))
+    crown = None
+    if CROWN_N[0] <= len(cx) <= CROWN_N[1]:
+        tc = end_of(cx, cy)
+        side = 1 if tc.mean() > 0 else -1
+        if np.mean(tc * side > 0) >= 0.9 and abs(tc.mean()) >= 0.6:  # one compact cluster at one end
+            crown = float(tc.mean())
+    gy, gx = np.nonzero(comp)  # the legs: green only
+    tg, wg = end_of(gx, gy), (to_left(gx, gy) - c) @ perp
+    pitch = float(np.linalg.norm(np.diff(to_left([c_px[0], c_px[0] + 1], [c_px[1]] * 2), axis=0)))
+    split = {}
+    for e in (1, -1):
+        n2 = 0
+        for f0 in (0.5, 0.6, 0.7, 0.8):  # bands across the body near that end: two runs of green = two legs
+            ws = np.sort(wg[np.abs(tg * e - f0) < 0.05])
+            n2 += len(ws) > 3 and bool(np.any(np.diff(ws) > 1.5 * pitch))
+        split[e] = n2
+    legs = -1 if split[1] >= 2 and split[-1] == 0 else 1 if split[-1] >= 2 and split[1] == 0 else None  # head sign
+    votes = [(nm, 1 if v > 0 else -1, txt) for nm, v, txt in (
+        ("eyes", eye if eye is not None and abs(eye) > 0.25 else None, f"eyes (white pixels at {abs(eye or 0):.2f} of the half-length)"),
+        ("crown", crown, f"crown (yellow at {abs(crown or 0):.2f})"),
+        ("legs", legs, f"legs (split in {max(split.values())}/4 bands at the feet end)")) if v is not None]
     if head_hint is not None:
         hp = to_left(*head_hint)[0]
         sign, how = (1 if (hp - c) @ ax > 0 else -1), "given by --head"
         confident = True
-    elif eye is not None and abs(eye) > 0.25:
-        sign = 1 if eye > 0 else -1
-        agree = shape * sign > 0
-        how = f"eyes (white pixels at {abs(eye):.2f} of the half-length toward that end); shape " + \
-              ("agrees" if agree else "DISAGREES") + f" ({shape * sign:+.2f})"
-        confident = True
+    elif votes:
+        sign = votes[0][1]
+        agree = all(v[1] == sign for v in votes)
+        confident = agree and votes[0][0] != "legs"  # eyes or crown, nothing against them
+        how = ", ".join(v[2] for v in votes) + ("" if agree else " DISAGREE") + \
+            ("" if votes[0][0] != "legs" else ": legs only, no crown or eyes seen") + \
+            f"; shape {'agrees' if shape * sign > 0 else 'disagrees'} ({shape * sign:+.2f}, not counted)"
     elif abs(shape) > 0.05:
-        sign, how, confident = (1 if shape > 0 else -1), f"shape only ({abs(shape):.2f}), no eyes seen", False
+        sign, how, confident = (1 if shape > 0 else -1), f"shape only ({abs(shape):.2f}), no eyes, crown or legs seen", False
     else:
-        sign, how, confident = 1, "UNDECIDED (no eyes, symmetric shape)", False
+        sign, how, confident = 1, "UNDECIDED (no eyes, crown or legs; symmetric shape)", False
     ax = ax * sign
     t, w, mid = t * sign, w * sign, mid * sign
     centre = c + ax * mid
@@ -185,8 +230,9 @@ def detect(img, hint=None, head_hint=None):
     width = float(np.ptp(w[band])) if band.sum() > 3 else 0.04
     return dict(contour=contour[:, 0, :], centre_px=to_px(centre)[0], head_px=to_px(head)[0], feet_px=to_px(feet)[0],
                 grip_px=to_px(grip)[0], centre=centre, head=head, feet=feet, grip=grip, axis=ax, length=float(L),
-                width=width, eyes_px=np.c_[ex, ey], how=how, confident=confident, eye_score=eye, shape_score=shape,
-                notes=notes)
+                width=width, eyes_px=np.c_[ex, ey], crown_px=np.c_[cx, cy], how=how, confident=confident, eye_score=eye,
+                shape_score=shape, crown_score=None if crown is None else crown * sign,  # + = at the head end
+                legs=None if legs is None else legs * sign, notes=notes)
 
 
 # ===================================================================== planning
@@ -251,16 +297,17 @@ def doll_local(det):
 class Plan:
     """The whole pick -> present -> place trajectory for one arm, checked."""
 
-    def __init__(self, det, side, place=None, face_deg=None, ik=None, ck=None, sc=None, log=print, dz=0.0):
+    def __init__(self, det, side, place=None, face_deg=None, ik=None, ck=None, sc=None, log=print, dz=0.0, belly=True):
         self.det, self.side, self.log = det, side, log
         self.dz = dz  # m, Lars lies this high above the table (the dock stand); 0 = on the table
+        self.belly = belly  # he lies face-down (on his belly); False = on his back, face up
         self.other = "left" if side == "right" else "right"
         self.ik, self.ck = ik, ck
         self.sc = sc
         self.tz = TABLE_Z[side]
         self.floor = self.tz + dz + 0.005
         self.gz = max(self.tz + dz + GRIP_Z, self.floor)
-        self.hz = self.tz + dz + DOLL_TOP + HOVER
+        self.hz = self.tz + dz + (BACK_TOP if belly else DOLL_TOP) + HOVER
         self.pick = arm_frame(det["grip"], side)
         h = det["axis"]
         self.h = h / np.linalg.norm(h)  # head direction (left frame and arm frame have parallel axes)
@@ -321,12 +368,13 @@ class Plan:
         return wp, ""
 
     def present(self, wp):
-        """Search the head-up presentation pose. His face looks back at the gripper (it grips him from the front), so
-        "facing the other arm" means the hand reaches out to the far side and points the fingers outward. Tries face
-        directions in FACES order (deg from the audience toward the other arm), positions on a polar grid around the
-        base on the outer side; keeps the pose nearest the stage pose that passes the static checks."""
+        """Search the head-up presentation pose. On his back his face looks back at the gripper (it grips him from the
+        front), so "facing the other arm" means the hand reaches out to the far side and points the fingers outward;
+        on his belly his face looks out past the fingertips, so facing the audience is the fingers pointing at it. Tries
+        face directions in FACES / FACES_BELLY order (deg from the audience toward the other arm), positions on a polar
+        grid around the base on the outer side; keeps the pose nearest the stage pose that passes the static checks."""
         stage = show.stage_pose(self.side)
-        faces = [self.face_deg] if self.face_deg is not None else FACES
+        faces = [self.face_deg] if self.face_deg is not None else FACES_BELLY if self.belly else FACES
         inv = np.linalg.inv(self.T_sd)
         out = -self.toward  # y sign of the arm's outer side
         for fd in faces:
@@ -358,8 +406,12 @@ class Plan:
 
     # ---- doll pose bookkeeping
     def doll_on_table(self, xy, hd):
-        R = np.column_stack([[hd[0], hd[1], 0], [-hd[1], hd[0], 0], [0, 0, 1]])
-        T = np.eye(4); T[:3, :3] = R; T[:3, 3] = [xy[0], xy[1], self.tz + self.dz + DOLL_R]
+        """His frame lying at xy, head toward hd: x to the head, z out of his face (up on his back, down on his belly)."""
+        if self.belly:
+            R = np.column_stack([[hd[0], hd[1], 0], [hd[1], -hd[0], 0], [0, 0, -1]])
+        else:
+            R = np.column_stack([[hd[0], hd[1], 0], [-hd[1], hd[0], 0], [0, 0, 1]])
+        T = np.eye(4); T[:3, :3] = R; T[:3, 3] = [xy[0], xy[1], self.tz + self.dz + (BELLY_AXIS_Z if self.belly else DOLL_R)]
         return T
 
     def site_pose(self, q):
@@ -772,26 +824,27 @@ def make_plan(det, img, args, ik, ck, log=print, rng=None):
     side = choose_side(det)
     sc = LarsScene(det)
     face = args.face
+    belly = not args.face_up
     if args.place:
         u, v = map(float, args.place.split(","))
         xy = arm_frame(to_left(u, v)[0], side)
         if not in_calib((u, v)):
             log(f"warning: --place {u:.0f},{v:.0f} is outside the calibrated area {CALIB_PX}")
-        return Plan(det, side, (xy, det["axis"]), face, ik[side], ck, sc, log).build()
+        return Plan(det, side, (xy, det["axis"]), face, ik[side], ck, sc, log, belly=belly).build()
     if args.random_place:
         rng = rng or np.random.default_rng()
         last = None
         for k, (xy, hd) in enumerate(random_place(img, det, side, rng)):
-            p = Plan(det, side, (xy, hd), face, ik[side], ck, sc, log).build()
+            p = Plan(det, side, (xy, hd), face, ik[side], ck, sc, log, belly=belly).build()
             if p.ok:
                 return p
             last = p
             if k >= 12:
                 break
         if last is None:
-            log("no clear spot found in reach"); return Plan(det, side, None, face, ik[side], ck, sc, log).build()
+            log("no clear spot found in reach"); return Plan(det, side, None, face, ik[side], ck, sc, log, belly=belly).build()
         return last
-    return Plan(det, side, None, face, ik[side], ck, sc, log).build()
+    return Plan(det, side, None, face, ik[side], ck, sc, log, belly=belly).build()
 
 
 def dry(args, img_path):
@@ -854,6 +907,7 @@ def retime(X, vlim, amax, hz=HZ):
     d1 = np.gradient(X, axis=0); d2 = np.gradient(d1, axis=0)
     a1 = np.maximum(np.abs(d1), 1e-9)
     sd = np.min(vlim[:, None] / a1, axis=1)  # path samples per second
+    sd = np.minimum(sd, np.min(np.sqrt(amax / np.maximum(np.abs(d2), 1e-12)), axis=1))  # corners: |d2| sd^2 <= amax
     sd[0] = sd[-1] = 0.0
 
     def acc(i, v):  # path acceleration at sample i, speed v, that keeps every joint inside amax
@@ -885,7 +939,7 @@ def timed(plan, points, held, g_from, g_to, g_frac=0.7):
     vlim = np.where(slow, 0.95 * show.TABLE_VMAX, V_FRAC * show.VMAX)
     for frac in (V_FRAC, 0.6, 0.5, 0.4):  # the 50 Hz differences of a retimed corner overshoot a bit: back off
         Q, u = retime(X, vlim, frac * show.AMAX)
-        if not show.motion_problems(np.vstack([X[:1], Q])):
+        if not show.motion_problems(np.round(np.vstack([X[:1], Q]), 4)):  # as written: keys are rounded to 1e-4 rad
             break
     G = g_from + (g_to - g_from) * np.clip(u / g_frac, 0, 1)
     sl = slow[np.round(u * (len(X) - 1)).astype(int)]
@@ -926,6 +980,19 @@ def bake_segments(plan):
     return out
 
 
+def dock_det():
+    """The fixed dock (DOCK_*) as a detection: what the bake plans from. No camera involved (the pixels are only for
+    the preview, through the current calib.json)."""
+    ax = np.asarray(DOCK_AXIS, float); ax /= np.linalg.norm(ax)
+    c = np.asarray(DOCK_XY, float)
+    head, feet = c + ax * DOCK_LEN / 2, c - ax * DOCK_LEN / 2
+    grip = head - ax * GRIP_FROM_HEAD * DOCK_LEN
+    return dict(contour=np.zeros((0, 2)), centre_px=to_px(c)[0], head_px=to_px(head)[0], feet_px=to_px(feet)[0],
+                grip_px=to_px(grip)[0], centre=c, head=head, feet=feet, grip=grip, axis=ax, length=DOCK_LEN,
+                width=DOCK_WIDTH, eyes_px=np.zeros((0, 2), int), crown_px=np.zeros((0, 2), int),
+                how="the fixed dock (DOCK_RIGHT, DOCK_AXIS)", confident=True, notes=[])
+
+
 def bake_gesture(plan, name, segs, about, start, prop_from, prop_to, speed=1.0):
     """The stage server's gesture JSON; speed < 1 stretches the timing (same path, slower everywhere)."""
     Q = np.vstack([start[None]] + [s["Q"] for s in segs])
@@ -938,21 +1005,23 @@ def bake_gesture(plan, name, segs, about, start, prop_from, prop_to, speed=1.0):
             "near": round(show.TABLE_NEAR + plan.dz, 4),
             "carry": {"name": "lars", "from": round(prop_from, 3), "to": round(min(prop_to, dur), 3),
                      "capsule": np.round(cap, 4).tolist(), "r": LARS_R},
-            "dock": {"px": np.round(plan.det["centre_px"], 1).tolist(), "head_px": np.round(plan.det["head_px"], 1).tolist(),
-                     "xy_left": np.round(plan.det["centre"], 4).tolist(), "z": plan.dz, "image": DOCK_IMG.name},
+            # table positions only (left arm's frame): the dock check maps them into the camera through the current
+            # calib.json, so it follows a recalibration
+            "dock": {"xy_left": np.round(plan.det["centre"], 5).tolist(), "head_xy_left": np.round(plan.det["head"], 5).tolist(),
+                     "z": plan.dz, "lying": "belly" if plan.belly else "back"},
             "speed": speed,
             "keys": [{"t": round(i / HZ / speed, 4), "q": np.round(q, 4).tolist(), "g": round(float(g), 3)} for i, (q, g) in enumerate(zip(Q, G))]}
 
 
 def bake(args):
-    img = cv2.imread(str(DOCK_IMG))
-    det = detect(img, np.array(DOCK_HINT))
-    assert det is not None and det["confident"], "Lars not found (confidently) in the dock frame"
+    det = dock_det()
     side = choose_side(det)
     station, ik = kit()
     ck = show.Checker()
     t0 = time.time()
-    plan = Plan(det, side, None, args.face, ik[side], ck, LarsScene(det), print, dz=args.dock_z)
+    # face-down he lies on the same spot, head the same way as on his back (the same outline from above)
+    belly = not args.face_up
+    plan = Plan(det, side, None, args.face, ik[side], ck, LarsScene(det), print, dz=args.dock_z, belly=belly)
     tried = []
     for tilt_deg, s in [(t, s) for t in TILTS for s in (1, -1)]:
         wp, why = plan.waypoints(s, math.radians(tilt_deg))
@@ -977,8 +1046,10 @@ def bake(args):
     t_grip = (sum(len(sg["Q"]) for sg in pick[:k]) / HZ + GRIP_SECS) / args.speed
     k = [sg["name"] for sg in place].index("release")
     t_release = sum(len(sg["Q"]) for sg in place[:k]) / HZ / args.speed
+    fd = math.degrees(math.atan2(plan.face_dir[1], plan.face_dir[0]))
+    shows = "facing the audience" if abs(fd) <= 20 else "in profile" if abs(fd) >= 60 else "turned toward the audience"
     gs = {"pick_lars": bake_gesture(plan, "pick_lars", pick, "Lars the frog joins: the right arm picks him up from his "
-                                    "dock and holds him head up. Ends holding him: then any gesture plays with him.",
+                                    f"dock and holds him head up, {shows}. Ends holding him: then any gesture plays with him.",
                                     wp["stage"], t_grip, 1e9, args.speed),
           "place_lars": bake_gesture(plan, "place_lars", place, "Lars goes home: the right arm puts him back on his dock, "
                                      "lets go and returns to the stage pose.", wp["present"], 0.0, t_release, args.speed)}
@@ -994,12 +1065,15 @@ def bake(args):
     for name, d in gs.items():
         (show.GESTURE_DIR / f"{name}.json").write_text(json.dumps(d, separators=(",", ":")) + "\n")
     print(f"baked in {time.time() - t0:.1f} s -> {show.GESTURE_DIR}/pick_lars.json, place_lars.json")
+    for why in tried:
+        print(f"  rejected: {why[:300]}")
     hd = math.degrees(math.atan2(plan.h[1], plan.h[0]))
-    fd = math.degrees(math.atan2(plan.face_dir[1], plan.face_dir[0]))
-    print(f"  dock: px ({det['centre_px'][0]:.0f},{det['centre_px'][1]:.0f}), {side}-arm frame grip ({plan.pick[0]:.3f},{plan.pick[1]:.3f}) "
+    print(f"  dock: left-arm frame centre ({det['centre'][0]:.4f},{det['centre'][1]:.4f}) (px ({det['centre_px'][0]:.0f},"
+          f"{det['centre_px'][1]:.0f}) through the current calib.json), {side}-arm frame grip ({plan.pick[0]:.3f},{plan.pick[1]:.3f}) "
           f"z {plan.gz:.3f}, head {hd:+.0f} deg, dock height {plan.dz:.3f} m; approach tilt {plan.tilt} deg, head sign {plan.s:+d}")
-    print(f"  holding pose {np.round(wp['present'], 2).tolist()}: head {plan.head_tilt:.1f} deg off vertical, face toward "
-          f"{fd:+.0f} deg (0 = audience, +90 = toward the left arm)")
+    print(f"  lying {'face-down (belly)' if belly else 'face-up (back)'}; holding pose {np.round(wp['present'], 2).tolist()}: "
+          f"head {plan.head_tilt:.1f} deg off vertical, face toward {fd:+.0f} deg (0 = audience, +90 = toward the left arm); "
+          f"searched {plan.face_used} deg first that passed")
     print(f"  {'segment':16s} {'s':>5s} {'vmax':>5s} {'links':>6s} {'Lars':>6s} {'site z':>6s} {'gap':>5s}  (cm, rad/s)")
     for sg in pick + place:
         print(f"  {sg['name']:16s} {len(sg['Q'])/HZ:5.2f} {sg['vmax']:5.2f} {sg['low_links']*100:6.1f} "
@@ -1036,17 +1110,23 @@ def dock_problem(dock, img=None):
         finally:
             for c in cams.values():
                 c.close()
-    det = detect(img, np.asarray(dock["px"], float))
+    if "head_xy_left" not in dock:
+        return "the gesture's dock has no head position (re-bake it with this lars.py)"
+    # the dock (fixed on the table) seen through the current calib.json; his detection goes through the same one, so
+    # this follows a recalibration and never changes where the arm goes
+    px, hpx = to_px(dock["xy_left"])[0], to_px(dock["head_xy_left"])[0]
+    det = detect(img, px)
     if det is None:
-        return "Lars is not at his dock (no doll-shaped green blob near it)"
+        return f"Lars is not at his dock (no doll-shaped green blob near px ({px[0]:.0f},{px[1]:.0f}))"
+    if not det["confident"]:
+        return f"not sure which end of Lars is his head ({det['how']})"
     d = float(np.linalg.norm(det["centre"] - np.asarray(dock["xy_left"])))
-    want = np.asarray(dock["head_px"], float) - dock["px"]
-    got = det["head_px"] - det["centre_px"]
+    want, got = hpx - px, det["head_px"] - det["centre_px"]
     ang = math.degrees(math.acos(np.clip(want @ got / np.linalg.norm(want) / np.linalg.norm(got), -1, 1)))
+    if ang > DOCK_TOL_DEG:
+        return f"Lars's head points {ang:.0f} deg off his dock direction ({det['how']})"
     if d > DOCK_TOL:
         return f"Lars lies {d*100:.1f} cm from his dock (max {DOCK_TOL*100:.0f})"
-    if ang > DOCK_TOL_DEG or not det["confident"]:
-        return f"Lars's head points {ang:.0f} deg off his dock direction ({det['how']})"
     return None
 
 
@@ -1067,6 +1147,35 @@ def variant(img, centre, angle_deg, flip=False, r=42):
     return out
 
 
+def variants_row(img, det, label, hint=False):
+    """Rotated/mirrored synthetic copies of the frame around Lars: he must be found (without a hint unless hint), confidently, head
+    direction within 25 deg of the real one turned the same way. Returns a row of zoomed annotated crops."""
+    c, h = det["centre_px"], det["head_px"]
+    v_img = (h - c) / np.linalg.norm(h - c)
+    tiles = [annotate(img, det)[:, :640]]
+    for ang, flip in ((90, False), (180, False), (-120, True), (35, True)):
+        im2 = variant(img, c, ang, flip)
+        d2 = detect(im2, c if hint else None)
+        assert d2 is not None, f"{label} variant {ang} flip {flip}: not found"
+        # expected head direction: rotate (and mirror) the real one about the disc centre (cv2 angle = CCW on screen)
+        e = v_img * ([-1, 1] if flip else [1, 1])
+        a = math.radians(ang)
+        e = np.array([e[0] * math.cos(a) + e[1] * math.sin(a), -e[0] * math.sin(a) + e[1] * math.cos(a)])
+        g = d2["head_px"] - d2["centre_px"]; g /= np.linalg.norm(g)
+        err = math.degrees(math.acos(np.clip(g @ e, -1, 1)))
+        assert np.hypot(*(d2["centre_px"] - c)) < 6, f"{label} variant {ang}/{flip}: centre {d2['centre_px']}"
+        assert err < 25, f"{label} variant {ang} flip {flip}: head direction off by {err:.0f} deg ({d2['how']})"
+        assert d2["confident"], (label, ang, flip, d2["how"])
+        print(f"  {label} variant rot {ang:+4d} deg{' mirrored' if flip else ''}: head direction within {err:.0f} deg; {d2['how']}")
+        tiles.append(annotate(im2, d2)[:, :640])
+    y, x = int(np.clip(c[1], 45, img.shape[0] - 45)), int(np.clip(c[0], 45, img.shape[1] - 45))
+    crops = [cv2.resize(t[y - 45:y + 45, x - 45:x + 45], (180, 180), interpolation=cv2.INTER_NEAREST) for t in tiles]
+    for k, t in enumerate(crops):
+        cv2.putText(t, f"{label}: " + ["real", "rot 90", "rot 180", "mirror -120", "mirror 35"][k], (4, 14),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
+    return np.hstack(crops)
+
+
 def selftest():
     img = cv2.imread(str(DIR / "lars" / "lars_overhead.jpg"))
     det = detect(img, np.array([377.0, 125.0]))
@@ -1076,42 +1185,71 @@ def selftest():
     assert h[1] < c[1] - 8, f"head {h} should be toward the top of the image (eyes there)"
     assert det["confident"] and "eyes" in det["how"], det["how"]
     assert 0.06 <= det["length"] <= 0.13, det["length"]
-    v_img = (h - c) / np.linalg.norm(h - c)
     print(f"real frame: centre ({c[0]:.0f},{c[1]:.0f}) head ({h[0]:.0f},{h[1]:.0f}) {det['length']*100:.1f} cm; {det['how']}")
-    tiles = [annotate(img, det)[:, :640]]
-    for ang, flip in ((90, False), (180, False), (-120, True), (35, True)):
-        im2 = variant(img, c, ang, flip)
-        d2 = detect(im2)  # no hint: it must find him on its own
-        assert d2 is not None, f"variant {ang} flip {flip}: not found"
-        # expected head direction: rotate (and mirror) the real one about the disc centre (cv2 angle = CCW on screen)
-        e = v_img * ([-1, 1] if flip else [1, 1])
-        a = math.radians(ang)
-        e = np.array([e[0] * math.cos(a) + e[1] * math.sin(a), -e[0] * math.sin(a) + e[1] * math.cos(a)])
-        g = d2["head_px"] - d2["centre_px"]; g /= np.linalg.norm(g)
-        err = math.degrees(math.acos(np.clip(g @ e, -1, 1)))
-        assert np.hypot(*(d2["centre_px"] - c)) < 6, f"variant {ang}/{flip}: centre {d2['centre_px']}"
-        assert err < 25, f"variant {ang} flip {flip}: head direction off by {err:.0f} deg ({d2['how']})"
-        assert d2["confident"], d2["how"]
-        print(f"variant rot {ang:+4d} deg{' mirrored' if flip else ''}: head direction within {err:.0f} deg; {d2['how']}")
-        tiles.append(annotate(im2, d2)[:, :640])
-    crops = [cv2.resize(t[int(c[1]) - 45:int(c[1]) + 45, int(c[0]) - 45:int(c[0]) + 45], (180, 180), interpolation=cv2.INTER_NEAREST)
-             for t in tiles]
-    for k, t in enumerate(crops):
-        cv2.putText(t, ["real", "rot 90", "rot 180", "mirror -120", "mirror 35"][k], (4, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.4,
-                    (255, 255, 255), 1, cv2.LINE_AA)
-    cv2.imwrite(str(DIR / "lars" / "lars_variants.jpg"), np.hstack(crops))
+    rows = [variants_row(img, det, "face up")]
+    # face-down (on his belly, the default dock): no eyes; the crown decides, the split legs must not disagree. The
+    # width/mass shape cue points at his feet here, so it is not counted.
+    # (Nov 7 evening frames: at the dock after the real pick put him back, and elsewhere on the table)
+    for name, hint, head_dir in (("facedown_dock_overhead.jpg", (317.0, 90.0), (1, -1)),
+                                 ("facedown_overhead.jpg", (437.0, 122.0), (1, -1))):
+        im = cv2.imread(str(DIR / "lars" / name))
+        d = detect(im, np.array(hint))
+        assert d is not None, f"Lars not found in {name}"
+        g = d["head_px"] - d["centre_px"]
+        assert d["confident"] and "crown" in d["how"] and d["legs"] != -1, (name, d["how"])
+        assert np.all(np.sign(g) == head_dir), f"{name}: head toward {g}, expected the crown end {head_dir}"
+        print(f"{name} (face down): centre ({d['centre_px'][0]:.0f},{d['centre_px'][1]:.0f}) head ({d['head_px'][0]:.0f},"
+              f"{d['head_px'][1]:.0f}); {d['how']}")
+        rows.append(variants_row(im, d, name[:-13], hint=True))  # today's frames hold other green blobs
+    w = max(r.shape[1] for r in rows)
+    cv2.imwrite(str(DIR / "lars" / "lars_variants.jpg"), np.vstack([np.pad(r, ((0, 0), (0, w - r.shape[1]), (0, 0))) for r in rows]))
     print(f"variants: {DIR / 'lars' / 'lars_variants.jpg'}")
+    # the dock check, face-down, with the baked dock on a real frame from the camera calib.json was fitted for (Nov 7
+    # 18:50, after the real place_lars put him back): at the dock passes; turned 180 deg (gripping 40 % from his feet)
+    # and crown hidden refused. Recalibrate -> grab a new frame of him at the dock for this.
+    im = cv2.imread(str(DIR / "lars" / "facedown_dock_cal3.jpg"))
+    dd = dock_det()
+    dock = {"xy_left": dd["centre"].tolist(), "head_xy_left": dd["head"].tolist()}
+    assert dock_problem(dock, im) is None, dock_problem(dock, im)
+    d = detect(im, to_px(DOCK_XY)[0])
+    assert "crown" in d["how"] and d["confident"], d["how"]
+    c = d["centre_px"]
+    flipped = variant(im, c, 180)
+    why = dock_problem(dock, flipped)
+    assert why and "head points" in why, why
+    print(f"dock check: at the dock OK; turned 180 deg refused: {why}")
+    # he lies ~25 deg off DOCK_AXIS in this frame (where the real place left him): 15 deg one way passes, the other
+    # way (~40 deg) is refused
+    assert [dock_problem(dock, variant(im, c, ang)) is None for ang in (15, -15)].count(True) == 1
+    for ang in (60, 120, -90):
+        assert dock_problem(dock, variant(im, c, ang)), ang
+    hidden = im.copy()
+    d = detect(im, c)
+    cx, cy = d["crown_px"].T
+    m = np.zeros(im.shape[:2], np.uint8); m[cy, cx] = 1
+    hidden[cv2.dilate(m, np.ones((5, 5), np.uint8)) > 0] = np.median(im[30:50, 360:400].reshape(-1, 3), axis=0)
+    why = dock_problem(dock, hidden)
+    assert why and not detect(hidden, c)["confident"], why
+    print(f"dock check: crown hidden refused: {why}")
+    why = dock_problem(dock, variant(hidden, c, 180))
+    assert why, "crown hidden and turned 180 deg passed"
     # not Lars: the yellow block must not be taken for him
     d3 = detect(img, np.array([251.0, 125.0]))
     assert d3 is None, "the yellow block was taken for Lars"
     # a dry plan on the real frame passes, head up at the presentation
     station, ik = kit()
     ck = show.Checker()
-    plan = Plan(det, choose_side(det), None, None, ik[choose_side(det)], ck, LarsScene(det), lambda *_: None).build()
-    assert plan.ok, plan.problems
-    assert plan.head_tilt < 10, plan.head_tilt
-    assert all(s["vmax"] <= V_NEAR + 0.02 for s in plan.segs if s["near"]), "near-table speed above 0.3 rad/s"
-    print(f"plan: {plan.side} arm, head {plan.head_tilt:.1f} deg off vertical at the presentation, face {plan.face_used} deg")
+    for belly in (False, True):
+        plan = Plan(det, choose_side(det), None, None, ik[choose_side(det)], ck, LarsScene(det), lambda *_: None,
+                    belly=belly).build()
+        assert plan.ok, plan.problems
+        assert plan.head_tilt < 10, plan.head_tilt
+        assert all(s["vmax"] <= V_NEAR + 0.02 for s in plan.segs if s["near"]), "near-table speed above 0.3 rad/s"
+        fd = math.degrees(math.atan2(plan.face_dir[1], plan.face_dir[0]))
+        if belly:
+            assert abs(fd) <= 30, f"face-down: held face {fd:.0f} deg from the audience"
+        print(f"plan ({'face down' if belly else 'face up'}): {plan.side} arm, head {plan.head_tilt:.1f} deg off vertical at "
+              f"the presentation, face {fd:+.0f} deg from the audience (searched {plan.face_used})")
     print("selftest OK")
 
 
@@ -1405,6 +1543,8 @@ def main():
     ap.add_argument("--no-gif", action="store_true")
     ap.add_argument("--bake", action="store_true", help="write gestures/pick_lars.json + place_lars.json from the dock")
     ap.add_argument("--dock-z", type=float, default=DOCK_Z, help="m, dock surface above the table (the stand)")
+    ap.add_argument("--face-up", action="store_true",
+                    help="Lars lies on his back (the old dock; held in profile); default: face-down, held facing the audience")
     ap.add_argument("--speed", type=float, default=0.3,
                     help="--bake: 0.25..1.0 scales the whole timing (1.0 = the 5 s target); ramp it up on the real arm")
     args = ap.parse_args()

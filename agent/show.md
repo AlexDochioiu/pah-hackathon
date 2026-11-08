@@ -34,7 +34,7 @@ SPOT_back_right = right:point_back_right | right:look_at_other
 LARS_POINT = right:point_at_lars | right:double_take        # "Down here.": an arm points at Lars on the table
 LARS_PICK = off                     # on: in act 1 the right arm lifts Lars from the dock (needs someone at the e-stop)
 # The pick line gives ~7 s of talk while Lars goes up and ~6 s while Lars goes down, with no other right-arm tag:
-# sized for the speed-1 bake (pick 5.0 s, place 5.2 s). Check it on the fake stage before turning it on.
+# sized for the speed-1 bake (pick 4.7 s, place 4.8 s). Check it on the fake stage before turning it on.
 LARS_PICK_UP = pick:lars | right:point_at_lars | right:double_take    # falls back while the stage lacks pick_lars
 LARS_PUT_DOWN = place:lars | right:nod
 LEAD_PAUSE_S = 0.3                  # an act's opening sound (the record scratch) plays this long before the voice

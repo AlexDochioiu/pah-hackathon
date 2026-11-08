@@ -31,6 +31,11 @@ gestures don't need it.
   assignment fits. A 4-point homography always fits exactly, so it can't pick the assignment.
 - teach.py only counts a touch held still for > 1.5 s; quick taps are lost. Ask for 3 s holds on every block.
 - The old file is kept on the station as `~/dial/calib_before_cal3.json`.
+- The offset's x moved 1.1 cm (+0.0056 → −0.0056); the per-block offsets in `calib.py` spread ±1.5 cm, so it's within
+  the noise of the touches. The Lars dock is pinned in the right arm's frame (`DOCK_RIGHT`, where the real pick
+  worked), so this didn't move the arm's target; only its left-frame/pixel position follows ([props.md](props.md)).
+- After a recalibration: re-grab `robot/lars/facedown_dock_cal3.jpg` with Lars at the dock (the selftest's dock
+  check runs on it).
 
 ## Redo it when
 The cameras or the arms move, or picks start missing by more than ~1 cm. Pixel coordinates refer to 640×360 frames.

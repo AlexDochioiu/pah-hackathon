@@ -52,7 +52,7 @@ cleanly (arms freeze, voice stops), so you can also skip a line that's running l
   stage knows wins). When the real point gestures exist, nothing changes in the script.
 - `LARS_PICK = on` keeps the line "A little higher, please…" where the right arm lifts Lars from the dock
   (`[pick:lars]`, then `[place:lars]`; a stage without the baked `pick_lars` gets a point instead). The line is
-  spaced for the speed-1 bake (pick 5.0 s, place 5.2 s, no other right-arm tag meanwhile); a slower bake needs
+  spaced for the speed-1 bake (pick 4.7 s, place 4.8 s since the face-down bake, no other right-arm tag meanwhile); a slower bake needs
   more words, so try it on the fake stage first. Only with someone at the e-stop, and only once the pick works on
   the real arms.
 - Reload: save, then STOP and cue again (each session reads `show.md` afresh; no restart needed). `uv run --group dev pytest -q
