@@ -40,8 +40,8 @@ LARS_PUT_DOWN = place:lars | right:nod
 # Off until it works on the real arms. on: act 2's pick is Dream-1's ([dream:pick_lars], robot/dream_run.py; it wins
 # over LARS_PICK). About 90 s: its own lines and the patter fill it, so act 2 runs well over budget.
 # A miss: the arm facepalms, a sad trombone, one DREAM_OOPS quip, then our own pick_lars. Needs someone at the e-stop.
-DREAM_PICK = off
-DREAM_ARGS = --speed 1.0 --hold --pick-s 90 --patter 6         # --hold: it ends holding Lars, so {LARS_PUT_DOWN} puts him back
+DREAM_PICK = on
+DREAM_ARGS = --raw --no-fallback --speed 0.5 --exec 16 --pick-s 90 --patter 8   # raw: Dream-1 unchecked, its own timing at half speed (like dreamcli's ~/dream-test.yaml); the arms stay ours
 DREAM_OOPS = Ah, frog-nabbit. | Nobody saw that. | That was a practice grab.
 # The "Built with" card: the /show page shows it during act BUILT_WITH_ACT. One line per tool,
 # "tool: how we use it". Add a sponsor's tool as the next BUILT_n. List only what the code really uses.
@@ -71,13 +71,13 @@ Thirty hours awake, and the pitch is: it's like... a robot? [right:facepalm]
 We'll take it from here. [left:nod]
 Good evening, humans! I'm {HOST_NAME}. Down here. {LARS_POINT} Yes. The frog.
 
-## Act 2: The pickup
-<!-- Its own cue, so the clicker can jump straight here. With LARS_PICK and DREAM_PICK off it skips the pick and goes straight into the intro. -->
+## Act 2: The stage hands and the wand
+<!-- Its own cue, so the clicker can jump straight here. With DREAM_PICK on, Dream-1 fetches the green stick (about 90 s, Lars talks over it), then the show name. -->
 [face:audience]
-{?LARS_PICK}{?!DREAM_PICK} A little higher, please. {LARS_PICK_UP} Higher. Higher! Thank you. Hello, back row! I can see all your laptops from up here. Okay, down again, I get dizzy. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know. A tiny bit to the left. Perfect.
-{?DREAM_PICK} Tonight, a world first: Dream-1 picks me up, live. No rehearsal. [dream:pick_lars] Hello, back row! I can see all your laptops from up here. Okay, down again. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know.
 I host the show, I tell the stories, and these two are my stage hands. [both:present]
 Stage hands. Because they're hands. That joke cost forty dollars in API credits. [right:tremble_excited] [left:eye_roll] [sfx:rimshot]
+{?LARS_PICK}{?!DREAM_PICK} A little higher, please. {LARS_PICK_UP} Higher. Higher! Thank you. Hello, back row! I can see all your laptops from up here. Okay, down again, I get dizzy. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know. A tiny bit to the left. Perfect.
+{?DREAM_PICK} Every host needs a magic wand. Mine is that green stick on the table. Tonight, one of my stage hands lets Dream-1 drive: a robot brain from Dream Labs that has never seen this table. Dream-1, fetch me my wand. Live, no rehearsal. [dream:pick_lars]
 Please welcome... [sfx:tada] {SHOW_NAME}! [both:ta_da] [sfx:applause] [music:funny]
 
 ## Act 3: The founders
@@ -108,11 +108,9 @@ Come up, hold the big yellow button, and tell me what happens. [right:tremble_ex
 
 ## Act 6: The finale
 <!-- Works from any state: it stops a story politely. Esc (STOP) afterwards folds the arms and ends the music. -->
-<!-- The threat: one arm creeps to the e-stop and hovers above it, never touching (a press drops both arms limp). -->
 [face:audience]
 One small note for the judges. [right:nod]
-It's first prize, or these two end it all. {PANIC_REACH} [sfx:drum_roll]
-Kidding. Mostly. [right:shake_head]
+These two worked thirty hours, unpaid. First prize would really help their union negotiations. [left:nod] [sfx:drum_roll]
 [music:victory] We were {SHOW_NAME}: {HOST_NAME}, the stage hands, and {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}!
 Goodnight! [duet:tip_hats] [sfx:applause]
 

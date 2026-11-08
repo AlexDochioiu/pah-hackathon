@@ -65,20 +65,20 @@ EMPTY_GRIP = 0.07   # measured gripper (0 closed .. 1 open) below this while "ho
                     # stops the fingers at 0.09-0.3 (the real picks, Nov 7). ponytail: knob, check on the real arms
 REACTION = "facepalm"   # the arm's "ah, damn it" after a miss: an existing gesture (head into the hand, shaking)
 OOPS_SFX = "sad_trombone"   # agent/sounds/sfx/crowd, CC0
-OOPS_LINES = {"empty_grip": "Ah, frog-nabbit. It grabbed thin air. Very magical.", "dropped": "And it dropped my wand. Typical.",
+OOPS_LINES = {"empty_grip": "It grabbed thin air. Very magical.", "dropped": "And it dropped my wand. Typical.",
               "not_lifted": "Close. The wand stays put. It's shy.", "timeout": "Dream-1 ran out of time. So did my patience."}
-PATTER = ["Three cameras, one wand, zero rehearsal.",
-          "No script, no rehearsal. Dream-1 is figuring this out right now.",
-          "Robots think slowly when they're being careful. Like me before coffee.",
-          "This is the part where a real roboticist would sweat.",
-          "Still thinking. Big brain, small frog.",
-          "Somewhere a GPU is very worried about me.",
-          "Careful with that wand. It's a family heirloom. From a dollar store.",
-          "If this goes wrong, it was the frog's fault. It's always the frog's fault.",
+PATTER = ["Dream-1 has never seen this table before. It's working it out from the cameras, right now.",
+          "No script and no rehearsal. Every move you see is Dream-1's own idea.",
+          "It's looking for the green stick. Green, like me. Easy mistake.",
+          "Robots move slowly when they're thinking. So do I, before coffee.",
+          "This is the part where a real roboticist would start sweating.",
           "Any moment now. Any. Moment.",
-          "I've had many assistants. Never a foundation model.",
-          "The back row can't see, but trust me, it's very dramatic.",
-          "Fun fact: frogs can't be fired. I checked."]
+          "The back row can't see this, but trust me, it's very dramatic.",
+          "Somewhere, a GPU is working very hard for one frog.",
+          "Take your time, Dream-1. The judges have all night.",
+          "Still thinking. Big brain, small table.",
+          "If this works, we're calling it magic.",
+          "Okay, Dream-1. The audience is getting hungry."]
 _lock, _said = threading.Lock(), [time.monotonic()]
 
 
@@ -272,7 +272,7 @@ def main():
         out(event="done", ok=False, held=False, dream_chunks=0, fallback=False,
             reason=f"stage not ready: fault {s.get('fault')}, busy {busy}, props {s['props']}")
         return
-    say("Dream-1 is looking for it with three cameras.")
+    say("Dream-1 is looking for it now, with three cameras.")
     stop = threading.Event()
     if a.patter > 0:
         threading.Thread(target=patter, args=(a.patter, stop), daemon=True).start()
