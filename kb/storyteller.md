@@ -159,8 +159,15 @@ after its release; the arm's hit comes `rtt/2 + starts_in + hit_at/speed + arm_l
   - One-word talk tags opened the mouth for 8 ms; now at least 0.4 s, closed half a word after the last word.
 - What the code does (`gestures.Timing`, `_Placer`): a tag right after a word is aimed at that word, one after the
   sentence's last word `SENTENCE_HIT_S` into the sentence. It fires `gesture_lead = rtt/2 + starts_in + hit_at/speed
-  + ARM_LAG_MS - audio_s` (capped at 3.5 s) earlier, converted to syllables at the voice's rate and snapped to a word
-  boundary, never before a face/props/pick tag or an earlier sentence's tags. `starts_in` and the rtt are EMAs of
+  + ARM_LAG_MS - audio_s` (capped at 3.5 s) earlier, converted to syllables at the voice's rate (a sentence end
+  counts a syllable of pause, a comma half) and snapped to the last word boundary not later than that, into the
+  sentences before if the lead needs it, never before a face/props/pick tag or an earlier sentence's tags. (Until
+  Nov 8 it stopped at its own sentence's start and snapped to the nearest boundary: the show's hits came 0.4-2.4 s
+  after their words.)
+- Show acts (cached audio): `voices.letter_times` matches the audio's pauses to the text's punctuation and times
+  every word; tags are zero-length spans on the next word. Before (Nov 8), the synchronizer paced an act by its
+  characters, tags and `[mark:…]`s included (a third of an act's characters): words came out up to 3.8 s off their
+  audio, and the page's transcript with them. `starts_in` and the rtt are EMAs of
   the stage's replies; the rate is measured per reply (sink); `audio_s` is the page's measured playout (index.html
   publishes `playout_ms`/`playout_bg_ms` every 2 s from `getStats`: jitter-buffer delay per track + RTT/2 + output
   latency). An `[sfx]` in a gesture's sentence rides on its hit; elsewhere it moves earlier by the sound track's

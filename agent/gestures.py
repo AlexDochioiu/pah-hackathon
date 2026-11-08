@@ -232,6 +232,20 @@ def _speed() -> float:
     return float(os.getenv("STAGE_SPEED", "1.0"))
 
 
+LATE_SYL = 0.5  # a tag may snap this many syllables (~0.2 s) past where its lead wants it, no more
+
+
+def _syllables(word: str) -> float:
+    """A word's speaking time in syllables, the pause after it included: the voice stops ~0.3-0.6 s after a
+    sentence and ~0.2-0.3 s after a clause (measured on the show's acts, Nov 8), so a tag aimed past one isn't
+    snapped to the later word."""
+    w = word.strip()
+    if not w:
+        return 0
+    end = re.sub(r"\[[^\]]*\]", "", w).rstrip(_CLOSERS)[-1:]
+    return len(hyphenate_without_tags(w)) + (1.0 if end in _SENTENCE_END else 0.5 if end in ",;:—" else 0)
+
+
 def _is_word(it: list) -> bool:
     return it[2] is None and bool(it[0].strip())
 
@@ -255,11 +269,11 @@ class _Placer:
             last = self.items[-1] if self.items else None
             if last is not None and last[2] is None and w[:1].strip() and last[0][-1:].strip():
                 last[0] += w  # a word split across chunks
-                last[1] = len(hyphenate_without_tags(last[0].strip()))
+                last[1] = _syllables(last[0])
                 continue
             if w.strip() and (start := self._sentence_start()) is not None:
                 out += self._close(start)
-            self.items.append([w, len(hyphenate_without_tags(w.strip())) if w.strip() else 0, None])
+            self.items.append([w, _syllables(w), None])
         return out
 
     def flush(self) -> str:
@@ -333,7 +347,9 @@ class _Placer:
             before.setdefault(k, []).append([items[i][0] + " ", 0, items[i][2]])
             moved.add(i)
 
-        prev, hit_tag = a, None
+        # the first tag may lead into the sentences before (the text held back for it), back to their last moving
+        # tag (_bound): capped at the sentence's start, the act's tags hit 0.4-2.4 s after their words (Nov 8)
+        prev, hit_tag = 0, None
         for i in tags:
             tag = items[i][2]
             if tag.arm is None:  # [next]: at the end
@@ -399,7 +415,11 @@ class _Placer:
         if want >= pos[i] and not nearest:
             return i
         spots = [k for k in range(bound, i + 1) if k in (a, bound, i) or _is_word(self.items[k])]
-        return min(spots, key=lambda k: (abs(pos[k] - want), k))
+        if nearest:
+            return min(spots, key=lambda k: (abs(pos[k] - want), k))
+        # a tag: the last spot not later than `want` (a hit a little early reads as on the word, a late one doesn't)
+        early = [k for k in spots if pos[k] <= want + LATE_SYL]
+        return max(early, key=lambda k: (pos[k], -k)) if early else min(spots, key=lambda k: (pos[k], k))
 
     def _hits(self, tag: Tag) -> tuple[str | None, list[float]]:
         if self.book is None or tag.arm == FILL_TAG:
@@ -1130,7 +1150,7 @@ class GestureSink(io.TextOutput):
         if self._reply_t is None:
             self._reply_t, self._reply_syl = now, 0
             return
-        self._reply_syl += sum(len(hyphenate_without_tags(w)) for w in text.split())
+        self._reply_syl += sum(_syllables(w) for w in text.split())  # pauses too, as tags_first counts them
 
     async def capture_text(self, text: str) -> None:
         clean = self._handle(self._parser.feed(text))

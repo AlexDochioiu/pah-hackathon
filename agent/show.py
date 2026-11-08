@@ -591,6 +591,17 @@ class ShowRunner:
         return hashlib.sha1(blob.encode()).hexdigest()[:16]
 
     async def _audio_for(self, text: str) -> tuple[list, Any]:
+        from voices import letter_times
+
+        frames, marks = await self._cached_audio(text)
+        if marks is not None and frames:
+            try:  # every word timed to the audio, so its gestures fire on it (voices.letter_times)
+                marks.letter_times = letter_times(text, frames)
+            except Exception as e:  # noqa: BLE001 - paced by its characters then, as before
+                logger.warning("show: no word timings: %s", e)
+        return frames, marks
+
+    async def _cached_audio(self, text: str) -> tuple[list, Any]:
         path = self.cache_dir / f"{self.cache_key(text)}.wav"
         if path.exists():
             return _read_wav(path, self.FRAME_MS), _read_marks(path)

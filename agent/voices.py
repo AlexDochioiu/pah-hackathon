@@ -220,6 +220,9 @@ class RunMarks:
         self.letters = 0  # letters the tts node has split so far
         self.total: float | None = None  # all audio, once synthesised
         self.closed = False
+        # every letter's start in the audio (index = spoken letters before it; [-1] = the speech's end), from the
+        # whole reply's audio (`letter_times`); only the show's cached acts have it: timestamp_runs then times each word
+        self.letter_times: list[float] | None = None
         self._changed = asyncio.Event()
 
     def changed(self) -> None:
@@ -252,6 +255,10 @@ async def timestamp_runs(text: AsyncIterable[str], find_marks: Callable[[], RunM
     async for chunk in text:
         if first:
             marks, first = find_marks(), False
+            if marks is not None and marks.letter_times:
+                async for piece in _timestamp_words(chunk, text, marks.letter_times, marks.total):
+                    yield piece
+                return
         if marks is None:
             yield chunk
             continue
@@ -289,6 +296,127 @@ async def timestamp_runs(text: AsyncIterable[str], find_marks: Callable[[], RunM
         if await marks.until(lambda: marks.total is not None, "end time for the reply"):
             held = io.TimedString(held, start_time=getattr(held, "start_time", NOT_GIVEN), end_time=marks.total)
         yield held
+
+
+async def _timestamp_words(first: str, rest: AsyncIterable[str], times: list[float],
+                           total: float | None) -> AsyncIterator[io.TimedString]:
+    """timestamp_runs with every letter's time known (`letter_times`): each word starts at its first letter's
+    time, and each tag (with the spaces and quotes after it) is a zero-length span at the next letter's, so tags
+    take no speaking time and fire with the word after them."""
+    letters, in_tag, prev = 0, False, " "
+    buf, start, is_tag = "", NOT_GIVEN, False
+
+    def at(n: int) -> float:
+        return times[min(n, len(times) - 1)]
+
+    def cut() -> io.TimedString | None:
+        if not buf:
+            return None
+        return io.TimedString(buf, start_time=at(letters), end_time=at(letters)) if is_tag else \
+            io.TimedString(buf, start_time=start)
+
+    async def chunks() -> AsyncIterator[str]:
+        yield first
+        async for c in rest:
+            yield c
+
+    async for chunk in chunks():
+        for c in chunk:
+            piece = None
+            if not in_tag and c == "[":
+                piece, buf, is_tag, in_tag = cut(), "", True, True
+            elif in_tag:
+                in_tag = c != "]"
+            elif c.isalnum():
+                if is_tag or not (prev.isalnum() or prev in "'’-"):  # a word starts
+                    piece, buf, start, is_tag = cut(), "", at(letters), False
+                letters += 1
+            if piece is not None:
+                yield piece
+            buf += c
+            prev = c
+    if buf:
+        end = total if total is not None else at(letters)
+        yield io.TimedString(buf, start_time=end if is_tag else start, end_time=end)
+
+
+PAUSE_S = 0.12  # quiet this long is a pause: where the voice breathes, at a sentence's or a clause's end
+_BREAKS = ".,!?;:…—"
+
+
+def letter_times(text: str, frames: list[rtc.AudioFrame]) -> list[float] | None:
+    """When each spoken letter of `text` (letters inside `[...]` tags don't count) starts in its audio `frames`.
+
+    The synchronizer otherwise paces a run's text by its characters, tags included, from its start to its end, and
+    a show act's tags ([mark:...] ones too, ~20 characters each) are a third of its characters: measured on act 3,
+    words came out up to 3.8 s off their audio (act 4: 2.6 s), early before a cluster of tags and late after one.
+    Here the pauses in the audio are matched to the punctuation in the text (each pause to the break nearest the
+    voiced time before it predicts), and the letters between two matches are spread over the voiced time between
+    them. Measured on acts 3 and 4: every clause start within 0.1 s except two unpunctuated pauses (0.6 s)."""
+    if not frames:
+        return None
+    rate, ch = frames[0].sample_rate, frames[0].num_channels
+    x = np.concatenate([np.frombuffer(bytes(f.data), dtype=np.int16) for f in frames]).astype(np.float32)
+    if ch > 1:
+        x = x[: len(x) // ch * ch].reshape(-1, ch).mean(1)
+    win = max(1, rate // 100)  # 10 ms
+    rms = np.sqrt((x[: len(x) // win * win].reshape(-1, win) ** 2).mean(1))
+    if not len(rms) or rms.max() <= 0:
+        return None
+    on = rms > rms.max() * 0.02
+    gap = int(PAUSE_S * 100)
+    segs, i, n = [], 0, len(on)  # voiced stretches, in 10 ms windows, pauses shorter than PAUSE_S bridged
+    while i < n:
+        if on[i]:
+            j = i
+            while j < n and (on[j] or on[j:j + gap].any()):
+                j += 1
+            segs.append((i, j))
+            i = j
+        else:
+            i += 1
+    breaks, letters, in_tag, brk = [], 0, False, False  # letters before each clause's first letter
+    for c in text:
+        if c == "[":
+            in_tag = True
+        elif c == "]":
+            in_tag = False
+        elif in_tag:
+            continue
+        elif c.isalnum():
+            if brk and (not breaks or breaks[-1] != letters):
+                breaks.append(letters)
+            brk = False
+            letters += 1
+        elif c in _BREAKS:
+            brk = True
+    if not segs or not letters:
+        return None
+    voiced = np.zeros(n + 1)
+    for a, b in segs:
+        voiced[a + 1:b + 1] = 1
+    cum = np.cumsum(voiced)  # voiced windows before window k
+    anchors, k_at = [(0, segs[0][0])], 0  # (letters, window) pairs; k_at: the segment the last anchor starts
+    for k in range(1, len(segs)):
+        if segs[k][1] - segs[k][0] < 15:  # a breath, not words
+            continue
+        la = anchors[-1][0]
+        v_to = cum[segs[k][0]] - cum[segs[k_at][0]]
+        v_all = cum[segs[-1][1]] - cum[segs[k_at][0]]
+        pred = la + (letters - la) * v_to / max(v_all, 1)
+        tol = max(4.0, 0.35 * (letters - la) * (segs[k - 1][1] - segs[k - 1][0]) / max(v_all, 1))
+        near = [b for b in breaks if b > la and abs(b - pred) <= tol]
+        if near:
+            anchors.append((min(near, key=lambda b: abs(b - pred)), segs[k][0]))
+            k_at = k
+    anchors.append((letters, segs[-1][1]))
+    times: list[float] = []
+    for (la, wa), (lb, wb) in zip(anchors, anchors[1:]):
+        for m in range(la, lb):  # letter m: its share of the voiced time between the two anchors
+            want = cum[wa] + (m - la) / max(lb - la, 1) * (cum[wb] - cum[wa])
+            times.append(float(min(int(np.searchsorted(cum, want, side="right")) - 1, wb)) / 100)
+    times.append(segs[-1][1] / 100)
+    return times
 
 
 def _span_start(chunk: str, lo: int, i: int) -> int:

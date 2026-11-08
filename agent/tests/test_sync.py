@@ -4,13 +4,14 @@ import asyncio
 
 import pytest
 from livekit import rtc
+from livekit.agents import utils
 
 import storyteller
 from gestures import GestureBook, Timing, tags_first
 from sounds import SoundBook, Soundboard
 from storyteller import StoryClock
 from test_sounds import FakePlayer
-from voices import RunMarks, tidy_speech, voiced_tts
+from voices import RunMarks, letter_times, tidy_speech, timestamp_runs, voiced_tts
 
 BOOK = GestureBook({"jump": 2.0, "present": 2.5, "nod": 2.0, "look_at_other": 2.0})
 TEXT = "the cat sat on the mat and then it ran [left:jump] far."
@@ -223,3 +224,47 @@ def test_a_gestures_own_sound_plays_even_when_not_offered():
         return offered, [w for _, k, w in board.player.log if k == "play"]
     offered, plays = asyncio.run(run())
     assert offered is False and plays == ["sfx:kiss"]
+
+
+def _speech(*bursts, rate=24000):
+    """Frames of a tone in each (start, end) second span, silence elsewhere."""
+    import numpy as np
+    n = int(max(e for _, e in bursts) * rate) + rate // 2
+    x = np.zeros(n, dtype=np.int16)
+    for s, e in bursts:
+        t = np.arange(int(s * rate), int(e * rate))
+        x[t] = (8000 * np.sin(2 * np.pi * 220 * t / rate)).astype(np.int16)
+    step = rate // 20
+    return [rtc.AudioFrame(x[i:i + step].tobytes(), rate, 1, len(x[i:i + step])) for i in range(0, n, step)]
+
+
+def test_letter_times_snap_clauses_to_pauses():
+    # "Hello there." for 1 s, a 0.7 s pause, "General Kenobi." from 1.7 s: letter-linear would start "General" at 1.0 s
+    times = letter_times("Hello there. [left:wave] General Kenobi.", _speech((0.1, 1.1), (1.8, 3.0)))
+    assert times[0] == pytest.approx(0.1, abs=0.02)
+    assert times[len("Hellothere")] == pytest.approx(1.8, abs=0.02)  # the tag's letters don't count
+    assert times[-1] == pytest.approx(3.0, abs=0.02)
+
+
+async def test_timed_words_put_tags_on_the_next_word():
+    """A show act's cached audio times every word; a tag is a zero-length span at the next letter's time, so it
+    takes no speaking time (the synchronizer paced by characters, tags included: up to 3.8 s off, Nov 8)."""
+    marks = RunMarks()
+    marks.starts, marks.times, marks.letters, marks.total, marks.closed = [0], [0.0], 12, 4.0, True
+    marks.letter_times = [0.1 * i for i in range(12)] + [3.5]
+
+    async def src():
+        yield "Hi there. [left:wave] [mark:left=wave]"
+        yield "Bye now."
+    pieces = [p async for p in timestamp_runs(src(), lambda: marks)]
+    assert "".join(pieces) == "Hi there. [left:wave] [mark:left=wave]Bye now."
+    spans = [(str(p), p.start_time, p.end_time if utils.is_given(p.end_time) else None) for p in pieces]
+    assert ("there. ", pytest.approx(0.2), None) in spans
+    assert ("[left:wave] ", pytest.approx(0.7), pytest.approx(0.7)) in spans  # "Bye" starts at letter 7
+    assert spans[-1] == ("now.", pytest.approx(1.0), 4.0)
+
+
+def test_tag_leads_into_the_sentence_before():
+    # a short sentence: the whole lead (1.1 s = 2.2 syllables) can't fit in it, so the tag moves into the one before
+    out = asyncio.run(place("We walk and walk and walk. A dragon? [left:jump] Yes."))
+    assert out.split() == "We walk and walk and [left:jump] walk. A [mark:left=jump]dragon? Yes.".split()

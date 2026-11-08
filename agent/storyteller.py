@@ -58,6 +58,7 @@ EXPRESSIVE = os.getenv("EXPRESSIVE", "1") == "1"  # let the LLM steer the voice'
 STAGE_URL = os.getenv("STAGE_URL", "http://127.0.0.1:8770")
 IDLE_AFTER_S = float(os.getenv("IDLE_AFTER_S", "1.5"))  # quiet stage -> POST /idle after this long
 NEXT_SCENE_AFTER_S = float(os.getenv("NEXT_SCENE_AFTER_S", "0.8"))  # pause between scenes for interjections
+REFETCH_S = 3.0  # the stage server was down at the session start: ask for its gesture list this often
 # Push-to-talk (app.py sets these): the mic only counts while the page's talk button is held.
 PTT = os.getenv("PTT", "0") == "1"
 AGENT_NAME = os.getenv("AGENT_NAME", "storyteller")
@@ -272,7 +273,8 @@ server = AgentServer(num_idle_processes=1) if PTT else AgentServer()  # PTT: a w
 @server.rtc_session(agent_name=AGENT_NAME)
 async def entrypoint(ctx: JobContext) -> None:
     stage = Stage(STAGE_URL)
-    book = GestureBook(await stage.fetch_gestures() or DEFAULT_GESTURES, await stage.fetch_duets(),
+    fetched = await stage.fetch_gestures()
+    book = GestureBook(fetched or DEFAULT_GESTURES, await stage.fetch_duets(),
                        await stage.fetch_duets("ensemble"), stage.about, stage.sides, stage.sounds)
     logger.info("gestures: %s; duets: %s", ", ".join(book.names), book.describe_duets())
     show = is_show(ctx.job.metadata)  # the page's /show route: scripted acts on cue (show.py)
@@ -334,6 +336,13 @@ async def entrypoint(ctx: JobContext) -> None:
                                "facepalmed and our own pick takes over. One short, funny line about it, then go on.")
 
     stage.on_dream_oops = dream_oops  # show mode: ShowRunner swaps in a DREAM_OOPS quip
+    if fetched is None:  # the stage was down: its real list once it answers (else present, double_take... drop)
+        refetch = asyncio.create_task(_refetch_book(stage, book, agent, sound_book, script, show))
+
+        async def stop_refetch() -> None:
+            refetch.cancel()
+
+        ctx.add_shutdown_callback(stop_refetch)
     await session.start(
         agent=agent,
         room=ctx.room,
@@ -370,6 +379,24 @@ async def entrypoint(ctx: JobContext) -> None:
         logger.info("show mode: %s, %d acts", script.show_name, len(script.acts))
         return
     session.generate_reply(instructions="Greet the listener and ask: a story, or a comedy show?")
+
+
+async def _refetch_book(stage: Stage, book: GestureBook, agent: Storyteller, sound_book: SoundBook,
+                        script: Script, show: bool) -> None:
+    """The session started while the stage server was down (Nov 8, 12:09: a whole show on the default list, so
+    present, double_take, slow_turn, eye_roll, ta_da and the ensembles were dropped as unknown): ask again every
+    few seconds and swap the stage's list into the shared book (and the LLM's prompt) once it answers."""
+    while True:
+        await asyncio.sleep(REFETCH_S)
+        if not (gestures := await stage.fetch_gestures()):
+            continue
+        fresh = GestureBook(gestures, await stage.fetch_duets(), await stage.fetch_duets("ensemble"), stage.about,
+                            stage.sides, stage.sounds)
+        book.__dict__.update(fresh.__dict__)  # in place: the agent, the sink and the show share this book
+        logger.info("stage server back: %d gestures, %d duets", len(book.names), len(book.duets))
+        await agent.update_instructions(build_instructions(book, sound_book, script, show=show)
+                                        + (script.live_prompt() if show else ""))
+        return
 
 
 def _listen_playout(room: rtc.Room) -> None:
