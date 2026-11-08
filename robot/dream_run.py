@@ -261,6 +261,11 @@ def main():
     a.chunks = max(1, min(a.chunks, MAX_CHUNKS))
     stage, t0 = Stage(a.stage), time.monotonic()
     end = t0 + a.pick_s
+    if a.cam:  # an earlier run that never put the pen down left a stuck "holds lars": open that gripper where it is
+        st = stage.state()
+        for side in ARMS:
+            if st["props"].get(side) == "lars" and not str(st["arms"][side].get("playing") or "").startswith("dream"):
+                steps(stage, side, "dream_release", [0.6], [list(st["arms"][side]["joints"])[:6]], [1.0], a)
     # idle_breathe loops between gestures and /trajectory takes over from it; wait out a gesture still playing.
     while True:
         s = stage.state()
