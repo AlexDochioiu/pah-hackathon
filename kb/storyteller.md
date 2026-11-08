@@ -71,7 +71,7 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
   `cheer`→`celebrate`…), then fuzzy match (difflib, cutoff 0.6), then any word of a compound (`sword_slash`).
   Unknown gestures and unknown arms are dropped and logged. Any short `[...]` span is removed from speech.
   Duets map first through `DUET_SYNONYMS` (catch/ball → `invisible_ball`, copy → `mirror`, through_the_wall →
-  `hand_through_wall`); the mime solos have their own verbs (`wall`, `box`, `ladder`, `wind`, `flower`, `sour`...).
+  `hand_through_wall`). The mime solos, `chef_kiss` and `flick` were cut (owner, Nov 8).
 - The gesture list comes from `GET {STAGE_URL}/gestures` at session start; if the stage is down, the built-in
   default list in `gestures.py` is used (same names as `fake_stage.py`).
 
@@ -369,8 +369,6 @@ estimates; the table is in [show.md](show.md)). Rehearsal how-to: [show.md](show
   speech handle) and `transcription_node` pins gestures and mouths to them. A replayed act skips `tts_node`, so
   `show.py` synthesizes under a stand-in speech handle, caches the marks next to the WAV (`<key>.json`) and hands
   them to the replayed speech. The cache key includes the palette's voice ids and the cast.
-- Founder points use `SPOT_*` chains in the config: the first gesture the stage knows wins (`point_back_left` and
-  co., built Nov 7 night; a stage without them falls back to `look_at_other`/`nod`).
 
 ## Gotchas
 - Install the hook after `session.start()`. The console's text/audio toggle resets the session outputs and drops

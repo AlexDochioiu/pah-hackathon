@@ -266,22 +266,6 @@ def library():
     add(s, "italian_exasperated", "Both hands pinched and pumping big, then thrown open to the sky and dropped: "
         "\"mamma mia!\", exasperated, fed up, giving up.", arms="both")
 
-    # round 3b: bigger, slower setups, then one crisp pop (the gripper springs open as fast as it can, ~0.3 s).
-    s = Seq().to(pose(j1=-0.04, j2=0.12, j3=0.36, p=-0.25, j6=0.15), 0.9).grips((0, 0.05), (0.4, 0.0))
-    t0 = s.t  # the pinch drawn to the lips, the head bowed over it: savour it...
-    s.wait(0.6).shake(t0, s.t, pose(j4=0.04, j6=0.04), 1.7, ramp=0.25)
-    s.to(pose(j1=0.1, j2=0.2, j3=0.42, p=0.45, j5=-0.1, j6=0.45), 0.5).hit(0.6)  # ... mwah! thrown up and out
-    s.grips((s.t - 0.4, 0.0), (s.t - 0.04, 1.0)).wait(0.7).to(np.zeros(6), 0.8).grips((s.t - 0.8, 1.0), (s.t, 0.05))
-    add(s, "chef_kiss", "The chef's kiss: the pinched fingertips drawn slowly to the lips, savoured, then thrown up "
-        "and out, bursting open: perfect!, delicious!, magnificent, a masterpiece.", sound="kiss")
-
-    haughty = pose(j1=0.1, j2=0.05, j3=0.15, p=0.3, j5=-0.35, j6=-0.15)  # nose in the air, the head turned aside
-    s = Seq().to(haughty, 0.9, hold=0.4).grips((0, 0.05), (0.4, 0.0))
-    s.kick(haughty + pose(j1=0.15, j3=0.05, j4=0.25, j5=-0.4, j6=0.5), 0.38).hit(0.3)  # flick: out and away
-    s.grips((s.t - 0.42, 0.0), (s.t - 0.06, 1.0)).wait(0.7).to(np.zeros(6), 0.9).grips((s.t - 0.9, 1.0), (s.t, 0.05))
-    add(s, "flick", "A dismissive flick: nose in the air, the head turned away, then the hand flicks out and away, "
-        "fingers springing open: bah!, whatever, go away, never mind.", sound="whoosh")
-
     # ---- face acting (round 3, step B): eyes (the wrist camera) lead, anticipation, the action, a held beat; the
     # gripper mouth plays the emotion. CLOSED/OPEN are mouth.py's shut and wide values.
     C, O = 0.05, 0.8
@@ -438,113 +422,6 @@ def library():
     add(s, "throw", "Wind back and up, then fling forward, letting go at the top: throw, toss, hurl, fling, "
         "cast a spell.", sound="whoosh")
 
-    # ---- mime (round 3b, Marceau-style): an invisible object shows through hard stops at constant contact points.
-    # s.fall() runs into a pose and stops dead (the hardest stop the acceleration limits allow); quintic moves are
-    # for the free motion between contacts. The open gripper is the flat palm.
-    W = pose(j2=0.16, j3=0.22, p=0.0)  # the palm flat on a wall in front
-    s = Seq().to(W + pose(j2=-0.05), 0.6).fall(W, 0.3).wait(0.3)  # reach, touch: stop dead
-    s.to(W + pose(j1=0.18, j5=-0.18), 0.9).wait(0.2)  # slide along it, the palm stays flat
-    s.to(W + pose(j1=-0.1, j5=0.1), 1.1)
-    s.fall(W + pose(j1=-0.14, j2=0.06, j5=0.14), 0.25).wait(0.15)  # ... the wall ends: it slips past the edge
-    s.to(W + pose(j1=-0.1, j2=-0.04, j3=0.06, p=0.25, j5=0.2), 0.35, hold=0.4).to(np.zeros(6), 0.7)  # look: huh
-    s.grips((0, C), (0.5, 1.0), (s.t - 1.3, 1.0), (s.t - 1.1, O), (s.t - 0.2, C))
-    add(s, "invisible_wall", "Mime: the flat hand meets an invisible wall and stops dead, slides along it, then slips "
-        "past its edge: a wall, a window, a barrier, stuck, feel the way.")
-
-    s = Seq().to(W + pose(j2=-0.04), 0.5).fall(W, 0.3).wait(0.15)  # the front wall
-    side = W + pose(j1=0.16, j5=-0.4)
-    s.to(side + pose(j2=-0.04), 0.55).fall(side, 0.3).wait(0.15)  # the side
-    top = pose(j2=0.05, j3=0.38, p=0.75)
-    s.to(top + pose(j3=-0.05), 0.6).fall(top, 0.32).wait(0.15)  # the ceiling: all closed in
-    t0 = s.t
-    s.to(pose(j2=0.04, j3=0.2, p=0.3), 0.4).wait(1.0)  # panic: patting all around, mouth flapping
-    s.shake(t0 + 0.4, s.t, pose(j1=0.06, j5=0.2, j6=0.15), 2.5, ramp=0.4).to(np.zeros(6), 0.8)
-    s.grips((0, C), (0.4, 1.0), (t0, 1.0), *flap(t0 + 0.2, t0 + 1.4, 3.0, 0.2, 0.8), (s.t, C))
-    add(s, "trapped_in_box", "Mime: the flat hand finds a wall in front, then one at the side, then the ceiling, "
-        "each a dead stop; then panic, patting all around: trapped, stuck, locked in, a box, a cage.")
-
-    s = Seq()
-    for i in range(3):  # hand over hand, each rung higher: reach up open, grab (dead stop), pull down
-        rung = pose(j2=0.04 + 0.03 * i, j3=0.3 + 0.12 * i, p=0.35 + 0.12 * i, j1=0.05 * (-1) ** i)
-        s.to(rung + pose(j3=0.06, p=0.05), 0.45).fall(rung, 0.18).wait(0.12)
-        s.to(rung + pose(j3=-0.14, p=-0.05), 0.4)
-    s.wait(0.2).to(np.zeros(6), 0.8)
-    s.grips(*[(t, g) for i in range(3) for t, g in ((0.05 + 1.15 * i, 1.0), (0.6 + 1.15 * i, 0.0))], (s.t - 0.6, C))
-    add(s, "climb_ladder", "Mime: reach up, grab a rung (a dead stop), pull, and again, higher and higher: climb, "
-        "a ladder, a rope, a tree, go up.")
-
-    lean = pose(j2=0.18, j3=0.05, p=-0.35)  # leaning into the wind, head down
-    s = Seq().to(lean, 0.7)
-    t0 = s.t
-    for k in range(3):  # fight forward a little, a gust shoves it back
-        s.to(lean + pose(j2=0.05 * (k + 1), j3=0.02), 0.5).to(lean + pose(j2=0.05 * k - 0.04, p=0.1), 0.35)
-    s.wait(0.2).shake(t0, s.t, pose(j5=0.05, j6=0.08), 3.0, ramp=0.3).to(np.zeros(6), 0.8)
-    s.grips((0, C), (0.5, 0.25), (s.t - 0.8, 0.25), (s.t, C))
-    add(s, "against_the_wind", "Mime: lean hard into a storm and struggle forward, pushed back by every gust: wind, "
-        "a storm, walk against it, a blizzard, struggle.")
-
-    post = pose(j1=0.2, j2=0.06, j3=0.05, p=-0.1, j5=-0.25, j6=0.35)  # leaning on a post, head tilted, at ease
-    s = Seq().to(post + pose(j2=-0.03), 0.8).fall(post, 0.3).wait(1.2)
-    s.fall(post + pose(j1=0.12, j2=0.12, j3=-0.12, p=-0.3, j6=0.2), 0.52).hit()  # the post is gone: drop
-    s.to(pose(j2=0.0, j3=0.25, p=0.45), 0.5, hold=0.4).to(np.zeros(6), 0.8)  # catch itself, mouth open
-    s.grips((0, C), (s.t - 1.7, C), (s.t - 1.4, O), (s.t - 0.6, O), (s.t, C))
-    add(s, "lean_on_nothing", "Mime: lean casually on an invisible post, relaxed, then it gives way and it drops, "
-        "catching itself: lean, relax, slip, oops.", sound=None)
-
-    s = Seq().to(pose(j2=0.04, j3=0.22, p=0.3), 0.6)
-    t0 = s.t
-    s.wait(10 / 3).shake(t0, s.t, pose(j5=0.25, j1=0.04), 0.6, ramp=0.5)  # the eyes follow a three-ball cascade
-    s.shake(t0, s.t, pose(j4=0.12, j3=0.03), 1.2, ramp=0.5).to(np.zeros(6), 0.8)
-    s.grips((0, C), *[(t0 + 0.35 + i / 2.4 + d, g) for i in range(7) for d, g in ((0, C), (0.12, 0.6))], (s.t, C))
-    add(s, "juggle", "Mime: juggle three invisible balls, the head following them up and across, the hand "
-        "flicking each one: juggle, a circus, show off a trick.")
-
-    s = Seq().to(pose(j2=0.3, j3=-0.1, p=-0.5), 0.8, hold=0.15).grips((0, C), (0.4, O), (0.95, O), (1.25, C))
-    s.fall(pose(j2=0.27, j3=-0.06, p=-0.38), 0.3)  # pluck: a tug, dead stop
-    s.to(pose(j2=0.04, j3=0.2, p=0.25), 0.7)
-    t0 = s.t
-    s.wait(1.0).shake(t0, s.t, pose(j3=0.025, p=0.05), 2.0, ramp=0.4)  # sniff, sniff
-    s.to(pose(j2=0.03, j3=0.25, p=0.55, j6=0.35), 0.8, hold=0.6).to(np.zeros(6), 0.8)  # bliss
-    s.grips((t0 + 1.0, C), (t0 + 1.4, 0.3), (s.t - 0.8, 0.3), (s.t, C))
-    add(s, "smell_flower", "Mime: pluck a flower, sniff it, sniff again, and melt into a blissful head tilt: smell, "
-        "a flower, a perfume, love, spring.")
-
-    s = Seq().to(pose(j2=0.12, j3=0.1, p=-0.2), 0.5).to(pose(j2=0.06, j3=0.15, p=0.15), 0.4)  # a sip
-    s.wait(0.6)  # freeze...
-    t0 = s.t
-    s.fall(pose(j2=0.02, j3=0.23, p=0.4, j6=0.15), 0.4).hit().wait(0.8)  # ... SOUR: jerk back, pucker, shudder
-    s.shake(t0 + 0.4, s.t, pose(j5=0.06, j6=0.06), 6.0, ramp=0.2).to(np.zeros(6), 0.9)
-    s.grips((0, C), (0.3, 0.45), (0.65, 0.45), (0.95, C), (t0, C), (t0 + 0.2, 0.0), (s.t - 0.9, 0.0), (s.t, C))
-    add(s, "taste_sour", "Mime: take a sip, freeze, then jerk back, the mouth puckered shut, shuddering: sour, a "
-        "lemon, yuck, disgusting, bitter medicine.")
-
-    door = pose(j2=0.16, j3=0.16, p=-0.05)
-    off = pose(j2=-0.025, j4=-0.07)  # a knock is mostly the wrist: it may stop twice as hard as the elbow
-    s = Seq().to(door + off, 0.6)
-    for k in range(3):  # knock, knock, knock: each tap stops dead on the door
-        s.fall(door, 0.27).hit().to(door + off, 0.2)
-    s.to(door + off + pose(j6=0.3, p=0.1), 0.4, hold=0.6)  # listen...
-    s.fall(door + pose(j1=-0.04), 0.35).to(door + pose(j1=0.22, j2=-0.05, j5=-0.3), 0.9)  # the handle, swing it open
-    s.wait(0.3).to(np.zeros(6), 0.8)
-    s.grips((0, C), (s.t - 2.3, C), (s.t - 2.05, 0.6), (s.t - 1.8, 0.0), (s.t - 1.0, 0.0), (s.t - 0.75, C))
-    add(s, "knock", "Mime: knock-knock-knock on an invisible door, wait, listen, then grab the handle and pull it "
-        "open: knock, a door, open the door, visit, who's there?", sound=None)
-
-    s = Seq().to(pose(j2=0.02, j3=0.25, p=0.2), 0.6)
-    t0 = s.t
-    s.wait(3.0).shake(t0, s.t, pose(j1=0.05, j6=0.3), 0.66, ramp=1.0)  # balancing sways, arms out
-    s.fall(pose(j1=-0.1, j2=0.06, j3=0.2, p=0.05, j6=-0.45), 0.35)  # a slip...
-    s.to(pose(j2=0.02, j3=0.25, p=0.2), 0.6, hold=0.2).to(np.zeros(6), 0.7)  # ... and recovers
-    s.grips((0, 1.0), (s.t - 0.7, 1.0), (s.t, C))
-    add(s, "tightrope", "Mime: balance on a tightrope, swaying wider and wider, a slip, and it saves itself: "
-        "balance, a tightrope, wobble, careful steps, a circus.")
-
-    down = pose(j2=-0.05, j3=-0.38, p=0.0)  # sinks straight down, the head level
-    s = Seq().to(pose(p=0.05), 0.4).to(down, 1.6, hold=0.6).to(np.zeros(6), 1.4).wait(0.2)
-    s.grips((0, C))
-    add(s, "elevator", "Mime: sink straight down, head level, as if riding an elevator (or stairs) behind a counter, "
-        "then come back up: go down, an elevator, downstairs, sink, hide behind something.")
-
     # ---- stand-up comedy (round 3b): punchline reactions for a comedian or a double act; the laugh track is the
     # agent's. Nothing is held. (mic_drop was cut in round 3b.)
     s = Seq().to(pose(j2=0.12, j3=-0.12, p=-0.65, j5=-0.25), 0.45, hold=0.2)  # the head drops and turns away
@@ -635,37 +512,6 @@ def library():
 
     add(Seq().to(pose(j2=0.35, j3=0.05, p=0.0), 0.8, hold=1.2).to(np.zeros(6), 0.8),
         "point_at_audience", "Reach forward and point the prop at the audience.")
-
-    # Founder points (Nov 7 night; the show's SPOT_* config): the founders stand ~0.8 m behind the arms, faces ~0.75 m
-    # above the table, one behind each arm (back_left, back_right) and one between them (back_centre). The arm turns
-    # round (j1, then j5 for the rest of the way) and aims its head up at the face; the upper arm tips back over the
-    # base (j2-), which after a ~100 deg turn keeps the COM over the base (lean-back rule) instead of swinging it
-    # behind. The spots are a guess: retune the poses below.
-    # The right arm plays the mirror image, so "outward" (behind this arm's own shoulder) is one set of keys for both
-    # arms: point_back_left on the left arm = point_back_right on the right arm.
-    def point_back(at, win):
-        """Turn round to `at` and back. win = (j1 ends, the tip starts, the head turn starts) as fractions of the
-        turn time: staged so the COM never passes behind the base. The base turn (j1) leads; the tip back (j2-j4) and
-        the head's extra turn (j5, j6) come in late, once the arm's own back has swung sideways (the head's mass
-        swung round early is what tips it near 90 deg). Each joint's own quintic over its window."""
-        a1, b0, c0 = win
-        w = np.array([a1, 1 - b0, 1 - b0, 1 - b0, 1 - c0, 1 - c0]); d = np.abs(at)
-        T = max(np.max(1.875 * d / (0.9 * show.VMAX * w)), np.max(np.sqrt(5.78 * d / (0.9 * show.AMAX * w * w))))
-        ease = lambda x: np.array([quintic(x / a1), *[quintic((x - b0) / (1 - b0))] * 3,
-                                   *[quintic((x - c0) / (1 - c0))] * 2])
-        s = Seq().drop(at, ease, T).wait(0.2)
-        s.to(at + pose(j2=0.06, j3=0.06, j4=-0.12), 0.35).to(at, 0.35).wait(0.3)  # a little jab: "this one!"
-        return s.drop(np.zeros(6), lambda x: 1 - ease(1 - x), T)  # the same path back
-    # Poses: grid search for the fewest radians within 8 deg of the aim; windows: searched for the shortest turn
-    # (~2.8 s at 90 % of the limits) with the COM at x >= -0.3 cm all the way (limit -0.7).
-    outward = pose(j1=1.8, j2=-0.4, j3=0.2, j4=0.0, j5=-1.0)  # left arm: ~(-0.8, +0.25, 0.75) m, behind its shoulder
-    inward = pose(j1=-1.7, j2=-0.6, j3=0.0, j4=0.2, j5=1.0)   # ~(-0.8, -0.30, 0.75): behind, between the arms
-    for name, at, win, where in (
-            ("point_back_left", outward, (0.9, 0.25, 0.5), "the left arm: behind its left shoulder"),
-            ("point_back_right", outward, (0.9, 0.25, 0.5), "the right arm: behind its right shoulder"),
-            ("point_back_centre", inward, (0.85, 0.3, 0.5), "either arm: behind the middle, between the two arms")):
-        add(point_back(at, win), name, f"Turn right round and point the head up at someone standing behind ({where}), "
-            "a little jab, then back: introduce someone backstage, look behind you!, it's behind you, over there.")
 
     s = Seq().wait(2.4)
     s.shake(0, 2.4, pose(j4=0.06), 1.25)

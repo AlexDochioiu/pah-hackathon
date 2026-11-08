@@ -77,7 +77,7 @@ def parse_config(text: str) -> dict[str, str]:
 
 
 def resolve_chain(value: str, known: Callable[[str, str], bool] | None) -> str:
-    """`left:point_back_left | left:look_at_other` -> the first option the stage has, as a tag. Without a gesture
+    """`right:point_at_lars | right:double_take` -> the first option the stage has, as a tag. Without a gesture
     list (the page) the first one; if the stage has none of them, the last one (GestureSink maps it fuzzily)."""
     options = [o.strip() for o in value.split("|") if o.strip()]
     for opt in options:
@@ -176,7 +176,7 @@ class Script:
 
     @property
     def founders(self) -> list[str]:
-        return [self.config[k].partition("@")[0].strip() for k in sorted(self.config) if k.startswith("FOUNDER_")]
+        return [self.config[k].strip() for k in sorted(self.config) if k.startswith("FOUNDER_")]
 
     @property
     def built_with(self) -> list[dict[str, str]]:
@@ -212,7 +212,7 @@ class Script:
         for head, body in sections:
             if head.lower() == "config":
                 config.update(parse_config(body))
-        values, warnings = _values(config, book_knows(book) if book else None)
+        values, warnings = _values(config, book_knows(book) if book else None), []
         acts, live = [], ""
         for head, body in sections:
             if m := _ACT.match(head):
@@ -250,21 +250,9 @@ def _letters(text: str) -> int:
     return sum(c.isalnum() for c in text)
 
 
-def _values(config: dict[str, str], known: Callable[[str, str], bool] | None) -> tuple[dict[str, str], list[str]]:
-    """Placeholder -> text. Gesture chains become one tag; FOUNDER_n is the name, POINT_n the tag for their spot."""
-    values: dict[str, str] = {}
-    warnings: list[str] = []
-    for key, value in config.items():
-        values[key] = resolve_chain(value, known) if _CHAIN.match(value) else value
-        if key.startswith("FOUNDER_"):
-            name, _, spot = value.partition("@")
-            values[key] = name.strip()
-            n = key.removeprefix("FOUNDER_")
-            chain = config.get(f"SPOT_{spot.strip()}", "")
-            values[f"POINT_{n}"] = resolve_chain(chain, known) if chain else ""
-            if spot.strip() and not chain:
-                warnings.append(f"FOUNDER_{n}: no SPOT_{spot.strip()} in the config")
-    return values, warnings
+def _values(config: dict[str, str], known: Callable[[str, str], bool] | None) -> dict[str, str]:
+    """Placeholder -> text. Gesture chains become one tag."""
+    return {key: resolve_chain(value, known) if _CHAIN.match(value) else value for key, value in config.items()}
 
 
 def _fill(text: str, values: dict[str, str], config: dict[str, str], warnings: list[str]) -> str:

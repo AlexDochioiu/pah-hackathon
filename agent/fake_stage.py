@@ -13,18 +13,15 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 GESTURES = {
-    "against_the_wind": 4.2, "bang_table": 5.3, "beat_chest": 4.1, "bite": 3.2, "block": 4.5, "bow": 2.9,
-    "celebrate": 4.8, "chef_kiss": 4.2, "climb_ladder": 5.0, "cower": 3.8, "cry": 4.4, "die_dramatically": 3.0,
-    "dodge": 2.7, "double_take": 4.4, "present": 2.48, "drive": 5.3, "duck": 3.3, "eat": 4.5, "elevator": 4.2, "eye_roll": 4.8,
-    "facepalm": 4.4, "flick": 4.1, "gallop": 3.0, "grab": 2.5, "gripper_clap": 2.4, "hop": 4.7, "idle_breathe": 4.0,
-    "invisible_wall": 5.2, "italian": 5.9, "italian_exasperated": 6.0, "juggle": 4.7, "knee_slap": 5.9, "knock":
-    5.6, "laugh": 4.2, "laugh_hard": 5.7, "lean_on_nothing": 4.9, "lift_heavy": 4.6, "look_around": 3.8,
-    "look_at_other": 2.8, "nod": 2.5, "pick_lars": 15.6, "place_lars": 16.1, "point_at_audience": 2.8, "point_back_centre": 6.8,
-    "point_back_left": 6.8, "point_back_right": 6.8, "pounce":
+    "bang_table": 5.3, "beat_chest": 4.1, "bite": 3.2, "block": 4.5, "bow": 2.9,
+    "celebrate": 4.8, "cower": 3.8, "cry": 4.4, "die_dramatically": 3.0,
+    "dodge": 2.7, "double_take": 4.4, "present": 2.48, "drive": 5.3, "duck": 3.3, "eat": 4.5, "eye_roll": 4.8,
+    "facepalm": 4.4, "gallop": 3.0, "grab": 2.5, "gripper_clap": 2.4, "hop": 4.7, "idle_breathe": 4.0,
+    "italian": 5.9, "italian_exasperated": 6.0, "knee_slap": 5.9, "laugh": 4.2, "laugh_hard": 5.7, "lift_heavy": 4.6, "look_around": 3.8,
+    "look_at_other": 2.8, "nod": 2.5, "pick_lars": 15.6, "place_lars": 16.1, "point_at_audience": 2.8, "pounce":
     3.5, "pull": 3.2, "push": 3.4, "rest": 3.0, "revive": 5.5, "roar": 3.6, "shake_head": 2.9, "shoot": 3.4, "sigh":
-    4.4, "slash": 3.9, "slow_turn": 5.9, "smell_flower": 5.2, "sneak": 4.6, "sneeze": 3.5, "snore": 5.8, "stage":
-    3.0, "startle": 3.0, "stir_frantic": 3.6, "stir_lazy": 4.4, "stomp": 4.6, "ta_da": 4.1, "taste_sour": 3.6,
-    "throw": 2.9, "thrust": 3.0, "tightrope": 6.0, "trapped_in_box": 5.6, "tremble_excited": 3.1, "ufo_crash": 5.5,
+    4.4, "slash": 3.9, "slow_turn": 5.9, "sneak": 4.6, "sneeze": 3.5, "snore": 5.8, "stage":
+    3.0, "startle": 3.0, "stir_frantic": 3.6, "stir_lazy": 4.4, "stomp": 4.6, "ta_da": 4.1, "throw": 2.9, "thrust": 3.0, "tremble_excited": 3.1, "ufo_crash": 5.5,
     "ufo_fly": 5.9, "ufo_hover": 4.0, "ufo_land": 5.7, "wave": 4.7
 }
 DUETS = {
@@ -41,9 +38,8 @@ ENSEMBLES = {
 # name -> the stage's "sound" ({"name", "at"}), copied from robot/gestures and robot/duets
 SOUNDS: dict[str, dict] = {
     "bang_table": {'name': 'bonk', 'at': [1.485, 4.122]}, "bite": {'name': 'chomp', 'at': [1.138, 1.947]},
-    "chef_kiss": {'name': 'kiss', 'at': 2.22}, "die_dramatically": {'name': 'body_fall', 'at': 1.528},
-    "double_take": {'name': None, 'at': 2.342}, "flick": {'name': 'whoosh', 'at': 1.55}, "knock":
-    {'name': None, 'at': [0.87, 1.34, 1.81]}, "lean_on_nothing": {'name': None, 'at': 2.82}, "roar": {'name':
+    "die_dramatically": {'name': 'body_fall', 'at': 1.528},
+    "double_take": {'name': None, 'at': 2.342}, "roar": {'name':
     'roar', 'at': 0.9}, "shoot": {'name': 'gunshot', 'at': 1.6}, "slash": {'name': 'sword_swing', 'at': 1.95},
     "stomp": {'name': None, 'at': [1.554, 3.738]}, "ta_da": {'name': 'tada', 'at': 1.992}, "throw": {'name':
     'whoosh', 'at': 1.317}, "ufo_crash": {'name': 'crash', 'at': 4.9}, "chomp": {'name': 'chomp', 'at': [2.7, 4.01,

@@ -227,3 +227,9 @@
   brush (N mm into the table)" instead of "-3 mm above the table (needs -3)". `/talk`, a duet or a toy duet while
   the right arm holds Lars say "only place_lars puts Lars back" (not "POST /props off", which never releases him).
   `check_gestures.py` asserts both wordings.
+- Nov 8: owner's round-4 answers applied. Q12: the founders are named, not pointed at ("we'll wave ourselves"):
+  `point_back_left/centre/right`, the `FOUNDER_n = Name @ spot` suffixes, the `SPOT_*` chains and the `POINT_n`
+  code are gone; act 2's last nod is both arms' again. Q8/Q10: the 11 mime solos, `chef_kiss` and `flick` cut
+  (JSONs, `make_gestures.py`, previews, synonyms, fake stage, kb); Q9 keeps the 3 mime duets. Act 1's "We'll take
+  it from here." nods (was the flick). check_gestures passes: 62 gestures, 14 unsafe pairs; test_show passes
+  (acts 0-3 116.7 s, act 4 8.1 s, act 5 19.6 s). Q13 approved the Dream-1 miss reaction (facepalm).

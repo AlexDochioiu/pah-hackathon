@@ -35,9 +35,9 @@ MINI = """# test show
 ```ini
 SHOW_NAME = Test Show     # a comment
 HOST_NAME = Kermit
-FOUNDER_1 = Ann @ back_left
-FOUNDER_2 = Bo @ nowhere
-SPOT_back_left = left:point_back_left | left:look_at_other
+FOUNDER_1 = Ann
+FOUNDER_2 = Bo
+GREET = left:moonwalk | left:look_at_other
 PICK = off
 BUILT_WITH_ACT = 2
 BUILT_2 = Thing Two: does two
@@ -50,7 +50,7 @@ Hi, so, it's like a robot?
 
 ## Act 1: One
 [face:audience]
-Stop. [left:shake_head] Hello there everyone, I am {HOST_NAME} of {SHOW_NAME}, nice to meet you all today. Meet {FOUNDER_1}! {POINT_1} [right:wave]
+Stop. [left:shake_head] Hello there everyone, I am {HOST_NAME} of {SHOW_NAME}, nice to meet you all today. Meet {FOUNDER_1}! {GREET} [right:wave]
 {?PICK} This line is only there when PICK is on.
 
 ## Act 2: Two
@@ -80,18 +80,18 @@ def test_parse_acts_config_and_names():
     assert s.act(0).note == "a note for the presenters" and "<!--" not in s.act(0).text
     one = s.act(1).text
     assert "I am Kermit of Test Show" in one and "Meet Ann!" in one
-    assert "[left:point_back_left]" in one  # no gesture list (the page): the first option
+    assert "[left:moonwalk]" in one  # no gesture list (the page): the first option
     assert "only there when PICK" not in one  # {?PICK} with PICK = off
     assert s.live_context == "You are Kermit on stage."
     assert s.act(3).text == "Who wants a story?"
-    assert any("MYSTERY" in w for w in s.warnings) and any("SPOT_nowhere" in w for w in s.warnings)
+    assert any("MYSTERY" in w for w in s.warnings)
 
 
-def test_point_falls_back_when_the_stage_lacks_the_gesture():
+def test_a_chain_falls_back_when_the_stage_lacks_the_gesture():
     book = GestureBook({"look_at_other": 2.8, "shake_head": 2.9})
     assert "[left:look_at_other]" in Script.parse(MINI, book).act(1).text
-    book = GestureBook({"point_back_left": 2.0, "look_at_other": 2.8})
-    assert "[left:point_back_left]" in Script.parse(MINI, book).act(1).text
+    book = GestureBook({"moonwalk": 2.0, "look_at_other": 2.8})
+    assert "[left:moonwalk]" in Script.parse(MINI, book).act(1).text
     assert resolve_chain("right:pick_lars | right:nod", lambda arm, name: False) == "[right:nod]"
     assert resolve_chain("duet:tip_hats", None) == "[duet:tip_hats]"
 
@@ -164,9 +164,8 @@ def test_show_md_is_complete_and_every_tag_exists_on_the_stage():
     # the takeover cuts in hard: the snap to the audience, then the first word at once
     assert s.act(1).split_lead()[0] == "[face:audience]"
     assert "[both:present]" in s.act(1).text  # the stage hands are lifted as they're introduced
-    # the founder points are real gestures now (Nov 7 night); Lars's point still falls back
-    for tag in ("[left:point_back_left]", "[right:point_back_centre]", "[right:point_back_right]"):
-        assert tag in s.act(2).text, tag
+    # owner, Nov 8: the founders are named, not pointed at (they wave themselves); Lars's point still falls back
+    assert "point_back" not in SHOW_MD.read_text() and "@" not in "".join(s.config[f"FOUNDER_{n}"] for n in "123")
     assert "[right:double_take]" in s.act(1).text
     assert sum("table" in a.spoken for a in s.acts) == 1  # one table gag, not three
     # the budget (owner, Nov 7; ~5 minutes with the demo): acts 0-3 <= 2:00, the demo intro <= 10 s, the finale <= 20 s

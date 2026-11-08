@@ -25,13 +25,10 @@ How to write it:
 ```ini
 SHOW_NAME = Stage Hands             # the project
 HOST_NAME = Lars                    # the host: Lars, the green plush frog on the table (prompt.md uses it too)
-FOUNDER_1 = Alex @ back_left        # name @ the spot they stand on
-FOUNDER_2 = Michael @ back_centre
-FOUNDER_3 = Darius @ back_right
-# Each spot as the gesture that points at it. Options after "|" are fallbacks, used while the stage lacks the first.
-SPOT_back_left = left:point_back_left | left:look_at_other
-SPOT_back_centre = right:point_back_centre | right:nod
-SPOT_back_right = right:point_back_right | right:look_at_other
+FOUNDER_1 = Alex                    # named in act 2; no point (owner, Nov 8: the founders wave themselves)
+FOUNDER_2 = Michael
+FOUNDER_3 = Darius
+# A gesture option chain: the first the stage has wins; options after "|" are fallbacks for an older stage.
 LARS_POINT = right:point_at_lars | right:double_take        # "Down here.": an arm points at Lars on the table
 # The finale's threat: the left arm creeps to the e-stop and hovers ~5 cm above it, then pulls back. Never a press.
 PANIC_REACH = left:panic_reach | left:slow_turn
@@ -71,7 +68,7 @@ It's kind of hard to expl—
 [face:audience]
 Stop. Stop, stop, stop. [both:shake_head]
 Thirty hours awake, and the pitch is: it's like... a robot? [right:facepalm]
-We'll take it from here. [left:flick]
+We'll take it from here. [left:nod]
 Good evening, humans! I'm {HOST_NAME}. Down here. {LARS_POINT} Yes. The frog.
 {?LARS_PICK}{?!DREAM_PICK} A little higher, please. {LARS_PICK_UP} Higher. Higher! Thank you. Hello, back row! I can see all your laptops from up here. Okay, down again, I get dizzy. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know. A tiny bit to the left. Perfect.
 {?DREAM_PICK} Tonight, a world first: Dream-1 picks me up, live. No rehearsal. [dream:pick_lars] Hello, back row! I can see all your laptops from up here. Okay, down again. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know.
@@ -80,11 +77,11 @@ Stage hands. Because they're hands. That joke cost forty dollars in API credits.
 Please welcome... [sfx:tada] {SHOW_NAME}! [both:ta_da] [sfx:applause] [music:funny]
 
 ## Act 2: The founders
-<!-- The founders stand behind the arms. Each name gets a point: the arm turns round (~2.8 s) and points its head at them. -->
+<!-- The founders stand behind the arms and wave when their name comes up. -->
 [face:audience]
-First, {FOUNDER_1}! {POINT_1} Hasn't blinked since Friday. We checked: we have cameras. [right:double_take]
-{FOUNDER_2}! {POINT_2} Keeps telling these two to act natural. They are two arms, bolted to a table, with no legal rights. [left:slow_turn]
-And {FOUNDER_3}! {POINT_3} Calls them the kids. Kids working thirty hours unpaid: that's not parenting, that's a startup. [left:nod]
+First, {FOUNDER_1}! Hasn't blinked since Friday. We checked: we have cameras. [right:double_take]
+{FOUNDER_2}! Keeps telling these two to act natural. They are two arms, bolted to a table, with no legal rights. [left:slow_turn]
+And {FOUNDER_3}! Calls them the kids. Kids working thirty hours unpaid: that's not parenting, that's a startup. [both:nod]
 On day one, the table tipped over. With them on it. [both:cower] Nobody filed a report. [left:shake_head]
 Give it up for {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}! [ensemble:clap] [sfx:applause]
 

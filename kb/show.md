@@ -63,9 +63,8 @@ works on the real arms.
   gestures. Gesture tags go at the end of the sentence they act out, sound tags exactly where they play.
 - `<!-- … -->` comments are presenter notes on the page, never spoken.
 - Config block: `SHOW_NAME`, `HOST_NAME` (also used by `prompt.md`), `BUILT_WITH_ACT` and `BUILT_n = tool: how`
-  (the card), `FOUNDER_n = Name @ spot`, and per spot the
-  gesture that points at it (`SPOT_back_left = left:point_back_left | left:look_at_other`: the first gesture the
-  stage knows wins; the `point_back_*` gestures exist since Nov 7 night, the fallbacks are for an old stage).
+  (the card), `FOUNDER_n = Name` (named in act 2, never pointed at: owner, Nov 8, the founders wave themselves),
+  and gesture chains (`LARS_POINT = right:point_at_lars | right:double_take`: the first gesture the stage knows wins).
 - `LARS_PICK = on` keeps the line "A little higher, please…" where the right arm lifts Lars from the dock
   (`[pick:lars]`, then `[place:lars]`; a stage without the baked `pick_lars` gets a point instead). The line is
   spaced for the speed-1 bake (pick 4.7 s, place 4.8 s since the face-down bake, no other right-arm tag meanwhile); a slower bake needs
@@ -83,7 +82,5 @@ works on the real arms.
 ## Gotchas
 - STOP during a duet: the stage finishes the duet at half speed before the arms rest (it refuses everything but
   `/freeze` mid-duet).
-- The founder points (`point_back_*`, Nov 7 night) turn the arm round for ~2.8 s each way (6.8 s in all): a
-  tag on the same arm within ~3 s of a point cuts it mid-turn, so act 2 nods with the left arm only after Darius's point.
 - Before its ✓ an act still plays, but its voice starts ~1 s after the cue instead of at once.
 - `.env` must have the LiveKit keys; the page needs internet (LiveKit Cloud, jsDelivr).
