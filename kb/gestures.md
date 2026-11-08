@@ -302,7 +302,7 @@ held: keeping link3 15 cm apart needs the hands angled in, and then the props cr
 | `quick_draw`: Western standoff: guns low at the hips, fingers twitch... DRAW! The left is faster: BANG, its gun kicks up; the right, hit mid-draw, jerks back, drops its gun and slumps; the left raises its smoking barrel. Sound: gunshot at 3.64 s. | 7.7 | empty hands |
 | `straight_man`: The left does a silly bit, bouncing and wiggling with its mouth flapping; the right slowly turns to stare at it, deadpan; the left notices and freezes; the right turns back to the audience and the left droops. | 7.5 | empty hands |
 | `tip_hats`: Turn to each other; the left tips its hat, the right answers with a deeper tip. | 5.6 | empty hands |
-| `ufo_abduct`: The left flies the UFO in and hovers it over the right, pulsing and turning, its beam tilted at it; the right cowers, looks up, trembles, then its head rises slowly toward the saucer, mouth falling open, as if being beamed up, and drops back as the UFO zips off: abduction, beam me up, aliens. | 8.1 | left ufo, right empty |
+| `ufo_abduct`: The left flies the UFO in and hovers it over the right, pulsing and turning, its beam tilted at it; the right cowers, looks up, trembles, then its head rises slowly toward the saucer, mouth falling open, as if being beamed up, and drops back as the UFO zips off: abduction, beam me up, aliens. | 7.9 | left ufo, right empty |
 
 "≥ 20 cm" is the distance cap of the check (15 cm + 5). `poke` closes the right gripper on its prop first (grip 0).
 

@@ -140,3 +140,6 @@
   the arm frame, the old depth into the table); the offset's 1.1 cm x change needed fixes to cross_swords,
   place_hat, rub_hands and ufo_abduct. `stage.py`: a finished one-shot plan counts only its held pose against the
   other arm, so `/stance each_other`, `/stance audience`, `pick_lars` plays (refused only while the stance move runs).
+- Nov 7 ~20:00: ufo_abduct back under 8 s (7.9): the hover is 2.1 s (was 2.3), trembling 0.2 s less; the rise into
+  the beam keeps its 1.0 s and the saucer's bob its phase against it (a faster rise closed at 5.5–6.4 cm/s). Previews
+  re-rendered for every move the Round 3 table/offset changed (gifs, each_other(_props) gifs, sound mp4s).

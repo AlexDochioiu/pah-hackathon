@@ -1170,20 +1170,23 @@ def ufo_abduct(H=(0.3256, -0.30, 0.35), TILT=0.7, ZIP=(0.3, -0.3, 0.0, 0.5)):
     s.move(dH + pose(j1=0.25, j2=-0.1, j3=0.1, p=0.25), cower, T=1.0, mirror=False, frac=FAST)  # it comes in high
     s.move(dH, None, T=0.5, mirror=False)                                     # ...and drops into the hover
     w = glide(0.3)
-    T = 2.3
+    T = 2.1  # the hover (was 2.3; 2.1 keeps the duet under 8 s with the Round 3 offset)
 
     def ufo(u):  # pulsing (a 1.5 Hz bob) and slowly turning
-        t = u * T
+        t = u * T + 2.3 - T  # the bob in step with the rise (RISE) as in the 2.3 s hover
         return dH + np.sin(np.pi * u) ** 2 * pose(j2=0.012 * np.sin(2 * np.pi * 1.5 * t),
                                                      j3=0.03 * np.sin(2 * np.pi * 1.5 * t),
                                                      j6=0.4 * np.sin(2 * np.pi * 0.4 * t))
 
+    RISE, UP = T - 1.38, 1.035  # s: the rise into the beam starts here and takes this long (the 2.3 s hover's; a
+    # faster rise closes on the saucer at > 5 cm/s), so the shorter hover only trembles for less
+
     def victim(u):  # trembles, then rises into the beam
         t = u * T
-        shake = (1 - w(np.clip((u - 0.35) / 0.25, 0, 1))) * np.sin(np.pi * min(u / 0.2, 1) / 2) * \
+        shake = (1 - w(np.clip((t - RISE + 0.115) / 0.575, 0, 1))) * np.sin(np.pi * min(t / 0.46, 1) / 2) * \
             pose(p=0.03 * np.sin(2 * np.pi * 2.8 * t), j6=0.04 * np.sin(2 * np.pi * 2.5 * t + 1))
-        return cower + w(np.clip((u - 0.4) / 0.45, 0, 1)) * (beam - cower) + shake
-    s.grip("right", 1.0, 0.8, after=1.1)                                      # the mouth falls open
+        return cower + w(np.clip((t - RISE) / UP, 0, 1)) * (beam - cower) + shake
+    s.grip("right", 1.0, 0.8, after=RISE + 0.18)                              # the mouth falls open
     s.path(ufo, victim, T=T, warp=None)
     s.grip("right", 0.3, 0.4, after=0.2)                                      # (shut once the saucer is off)
     s.move(dH + pose(j1=ZIP[0], j2=ZIP[1], j3=ZIP[2], p=ZIP[3]), cower + pose(j3=-0.05, p=-0.3), T=0.4, mirror=False)
