@@ -65,18 +65,18 @@ EMPTY_GRIP = 0.07   # measured gripper (0 closed .. 1 open) below this while "ho
                     # stops the fingers at 0.09-0.3 (the real picks, Nov 7). ponytail: knob, check on the real arms
 REACTION = "facepalm"   # the arm's "ah, damn it" after a miss: an existing gesture (head into the hand, shaking)
 OOPS_SFX = "sad_trombone"   # agent/sounds/sfx/crowd, CC0
-OOPS_LINES = {"empty_grip": "Ah, frog-nabbit. It grabbed thin air.", "dropped": "And it dropped me. Typical.",
-              "not_lifted": "Close. Not lifted, but close.", "timeout": "Dream-1 ran out of time. So did my patience."}
+OOPS_LINES = {"empty_grip": "Ah, frog-nabbit. It grabbed thin air. Very magical.", "dropped": "And it dropped my wand. Typical.",
+              "not_lifted": "Close. The wand stays put. It's shy.", "timeout": "Dream-1 ran out of time. So did my patience."}
 PATTER = ["It's looking at me through three cameras. I've never felt so seen.",
           "No script, no rehearsal. Dream-1 is figuring this out right now.",
           "Robots think slowly when they're being careful. Like me before coffee.",
           "This is the part where a real roboticist would sweat.",
           "Still thinking. Big brain, small frog.",
           "Somewhere a GPU is very worried about me.",
-          "Gently, please. I'm a plush, not a stress ball.",
+          "Careful with that wand. It's a family heirloom. From a dollar store.",
           "If this goes wrong, it was the frog's fault. It's always the frog's fault.",
           "Any moment now. Any. Moment.",
-          "I've been picked up before. Never by a foundation model.",
+          "I've had many assistants. Never a foundation model.",
           "The back row can't see, but trust me, it's very dramatic.",
           "Fun fact: frogs can't be fired. I checked."]
 _lock, _said = threading.Lock(), [time.monotonic()]
@@ -289,6 +289,20 @@ STAGE_START = ('cd ~/physical-ai-hacks && setsid -f sh -c "exec .venv/bin/python
                '> ~/dial/stage_after_dreamcli.out 2>&1 < /dev/null"')
 
 
+def wave(stage, arm, c, secs=2.6):
+    """The owner (Nov 8): wave the wand 2-3 s before putting it back. Raw (unchecked) wiggle of the wrist (j4 +-0.25,
+    j6 +-0.4 rad, two cycles) around where the lift ended, the gripper kept where Dream-1 left it."""
+    import math
+    q0, g0 = c["q"][-1], c["g"][-1]
+    t = [round(0.05 * (i + 1), 3) for i in range(int(secs * 20))]
+    q = [[*q0[:3], q0[3] + 0.25 * math.sin(2 * math.pi * 2 * x / secs), q0[4], q0[5] + 0.4 * math.sin(2 * math.pi * 2 * x / secs)]
+         for x in t]
+    reason, r = play(stage, arm, "dream_wave", t, q, [g0] * len(t), 1.0, None, True)
+    out(event="info", wave=reason or "ok")
+    if not reason:
+        wait_done(stage, arm, "dream_wave", time.monotonic() + r["duration_s"] + 5)
+
+
 def cli(a, stage, s, end):
     """--cli (owner, Nov 8: raw dreamcli picks far better than our /trajectory path): stop the stage server (it folds
     the arms), run `dreamcli robot run` until --pick-s is up, Ctrl-C it (it homes the arms and switches them off),
@@ -378,14 +392,14 @@ def run(a, stage, s, end):
                     low = min(low, r.get("tip_mm", low))
                     if not held:
                         held = True
-                        say("Got me!")
+                        say("Got it!")
                 else:
                     held, low = False, float("inf")
                 lifted = held and r.get("tip_end_mm", 0) - low >= RISE_MM
             else:
                 if not held and r["props"][arm]:
                     held = True
-                    say("Got me!")
+                    say("Got it!")
                 lifted = held and r.get("tip_end_mm", 0) >= LIFT_MM
             asked = [False]
             other = s["arms"]["left" if arm == "right" else "right"]["joints"]
@@ -426,9 +440,9 @@ def run(a, stage, s, end):
     out(event="info", dream_reason=reason, played=len(played), held=held, lifted=lifted, missed=missed,
         latency_s=latency)
     if lifted and not reason and a.raw:  # nothing else can put him down from where Dream-1 lifted him: back the way it came
-        say("Up I go! That was all Dream-1's own idea. Hello, back row! I can see all your laptops from up here.")
-        time.sleep(4)
-        say("Okay, down again. Gently. Gently! Frogs bruise, you know.")
+        say("Behold! The robot is now a wizard. I, sadly, am still a frog.")
+        wave(stage, arm, played[-1])  # 2-3 s of a wizard's flourish with the wand, then back the way it came
+        say("Thank you, Dream-1. Put it back gently.")
         for i, c in enumerate(reversed(played)):
             back, r = play(stage, arm, f"dream_back{i + 1}", c["t"], c["q"][::-1], c["g"][::-1], a.speed, None, a.raw)
             if back or wait_done(stage, arm, f"dream_back{i + 1}", time.monotonic() + r["duration_s"] + 5):
