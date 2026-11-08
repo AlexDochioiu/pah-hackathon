@@ -137,7 +137,7 @@ def _traj_check(ck, ck_props, arm, name, tk, Qk, Gk, span, shape, vcap, raw=Fals
                 f"(> {TRAJ_MAX_S:.0f} s): too much motion for one trajectory")
     if raw:
         tip, body = _lowest(ck, arm, Q)
-        return d, Q, G, [], tip, body, ck.swept.pop(show.key(name, arm), None)
+        return d, Q, G, [], tip, body, ck.scene.sweep(arm, Q)  # still needed: the other arm's gestures clear it
     floor = show.TABLE_FLOOR
     show.TABLE_FLOOR = TRAJ_TIP_FLOOR  # ponytail: module global swapped (the stage holds its lock; the worker is
     try:                               # single-threaded); a floor argument on check_side if that ever changes
