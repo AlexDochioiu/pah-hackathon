@@ -49,16 +49,45 @@
             font-size:40px; font-weight:800; color:var(--paper); cursor:pointer; }
   #banner.show { display:flex; }
   footer { font-size:15px; color:var(--ink-soft); display:flex; gap:18px; justify-content:space-between; }
+  a.chip { color:var(--ink); text-decoration:none; margin-left:auto; }
+  a.chip::before { display:none; }
+  /* show mode (/show): the act cue board */
+  #show { display:none; border:var(--line); border-radius:var(--r-lg); background:var(--paper); padding:16px 24px;
+          gap:8px 28px; grid-template-columns:auto 1fr auto; align-items:start; }
+  body.show-mode #show { display:grid; }
+  body.show-mode #transcript { font-size:20px; flex:0 1 160px; }
+  body.show-mode #talk { height:120px; font-size:40px; }
+  #act-num { font-size:120px; font-weight:800; line-height:1; grid-row:span 3; min-width:1.2ch; text-align:center;
+             background:var(--sunshine); border:var(--line); border-radius:var(--r-md); padding:6px 18px; }
+  #act-num.playing { background:var(--mint); }
+  #act-title { font-size:44px; font-weight:800; }
+  #act-state { font-size:22px; font-weight:600; color:var(--ink-soft); }
+  #act-note { font-size:20px; color:var(--ink-soft); font-style:italic; }
+  #prompter { grid-column:2 / 4; font-size:34px; line-height:1.3; background:var(--cream); border-radius:var(--r-md);
+              padding:10px 16px; }
+  #prompter b { font-size:20px; letter-spacing:.5px; color:var(--ink-soft); display:block; }
+  #acts { grid-row:1 / 3; grid-column:3; list-style:none; margin:0; padding:0; font-size:18px; line-height:1.6; }
+  #acts li.cur { font-weight:800; }
+  #keys { grid-column:1 / 4; font-size:17px; color:var(--ink-soft); }
 </style>
 </head>
 <body>
 <header>
-  <h1>Story Theatre</h1>
+  <h1 id="h-title">Story Theatre</h1>
   <span class="chip" id="c-server">server</span>
   <span class="chip" id="c-room">room</span>
   <span class="chip" id="c-agent">storyteller</span>
   <span class="chip" id="c-stage">stage</span>
+  <a class="chip" id="mode" href="/show">Show mode →</a>
 </header>
+<section id="show">
+  <div id="act-num">0</div>
+  <div><div id="act-title">…</div><div id="act-state"></div><div id="act-note"></div></div>
+  <ul id="acts"></ul>
+  <div id="prompter"></div>
+  <div id="keys">Next: → · PageDown · Space &nbsp;|&nbsp; Back: ← · PageUp &nbsp;|&nbsp; Jump: 1–9 (0: start over)
+    &nbsp;|&nbsp; STOP: Esc. The talk button works in the demo act.</div>
+</section>
 <div id="say">Starting…</div>
 <button id="talk" disabled>HOLD TO TALK<small>or hold the space bar</small></button>
 <button id="stop">■ STOP<small style="font-size:16px;font-weight:600"> &nbsp;arms freeze, then rest · Esc</small></button>
@@ -76,24 +105,65 @@ let room = null, agent = null, connecting = false, parked = false, stopped = fal
 let boot = null, pageHash = null, serverUp = false, joinedAt = 0;
 let holding = false, holdStart = 0, rpcChain = Promise.resolve();
 const segments = new Map();  // segment id -> <p>
+// show mode (/show): app.py keeps the act cursor; the worker plays an act on the RPC show_play
+const SHOW = location.pathname.replace(/\/+$/, "") === "/show";
+let script = null, current = 0, pendingCue = null;
+if (SHOW) { document.body.classList.add("show-mode"); $("mode").textContent = "← Story mode"; $("mode").href = "/"; }
 
 function chip(id, text, cls) { const el = $(id); el.textContent = text; el.className = "chip " + (cls || ""); }
 
 function agentState() { return agent ? (agent.attributes["lk.agent.state"] || "initializing") : null; }
+function showAttr(k) { return agent ? agent.attributes["show." + k] : undefined; }
+function actOf(n) { return script && script.acts.find((a) => a.act === n); }
+function liveNow() { const a = actOf(current); return !SHOW || (a && a.kind === "live" && showAttr("act") === String(current)); }
+
+function renderShow() {
+  if (!SHOW || !script) return;
+  const act = actOf(current), next = actOf(current + 1);
+  const playingHere = showAttr("act") === String(current);
+  const state = !agent ? "storyteller not connected" : !playingHere ? "cued" :
+    { ready: "ready: waiting for the first cue", playing: "playing", done: "done", live: "live: the audience talks to " + script.host_name }[showAttr("state")] || showAttr("state") || "getting ready";
+  const ms = showAttr("latency_ms");
+  $("act-num").textContent = current;
+  $("act-num").classList.toggle("playing", playingHere && showAttr("state") === "playing");
+  $("act-title").textContent = act ? act.title : "—";
+  $("act-state").textContent = state + (playingHere && ms ? ` · voice started ${(ms / 1000).toFixed(2)} s after the cue` : "");
+  $("act-note").textContent = act ? act.note : "";
+  const p = $("prompter");
+  p.innerHTML = "";
+  const line = (label, text) => { const b = document.createElement("b"); b.textContent = label; p.append(b, document.createTextNode(text)); };
+  if (act && act.kind === "human") line("YOU SAY", act.first_line);
+  if (next) line(`NEXT (→) · ACT ${next.act}: ${next.title.toUpperCase()}`, next.kind === "human" ? "(a person speaks)" : /^["“]/.test(next.first_line) ? next.first_line : "“" + next.first_line + "”");
+  else line("NEXT", "That's the end of the show. Esc folds the arms.");
+  let durations = {}; try { durations = JSON.parse(showAttr("durations") || "{}"); } catch (e) {}
+  const primed = (showAttr("primed") || "").split(",");
+  const ul = $("acts"); ul.innerHTML = "";
+  for (const a of script.acts) {
+    const li = document.createElement("li");
+    const secs = durations[a.act] ? `${durations[a.act]} s voice` : `≈ ${a.estimate_s} s`;
+    li.textContent = `${a.act} · ${a.title} · ${secs}${primed.includes(String(a.act)) ? " ✓" : ""}${a.kind === "live" ? " · live" : ""}`;
+    li.classList.toggle("cur", a.act === current);
+    ul.appendChild(li);
+  }
+  if (script.warnings.length) $("act-note").textContent += " ⚠ " + script.warnings.join("; ");
+}
 
 function render() {
   const ready = room !== null && agent !== null;
-  talk.disabled = !ready;
+  talk.disabled = !ready || !liveNow();
   talk.classList.toggle("held", holding);
   talk.firstChild.textContent = holding ? "LISTENING…" : "HOLD TO TALK";
-  talk.querySelector("small").textContent = holding ? "let go when you're done" : "or hold the space bar";
+  talk.querySelector("small").textContent = holding ? "let go when you're done" : SHOW ? (liveNow() ? "hold it while you talk" : "lights up in the demo act") : "or hold the space bar";
+  renderShow();
+  flushCue();
   const st = agentState();
   chip("c-agent", agent ? "storyteller: " + st : (room ? "storyteller: not here yet" : "storyteller"),
        agent ? "ok" : (room ? "wait" : ""));
   if (!serverUp) say.textContent = "Server restarting…";
-  else if (!room) say.textContent = parked ? (stopped ? "Stopped: arms going to rest. Click to start a new story." : "This story was closed. Click to start a new one.") : "Connecting…";
+  else if (!room) say.textContent = parked ? (stopped ? (SHOW ? "Stopped: arms going to rest. A cue key (or a click) carries on." : "Stopped: arms going to rest. Click to start a new story.") : "This story was closed. Click to start a new one.") : "Connecting…";
   else if (!agent) say.textContent = "Waiting for the storyteller…";
   else if (holding) say.textContent = "Listening to you…";
+  else if (SHOW && !liveNow() && st === "listening") say.textContent = "Waiting for the next cue";
   else say.textContent = { speaking: "Telling the story", thinking: "Thinking…", listening: "Hold the button and talk",
                            initializing: "Getting ready…" }[st] || st;
 }
@@ -108,7 +178,7 @@ function showSegment(id, who, text, final) {
   if (!p) {
     p = document.createElement("p");
     p.innerHTML = '<span class="who"></span><span class="text"></span>';
-    p.querySelector(".who").textContent = who === "you" ? "You:" : "Sparky:";
+    p.querySelector(".who").textContent = who === "you" ? "You:" : (script ? script.host_name : "Lars") + ":";
     if (who === "you") p.classList.add("you");
     segments.set(id, p);
     transcript.appendChild(p);
@@ -130,7 +200,7 @@ async function connect() {
   connecting = true;
   chip("c-room", "room: joining", "wait");
   try {
-    const t = await (await fetch("/token", { cache: "no-store" })).json();
+    const t = await (await fetch(SHOW ? "/token?mode=show" : "/token", { cache: "no-store" })).json();
     const r = new LK.Room({ audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     r.on(LK.RoomEvent.ParticipantConnected, findAgent)
      .on(LK.RoomEvent.ParticipantDisconnected, findAgent)
@@ -172,10 +242,10 @@ async function connect() {
   }
 }
 
-function rpc(method) {
+function rpc(method, payload) {
   const r = room, a = agent;
   if (!r || !a) return;
-  rpcChain = rpcChain.then(() => r.localParticipant.performRpc({ destinationIdentity: a.identity, method, payload: "" }))
+  rpcChain = rpcChain.then(() => r.localParticipant.performRpc({ destinationIdentity: a.identity, method, payload: payload || "" }))
     .catch((e) => { console.error(method, e); say.textContent = "Couldn't reach the storyteller (" + method + ")"; });
 }
 
@@ -198,8 +268,34 @@ talk.addEventListener("pointerdown", (e) => { talk.setPointerCapture(e.pointerId
 talk.addEventListener("pointerup", () => release(false));
 talk.addEventListener("pointercancel", () => release(true));
 talk.addEventListener("contextmenu", (e) => e.preventDefault());
-window.addEventListener("keydown", (e) => { if (e.code === "Space") { e.preventDefault(); if (!e.repeat) press(); } });
-window.addEventListener("keyup", (e) => { if (e.code === "Space") { e.preventDefault(); release(false); } });
+window.addEventListener("keydown", (e) => { if (e.code === "Space" && !SHOW) { e.preventDefault(); if (!e.repeat) press(); } });
+window.addEventListener("keyup", (e) => { if (e.code === "Space" && !SHOW) { e.preventDefault(); release(false); } });
+
+// show mode: presenter clickers send PageDown / PageUp / ArrowRight / Space; 0-9 jump; Esc stays STOP
+async function cue(cmd, act) {
+  release(true);
+  if (room) room.startAudio();
+  try {
+    const r = await (await fetch("/show/cue", { method: "POST", body: JSON.stringify({ cmd, act }) })).json();
+    current = r.current;
+    if (r.act !== null && r.act !== undefined && !r.sent) { pendingCue = r.act; flushCue(); }  // sent: app.py handed it over locally
+  } catch (e) { say.textContent = "Cue failed: server down?"; }
+  render();
+}
+function flushCue() {
+  if (pendingCue === null) return;
+  if (parked && serverUp && !room) { parked = false; stopped = false; }  // after STOP a cue starts a fresh room
+  if (!room || !agent || showAttr("state") === undefined) return;  // sent once the worker's show is up
+  const n = pendingCue; pendingCue = null;
+  document.querySelectorAll("audio").forEach((el) => { el.muted = false; });
+  rpc("show_play", JSON.stringify({ act: n }));
+}
+window.addEventListener("keydown", (e) => {
+  if (!SHOW || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (["PageDown", "ArrowRight", "ArrowDown"].includes(e.key) || e.code === "Space") { e.preventDefault(); cue("next"); }
+  else if (["PageUp", "ArrowLeft", "ArrowUp"].includes(e.key)) { e.preventDefault(); cue("prev"); }
+  else if (/^[0-9]$/.test(e.key)) { e.preventDefault(); cue("jump", Number(e.key)); }
+});
 window.addEventListener("blur", () => release(true));
 $("banner").addEventListener("click", () => room && room.startAudio());
 document.addEventListener("click", () => { if (parked && serverUp && !room) { parked = false; stopped = false; render(); } });
@@ -233,6 +329,11 @@ async function poll() {
       if (room) { const r = room; room = null; agent = null; await r.disconnect(); }
     }
     boot = s.boot; pageHash = s.page;
+    try {
+      script = await (await fetch("/show/script", { cache: "no-store" })).json();
+      if (!script.acts) script = null;
+      else if (SHOW) { $("h-title").textContent = script.show_name; document.title = script.show_name + " · show"; current = script.current; }  // app.py owns the cursor
+    } catch (e) { script = null; }
     if (room && !agent && Date.now() - joinedAt > 20000) {  // dispatch got lost: start over in a fresh room
       const r = room; room = null; await r.disconnect();
     }

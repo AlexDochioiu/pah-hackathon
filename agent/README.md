@@ -32,6 +32,8 @@ whether the stage at `STAGE_URL` answers, and the git hash in the footer. To res
 own. With the fake stage on another port: `python3 fake_stage.py --port 8771` and
 `STAGE_URL=http://127.0.0.1:8771 uv run app.py` (the environment wins over `.env`). `APP_PORT` changes the port.
 Details: [../kb/storyteller.md](../kb/storyteller.md#story-theatre-hold-to-talk-page-for-the-loud-venue).
+The hackathon presentation (clicker-cued acts from `show.md`) is the same app at http://127.0.0.1:8790/show:
+[../kb/show.md](../kb/show.md).
 
 ## 3. Against the real stage
 The stage server (`robot/stage.py`, see [../kb/gestures.md](../kb/gestures.md)) listens on the station's

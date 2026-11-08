@@ -114,3 +114,6 @@
   taking turns (`agent/sounds/music/<mood>/`), 26 MB. New moods: mystery, chase, epic, romantic, fairytale,
   underwater, medieval, pirate, western; lounge is now real jazz/bossa instead of the 8-bit loop. Adds `kiss`,
   `frog`, `laugh_big` guidance, and a timing test that no longer depends on wall-clock time.
+- 2026-11-07 18:00: show mode: `/show` runs the presentation as clicker-cued acts from `agent/show.md` through the
+  LLM's own pipeline (gestures, sounds, voices), voices pre-synthesized so act 1 cuts in ~0.3 s after the cue. The
+  host is now Lars the frog (`HOST_NAME`), the show is "Stage Hands". See [show.md](show.md).

@@ -1,6 +1,7 @@
 # Storyteller voice agent
 
-`agent/` is a LiveKit Agents (Python, `livekit-agents~=1.8`, locked at 1.8.11) voice agent, "Sparky". It asks the
+`agent/` is a LiveKit Agents (Python, `livekit-agents~=1.8`, locked at 1.8.11) voice agent; its host is Lars, the green plush frog
+on the table (`HOST_NAME` in `agent/show.md`). It asks the
 listener what story they want, improvises it scene by scene, and cues the two arms as puppet actors through the
 stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](../agent/README.md).
 
@@ -8,12 +9,13 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 | File | What |
 |---|---|
 | `agent/storyteller.py` | Entrypoint (`uv run storyteller.py console\|dev`). Model choices and timings at the top. |
-| `agent/prompt.md` | The system prompt. `{{GESTURES}}` is replaced at startup with the stage's gesture list, `{{SFX}}`/`{{MUSIC}}` with the sound library. |
+| `agent/prompt.md` | The system prompt. `{{GESTURES}}` is replaced at startup with the stage's gesture list, `{{SFX}}`/`{{MUSIC}}` with the sound library, `{{HOST_NAME}}` from `show.md`. |
 | `agent/gestures.py` | Tag parser, gesture-name mapping, stage HTTP client, the speech-synced gesture hook. |
 | `agent/sounds.py`, `agent/sounds/` | Sound effects and mood music: the library (CC0, `sounds/LICENSES.md`) and its player. |
 | `agent/voices.py` | Character voices: the voice palette, the voice-run splitter, parallel synthesis, run timing. |
 | `agent/director.py` | Freeze when the listener talks, idle when the stage is quiet, auto-continue to the next scene. |
 | `agent/app.py`, `agent/web/index.html` | Story Theatre: hold-to-talk web page plus the PTT worker it runs. |
+| `agent/show.py`, `agent/show.md` | Show mode: the clicker-cued presentation and its script. |
 | `agent/fake_stage.py` | Stdlib stand-in for `robot/stage.py`, same API, prints what the arms would do. |
 | `agent/telephony/dispatch-rule.json` | SIP dispatch rule for a phone number (not applied yet). |
 
@@ -145,7 +147,7 @@ quote, the span its mouth flaps for) by that character's own voice. A quote with
   names in `ABOUT`/`MUSIC_ABOUT` in `sounds.py`, add common other words to `SFX_SYNONYMS`/`MUSIC_SYNONYMS`).
   Tag names (sfx files, mood folders) must be letters and underscores (no digits: the tag parser rejects them).
 - Volumes (env overrides): `SFX_VOLUME` 0.8; music `MUSIC_VOLUME` 0.35 when nobody talks, ducked to
-  `MUSIC_DUCKED` 0.15 while Sparky (`agent_state_changed` speaking) or the listener (`user_state_changed`) speaks.
+  `MUSIC_DUCKED` 0.15 while Lars (`agent_state_changed` speaking) or the listener (`user_state_changed`) speaks.
   The music source is our own looping frame generator that glides its gain (down in 0.25 s, up in 1.2 s); a new
   `[music:x]` fades the old track out and the new one in over 1.5 s. Offline mix check: music about -34 dBFS RMS
   between lines, -41 dBFS ducked, an explosion about -17 dBFS.
@@ -195,6 +197,37 @@ works). The talk button (or the space bar) is the only way in: the mic is ignore
   transcript until `transcript_timeout`, then uses what it has. At 10 s that made replies start 13 s after release;
   at 2.5 s they start ~3.5 s after.
 - The page loads `livekit-client` 2.23.0 from jsDelivr (the venue needs internet for LiveKit anyway).
+
+## Show mode (the hackathon presentation)
+Clicker-cued acts: the arms cut in on a founder, introduce Lars, the founders and the project, then hand over to
+the live story mode. Rehearsal how-to: [show.md](show.md). Script: `agent/show.md` (format in its header).
+- `http://127.0.0.1:8790/show` (same `app.py`): `/token?mode=show` dispatches the worker with metadata
+  `{"mode":"show"}`; `storyteller.py` then skips the greeting, appends the script's "Live context" to the prompt
+  and starts `show.ShowRunner`. The normal page at `/` is unchanged.
+- Cue flow: the page POSTs `/show/cue {cmd: next|prev|jump}`; `app.py` keeps the act cursor and forwards the act to
+  the worker on `127.0.0.1:8792/play` (`SHOW_CUE_PORT`; 409 for another room). If that fails the page calls the
+  agent's `show_play` RPC instead (about 250 ms slower, through the SFU). The worker publishes `show.act`,
+  `show.state` (playing, done, live, ready), `show.primed` and `show.latency_ms` as participant attributes.
+- Playback uses the LLM's own pipeline: `session.say(text, add_to_chat_ctx=True)` with the speech-synced gesture
+  hook, sounds, talk tags (voices, mouths). A cue first cuts the current act (`director.cut()`: freeze, drop the
+  next scene; `session.interrupt(force=True)`). Tags before an act's first word fire at once; with a sound among
+  them the voice waits `LEAD_PAUSE_S` (0.3 s).
+- LLM guard: until the `(live)` act any reply the LLM starts (`speech_created` with source `generate_reply`) is
+  interrupted, so a stray turn can't talk over the script. The scripted lines land in the chat history, so the
+  live stories know what was said.
+- Pre-synthesis: at session start every act's speech goes through `tts_node` (the per-character voices included)
+  and is cached as WAV in `agent/.cache/show/` (key: text, TTS model and voice, the `tts_node` source, text
+  transforms, voices); act 1 first (~10 s), all acts ~40 s cold, instant warm. A cached act replays its frames through
+  `say(audio=…)`; before the cache is ready it streams from the TTS (~1 s first audio).
+- Measured (Nov 7, LiveKit Cloud, fake stage): cue → voice in the worker 310–320 ms on act 1 (the 0.3 s scratch
+  lead included), 12–60 ms on acts without a lead sound. Heard in a client: scratch 0.46–0.78 s and voice
+  0.75–1.0 s after the key press on the local path; 0.7–1.0 s / 1.1–1.3 s over the RPC fallback.
+- Per-character voices: `Storyteller.tts_node` records where each voice run starts (`voices.RunMarks`, keyed by the
+  speech handle) and `transcription_node` pins gestures and mouths to them. A replayed act skips `tts_node`, so
+  `show.py` synthesizes under a stand-in speech handle, caches the marks next to the WAV (`<key>.json`) and hands
+  them to the replayed speech. The cache key includes the palette's voice ids and the cast.
+- Founder points use `SPOT_*` chains in the config: the first gesture the stage knows wins, so the placeholders
+  (`point_back_left` and co., which don't exist yet) fall back to `look_at_other`/`nod` until they do.
 
 ## Gotchas
 - Install the hook after `session.start()`. The console's text/audio toggle resets the session outputs and drops

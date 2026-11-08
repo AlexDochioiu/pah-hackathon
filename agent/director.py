@@ -34,6 +34,10 @@ class Director:
         self.holding = True
         self._listener_cut_in()
 
+    def cut(self) -> None:
+        """A show cue (show.py): the arms freeze and a pending next scene is dropped, as when the listener talks."""
+        self._listener_cut_in()
+
     def release(self) -> None:
         self.holding = False
         self._reschedule()

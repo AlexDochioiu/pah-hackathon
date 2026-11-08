@@ -8,8 +8,8 @@ Status: 🔨 being built · 👀 waiting for owner review · ⏸ waiting for som
 ## Show (must work in the demo)
 | What | Status | Notes |
 |---|---|---|
-| Presentation: robots interrupt the founder, introduce the founders, pitch, live demo, finale | 👀 | Draft script and 7 questions on the review page (names, cues, slot length, where you stand, name). Then: a show mode with clicker-cued acts |
-| Point at where the founders stand | 🔨 next | Fixed spots first (from the review answer); wrist-camera person finding later |
+| Presentation: robots interrupt the founder, introduce the founders, pitch, live demo, finale | 👀 | Show mode built: `/show`, clicker-cued acts in `agent/show.md`, rehearsal how-to in [show.md](show.md). Next: a rehearsal on the real arms, then tune lines and timings |
+| Point at where the founders stand | 🔨 next | Gestures `point_back_left/centre/right` (the show script falls back to look/nod until they exist); wrist-camera person finding later |
 | Character voices: narrator + a distinct voice per arm, casting palette | 👀 | Built (`agent/voices.py`, `[voice:left=NAME]`); samples of the 6 voices, a scene and 3 Lars host voices in `/tmp/pah-voices/` for the review page; not yet heard in a live session |
 | Sound effects + background music, played on the laptop through the web page | 👀 | Built: `[sfx:x]`, `[music:x]`, 76 CC0 sfx in 7 groups + 37 CC0 tracks in 18 moods (they take turns) in `agent/sounds/`; samples for the owner to listen to; not yet heard in a live session |
 | Comedy mode: double act, laugh track / rimshot / crickets after punchlines | 🔨 | Sounds + prompt "Comedy show" done; comedy gestures with the gesture work |
@@ -38,5 +38,6 @@ Status: 🔨 being built · 👀 waiting for owner review · ⏸ waiting for som
 - Dream-1 fine-tune on Lars demos: not needed with the dock/live pick ([dream-1.md](dream-1.md) has the recipe).
 
 ## Done (recent)
+- Show mode: `/show` page, cued acts with pre-synthesized voices, Lars as host.
 - Round 3a verdicts: all 5 hand ensembles kept, facing 67° (beba237).
 - Props explicit, deep facing, hand ensembles (e1b95eb). STOP button (af1d40d). Web hold-to-talk app (af8e2ab).

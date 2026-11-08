@@ -1,6 +1,6 @@
 """Story Theatre: a hold-to-talk web page for the storyteller, for rooms too loud for an always-on mic.
 
-    uv run app.py        # then open http://127.0.0.1:8790
+    uv run app.py        # then open http://127.0.0.1:8790 (story mode) or http://127.0.0.1:8790/show (show mode)
 
 Runs the storyteller worker in push-to-talk mode (PTT=1) as a subprocess, serves web/index.html, mints LiveKit
 tokens that dispatch that worker into a fresh room, and reports whether the stage server answers. Ctrl-C (or
@@ -29,6 +29,8 @@ import aiohttp
 from aiohttp import web
 from dotenv import load_dotenv
 from livekit import api
+
+from show import CUE_PORT, Cursor, Script
 
 HERE = Path(__file__).parent
 load_dotenv(HERE / ".env")  # override=False: anything already in the environment wins
@@ -179,13 +181,15 @@ class App:
         self.room: str | None = None
         self.http: aiohttp.ClientSession | None = None
         self.stage_cache: tuple[float, dict] = (0.0, {})
+        self.cursor = Cursor()  # show mode: the act the show is on; outlives rooms, STOP and page reloads
 
     async def index(self, _req: web.Request) -> web.Response:
         return web.Response(text=PAGE.read_text(), content_type="text/html", headers={"Cache-Control": "no-store"})
 
-    async def token(self, _req: web.Request) -> web.Response:
+    async def token(self, req: web.Request) -> web.Response:
         """A fresh room per page join, with the PTT worker dispatched into it. The previous room is closed, so
-        only one story drives the arms at a time."""
+        only one story drives the arms at a time. `?mode=show` (the /show page) starts the worker in show mode."""
+        metadata = json.dumps({"mode": "show"}) if req.query.get("mode") == "show" else ""
         self.rooms += 1
         old, self.room = self.room, f"story-{BOOT}-{self.rooms}"
         if old:
@@ -195,12 +199,53 @@ class App:
             .with_identity(f"listener-{uuid.uuid4().hex[:6]}")
             .with_name("Listener")
             .with_grants(api.VideoGrants(room_join=True, room=self.room))
-            .with_room_config(api.RoomConfiguration(agents=[api.RoomAgentDispatch(agent_name=AGENT_NAME)]))
+            .with_room_config(api.RoomConfiguration(agents=[api.RoomAgentDispatch(agent_name=AGENT_NAME, metadata=metadata)]))
             .to_jwt()
         )
-        log.info("page joined room %s", self.room)
+        log.info("page joined room %s%s", self.room, " (show)" if metadata else "")
         return web.json_response({"url": os.environ["LIVEKIT_URL"], "token": token, "room": self.room},
                                  headers={"Cache-Control": "no-store"})
+
+    async def show_script(self, _req: web.Request) -> web.Response:
+        """show.md, parsed per request (an edit shows on the next poll), plus the act the show is on."""
+        try:
+            script = Script.load()
+        except Exception as e:  # noqa: BLE001 - a broken script shows on the page
+            return web.json_response({"error": str(e)}, status=500)
+        return web.json_response({**script.to_json(), "current": self.cursor.act},
+                                 headers={"Cache-Control": "no-store"})
+
+    async def show_cue(self, req: web.Request) -> web.Response:
+        """A clicker cue from the /show page: {"cmd": "next"|"prev"|"jump", "act": n} -> the act to play now
+        (null: past the last act, nothing to do). The page then asks the worker to play it (RPC show_play)."""
+        body = await req.json()
+        last = Script.load().last
+        cmd = body.get("cmd")
+        if cmd == "next":
+            act = self.cursor.next(last)
+        elif cmd == "prev":
+            act = self.cursor.prev()
+        elif cmd == "jump":
+            act = self.cursor.jump(int(body.get("act", 0)), last)
+        else:
+            return web.json_response({"error": f"unknown cmd {cmd!r}"}, status=400)
+        sent = act is not None and await self.cue_worker(act)
+        log.info("show cue %s -> act %s%s", cmd, act, " (sent)" if sent else "")
+        return web.json_response({"act": act, "current": self.cursor.act, "sent": sent})
+
+    async def cue_worker(self, act: int) -> bool:
+        """Hand the cue to the show session on localhost (show.ShowRunner.serve_cues). False: the page sends it
+        as an RPC instead (no session yet, an old one on the port, or the page is rejoining after STOP)."""
+        if not self.room:
+            return False
+        if self.http is None:
+            self.http = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1.0))
+        try:
+            async with self.http.post(f"http://127.0.0.1:{CUE_PORT}/play", json={"act": act, "room": self.room},
+                                      timeout=aiohttp.ClientTimeout(total=0.4)) as resp:
+                return resp.status == 200
+        except Exception:  # noqa: BLE001 - not listening (yet)
+            return False
 
     async def delete_room(self, name: str) -> None:
         try:
@@ -281,8 +326,9 @@ async def main() -> None:
     worker = Worker()
     app = App(worker)
     web_app = web.Application()
-    web_app.add_routes([web.get("/", app.index), web.get("/token", app.token), web.get("/status", app.status),
-                            web.post("/stop", app.stop)])
+    web_app.add_routes([web.get("/", app.index), web.get("/show", app.index), web.get("/token", app.token),
+                        web.get("/status", app.status), web.post("/stop", app.stop),
+                        web.get("/show/script", app.show_script), web.post("/show/cue", app.show_cue)])
     runner = web.AppRunner(web_app, access_log=None)
     await runner.setup()
     try:

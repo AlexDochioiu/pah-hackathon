@@ -24,6 +24,7 @@ from livekit.plugins import noise_cancellation
 
 from director import Director, PushToTalk
 from gestures import DEFAULT_GESTURES, GestureBook, GestureSync, Stage, tags_first
+from show import Script, ShowRunner, is_show
 from sounds import SoundBook, Soundboard
 from voices import DEFAULT_CAST, NARRATOR_VOICE, PALETTE, RunMarks, describe_palette, stream_tts, timestamp_runs, voiced_tts
 
@@ -49,9 +50,11 @@ AGENT_NAME = os.getenv("AGENT_NAME", "storyteller")
 logger = logging.getLogger("storyteller")
 
 
-def build_instructions(book: GestureBook, sounds: SoundBook | None = None) -> str:
+def build_instructions(book: GestureBook, sounds: SoundBook | None = None, script: Script | None = None) -> str:
     sounds = sounds or SoundBook.load()
-    return ((HERE / "prompt.md").read_text().replace("{{GESTURES}}", book.describe())
+    script = script or Script.load(book=book)  # HOST_NAME lives in show.md's config, for both modes
+    return ((HERE / "prompt.md").read_text().replace("{{HOST_NAME}}", script.host_name)
+            .replace("{{GESTURES}}", book.describe())
             .replace("{{DUETS}}", book.describe_duets()).replace("{{ENSEMBLES}}", book.describe_duets(ensembles=True))
             .replace("{{SFX}}", sounds.describe_sfx()).replace("{{MUSIC}}", sounds.describe_music())
             .replace("{{VOICES}}", describe_palette())
@@ -119,6 +122,8 @@ async def entrypoint(ctx: JobContext) -> None:
     book = GestureBook(await stage.fetch_gestures() or DEFAULT_GESTURES, await stage.fetch_duets(),
                        await stage.fetch_duets("ensemble"), stage.about, stage.sides)
     logger.info("gestures: %s; duets: %s", ", ".join(book.names), book.describe_duets())
+    show = is_show(ctx.job.metadata)  # the page's /show route: scripted acts on cue (show.py)
+    script = Script.load(book=book)
 
     session = AgentSession(
         stt=inference.STT(model=STT_MODEL, language="en"),
@@ -154,8 +159,10 @@ async def entrypoint(ctx: JobContext) -> None:
 
     ctx.add_shutdown_callback(shutdown)
 
+    agent = Storyteller(instructions=build_instructions(book, sound_book, script)
+                        + (script.live_prompt() if show else ""), voices=voices)
     await session.start(
-        agent=Storyteller(instructions=build_instructions(book, sound_book), voices=voices),
+        agent=agent,
         room=ctx.room,
         room_options=room_io.RoomOptions(audio_input=room_io.AudioInputOptions(noise_cancellation=_noise_cancellation)),
     )
@@ -169,6 +176,15 @@ async def entrypoint(ctx: JobContext) -> None:
         logger.info("push-to-talk: listening only while the talk button is held")
 
     stage.face("audience")  # a new show starts facing the audience (and at the stage pose)
+    if show:  # act 0: silent until the first cue
+        cast = sorted((n, PALETTE[n].id) for n in voices), agent.cast  # what each line's voice is: the cache key
+        runner = ShowRunner(session, agent, script, stage, director, book, on_sound=board.cue,
+                            voice_key=f"{TTS_MODEL}/{TTS_VOICE}/{cast}", room_name=ctx.room.name)
+        runner.register(ctx.room.local_participant)
+        runner.start()
+        ctx.add_shutdown_callback(runner.aclose)
+        logger.info("show mode: %s, %d acts", script.show_name, len(script.acts))
+        return
     session.generate_reply(instructions="Greet the listener and ask: a story, or a comedy show?")
 
 
