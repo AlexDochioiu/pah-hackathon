@@ -35,7 +35,7 @@ load_dotenv(HERE / ".env")
 STT_MODEL = os.getenv("STT_MODEL", "assemblyai/universal-3-6-pro")
 LLM_MODEL = os.getenv("LLM_MODEL", "google/gemma-4-31b-it")  # LiveKit's latency-optimised voice default
 TTS_MODEL = os.getenv("TTS_MODEL", "fishaudio/s2.1-pro")  # expressive: emotion, pacing, laughs
-TTS_VOICE = os.getenv("TTS_VOICE", NARRATOR_VOICE)  # "Laura", a confident narrator
+TTS_VOICE = os.getenv("TTS_VOICE", NARRATOR_VOICE)  # Lars, the host
 CHARACTER_VOICES = os.getenv("CHARACTER_VOICES", "1") == "1"  # 0: the narrator reads every line (voices.py)
 EXPRESSIVE = os.getenv("EXPRESSIVE", "1") == "1"  # let the LLM steer the voice's emotion inline
 

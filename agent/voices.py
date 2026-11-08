@@ -26,7 +26,7 @@ from gestures import MAX_TAG_LEN, QUOTES_CLOSE, QUOTES_OPEN, parse_tag, talk_arm
 
 logger = logging.getLogger("storyteller.voices")
 
-NARRATOR_VOICE = "e3cd384158934cc9a01029cd7d278634"  # "Laura", a confident narrator (also storyteller.TTS_VOICE)
+NARRATOR_VOICE = "532f7f4adb32420fa4f5c95e9b13be9d"  # Lars the host: "frog", warm and enthusiastic (owner pick; Laura was e3cd3841...)
 
 
 @dataclass(frozen=True)
