@@ -1,26 +1,30 @@
 """Dream-1 picks up Lars, through our checker: ask Dream-1 (no motion), check, play slowly, else our own pick_lars.
 
-    python3 robot/dream_run.py --task "pick up the green frog"             # real: the stage at :8770, Dream on nuck9
-    python3 robot/dream_run.py --replay robot/lars/dream_chunks.json --stage http://127.0.0.1:8785   # kin, offline
+    python3 robot/dream_run.py                    # real: the stage at :8770 (tunnel), Dream-1 on nuck9
+    python3 robot/dream_run.py --replay robot/lars/dream_pick.json --stage http://127.0.0.1:8785   # kin, offline
 
-Laptop side, stdlib only. Per chunk (up to --chunks, default 3):
+Laptop side, stdlib only. Chunk after chunk, until Dream-1 has picked Lars up (--pick-s cap, --chunks cap):
 1. robot/dream_preview.py runs on the station over ssh (--serve): cameras and the Dream client open, the observation
    window fed at 5 Hz. "next" asks Dream-1 for one 48-row chunk (~1 s round trip, one billed call). Nothing moves.
-2. POST /trajectory plays that chunk's busier arm (the one --arm names, or the one that moves most in chunk 1).
-   The stage retimes it to <= 0.3 rad/s and the gripper to 1.0 per s (a full close takes about 1 s), checks it with
-   show.Checker (limits, table, the other arm) and refuses it with the reason, nothing moving.
-3. While it plays, the next chunk is fetched (about 1.5 s before the end, so its ~1 s round trip is hidden), with
+2. A chunk that barely moves (STILL: Dream-1 often idles a few chunks at rest before it reaches) is skipped, not
+   played, and the next one asked for. The first one that moves picks the arm (--arm, or the one that moves most).
+3. POST /trajectory plays it with carry=lars: the stage retimes it to <= 0.3 rad/s x --speed and the gripper to
+   1.0 per s (a full close takes about 1 s), checks it with show.Checker (limits, table: fingertips may brush it to
+   -3 mm, the other arm) and refuses it with the reason, nothing moving. A chunk that closes the gripper from open
+   makes the stage hold Lars (props): from then on it keeps the grip, gestures too, and /talk is refused.
+4. While it plays, the next chunk is fetched (about 1.5 s before the end, so its ~1 s round trip is hidden), with
    the seam where this chunk ends.
-It stops at a chunk that barely moves (STILL), the first refusal, a tracking error over TRACK_LIMIT, a stage fault, a Dream error or --timeout. Then
-the cameras are released (the stage's dock check needs the overhead camera), the arm goes back along the chunks it
-played, reversed (the same checks; it opens the gripper where it closed it, so Lars goes back down where he was;
-   a chunk that ends closed on him makes the stage hold him (--carry), and the reversed one that opens puts him down),
-and on a failure our own pick_lars and place_lars play instead (--no-fallback skips them).
+Done when the stage holds Lars and a chunk ends with the fingertips LIFT_MM above the table: no more Dream-1 calls,
+the arm stays where it is, holding him, and is the stage's again (gestures play with him in hand; place_lars puts
+him back). It stops early at a refusal, a tracking error over TRACK_LIMIT, a stage fault, a Dream error, --chunks or
+--pick-s. Then the cameras are released (the stage's dock check needs the overhead camera), the arm goes back along
+the chunks it played, reversed (the same checks; the reversed closing chunk opens the gripper, so Lars goes back
+down where he was), and our own pick_lars and place_lars play instead (--no-fallback skips them).
 
 Output: JSON lines on stdout, for agent/gestures.py ([dream:pick_lars]):
     {"event": "say", "text": "..."}      a line for the host, the "let me ask Dream-1... let's see" beat
     {"event": "info", ...}               what happened, for the log
-    {"event": "done", "ok", "dream_chunks", "fallback", "reason", "latency_s"}
+    {"event": "done", "ok", "held", "dream_chunks", "fallback", "reason", "latency_s"}
 """
 
 import argparse
@@ -39,7 +43,8 @@ TRACK_LIMIT = 0.2   # rad: stop Dream's run before the stage's own TRACK_STOP (0
 PREFETCH_S = 1.5    # s before a chunk ends that the next one is asked for (a get_action takes ~1 s)
 STILL = 0.15        # rad: a chunk whose arm moves less (and whose gripper changes < 0.3) is Dream-1 idling, not a
                     # move: seen on real frames Nov 7 (jitter of 0.02-0.06 rad at rest): our own pick instead
-MAX_CHUNKS = 6
+LIFT_MM = 40.0      # mm: the fingertips this high above the table at a chunk's end, holding Lars: he's picked up
+MAX_CHUNKS = 60
 ARMS = ("left", "right")
 
 
@@ -174,80 +179,98 @@ def wait_done(stage, arm, name, end, on_tick=None):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--task", default="pick up the green frog")
+    ap.add_argument("--task", default="pick up the green frog and hold it up")
     ap.add_argument("--stage", default="http://127.0.0.1:8770")
     ap.add_argument("--station", default="nuck9")
     ap.add_argument("--remote-dir", default="~/dream-ghost")
-    ap.add_argument("--head", choices=["joint", "eef"], default="joint")
+    ap.add_argument("--head", choices=["joint", "eef"], default="eef", help="eef: the head dreamcli's real picks used")
     ap.add_argument("--arm", choices=["auto", *ARMS], default="auto")
-    ap.add_argument("--chunks", type=int, default=3)
+    ap.add_argument("--chunks", type=int, default=30, help="Dream-1 calls at most (still ones included)")
+    ap.add_argument("--pick-s", type=float, default=60.0, help="s for Dream-1's part (asking and playing), the way "
+                    "back excluded; our 0.3 rad/s cap plays its chunks ~1.5-2.5x slower than dreamcli")
     ap.add_argument("--speed", type=float, default=1.0, help="x the stage's 0.3 rad/s cap (0.1..1)")
-    ap.add_argument("--timeout", type=float, default=150.0, help="s for Dream's part, the way back excluded")
     ap.add_argument("--replay", help="a JSON list of chunk events (dream_preview.py output) instead of the station")
     ap.add_argument("--fake", action="store_true", help="the station preview makes up a reach (no Dream call)")
     ap.add_argument("--no-fallback", action="store_true")
-    ap.add_argument("--carry", default="lars", help="the prop a chunk that ends closed holds (the stage then keeps "
-                    "the grip: no mouth, no gesture grip changes, until a chunk that ends open puts it down); '' for none")
+    ap.add_argument("--carry", default="lars", help="the prop a closing chunk makes the stage hold; '' for none")
     a = ap.parse_args()
     a.chunks = max(1, min(a.chunks, MAX_CHUNKS))
     stage, t0 = Stage(a.stage), time.monotonic()
-    end = t0 + a.timeout
+    end = t0 + a.pick_s
     s = stage.state()
     busy = [side for side in ARMS if s["arms"][side].get("playing")]
     if s.get("fault") or busy or any(s["props"].values()):
-        out(event="done", ok=False, dream_chunks=0, fallback=False,
+        out(event="done", ok=False, held=False, dream_chunks=0, fallback=False,
             reason=f"stage not ready: fault {s.get('fault')}, busy {busy}, props {s['props']}")
         return
     say("Let me ask Dream-1 how to pick me up.")
-    played, latency, reason, arm, pre, refused = [], [], None, None, None, False
+    played, latency, reason, arm, pre, refused, held, lifted = [], [], None, None, None, False, False, False
+    cmd = {side: s["arms"][side]["joints"] for side in ARMS}
     try:
         pre = Preview(a)
         pre.ready()
-        cmd = {side: s["arms"][side]["joints"] for side in ARMS}
         pre.ask(cmd)
-        ch = pre.chunk()
         for k in range(1, a.chunks + 1):
+            ch = pre.chunk()
             latency.append(ch.get("latency_s"))
-            if arm is None:
-                arm = a.arm if a.arm != "auto" else max(ARMS, key=lambda side: moves(ch, side))
-                out(event="info", arm=arm, moves={side: round(moves(ch, side), 3) for side in ARMS})
-            name = f"dream{k}"
-            c = {"t": ch["t"], **ch[arm]}
-            if moves(ch, arm) < STILL and max(c["g"]) - min(c["g"]) < 0.3:
-                reason = f"Dream-1 stays put (chunk {k}: the {arm} arm moves {moves(ch, arm):.2f} rad)"
+            if time.monotonic() > end:
+                reason = f"no pick within {a.pick_s:.0f} s"
                 break
-            if k == 1:
+            side = arm or (a.arm if a.arm != "auto" else max(ARMS, key=lambda x: moves(ch, x)))
+            c = {"t": ch["t"], **ch[side]}
+            if moves(ch, side) < STILL and max(c["g"]) - min(c["g"]) < 0.3:
+                out(event="info", chunk=k, still=round(moves(ch, side), 3))
+                if k < a.chunks:
+                    pre.ask(cmd)  # Dream-1 idles: ask again from where the arms are
+                continue
+            if arm is None:
+                arm = side
+                out(event="info", arm=arm, moves={x: round(moves(ch, x), 3) for x in ARMS})
                 say(f"Dream-1 says: the {arm} arm, like this. Let's see if our checker likes it.")
+            name = f"dream{k}"
             reason, r = play(stage, arm, name, c["t"], c["q"], c["g"], a.speed, a.carry)
             out(event="info", chunk=k, reply=r)
             if reason:
                 refused = code_refused(r)
                 break
             played.append(c)
-            if k == 1:
+            if len(played) == 1:
                 say("Our checker says yes. Gently, please!")
+            if not held and r["props"][arm]:
+                held = True
+                say("Got me!")
+            lifted = held and r.get("tip_end_mm", 0) >= LIFT_MM
             asked = [False]
             other = s["arms"]["left" if arm == "right" else "right"]["joints"]
+            cmd = {arm: c["q"][-1], ("left" if arm == "right" else "right"): other}
 
-            def prefetch(st, k=k, c=c, r=r, started=time.monotonic()):
-                if k < a.chunks and not asked[0] and time.monotonic() - started > r["duration_s"] - PREFETCH_S:
+            def prefetch(st, k=k, r=r, started=time.monotonic()):
+                if not lifted and k < a.chunks and not asked[0] and time.monotonic() - started > r["duration_s"] - PREFETCH_S:
                     asked[0] = True
-                    pre.ask({arm: c["q"][-1], ("left" if arm == "right" else "right"): other})
-            reason = wait_done(stage, arm, name, min(end, time.monotonic() + r["duration_s"] + 5), prefetch)
-            if reason or k == a.chunks:
+                    pre.ask(cmd)
+            reason = wait_done(stage, arm, name, time.monotonic() + r["duration_s"] + 5, prefetch)  # --pick-s: next ask
+            if reason or lifted:
+                break
+            if k == a.chunks:
+                reason = f"no pick in {a.chunks} chunks"
                 break
             if not asked[0]:
-                pre.ask({arm: c["q"][-1], ("left" if arm == "right" else "right"): other})
-            ch = pre.chunk()
+                pre.ask(cmd)
+        else:
+            reason = reason or f"no pick in {a.chunks} chunks"
     except Exception as e:  # Dream down, no frames, ssh gone: our own pick then
         reason = f"{type(e).__name__}: {e}"
     finally:
         if pre:
             pre.close()  # the cameras free again before anything else moves
-    out(event="info", dream_reason=reason, played=len(played), latency_s=latency)
+    out(event="info", dream_reason=reason, played=len(played), held=held, lifted=lifted, latency_s=latency)
+    if lifted and not reason:
+        say("Up I go! That was all Dream-1's own idea, checked by us.")
+        out(event="done", ok=True, held=True, arm=arm, dream_chunks=len(played), fallback=False, reason=None,
+            latency_s=latency)
+        return
     if played:
-        say("That's where we stop Dream-1's idea. Back the way we came." if reason else
-            "That was all Dream-1's own idea, checked by us. And back down I go.")
+        say("That's where we stop Dream-1's idea. Back the way we came.")
         back = None
         for i, c in enumerate(reversed(played)):
             back, r = play(stage, arm, f"dream_back{i + 1}", c["t"], c["q"][::-1], c["g"][::-1], a.speed,
@@ -257,16 +280,14 @@ def main():
                 back = wait_done(stage, arm, f"dream_back{i + 1}", time.monotonic() + r["duration_s"] + 5)
             if back:
                 break
-        if back:
+        if back or any(stage.state()["props"].values()):
             say("I'm stuck halfway. Can someone at the robot help?")
-            out(event="done", ok=False, dream_chunks=len(played), fallback=False,
-                reason=f"{reason or 'ok'}; the way back stopped: {back}", latency_s=latency)
+            out(event="done", ok=False, held=any(stage.state()["props"].values()), dream_chunks=len(played),
+                fallback=False, reason=f"{reason}; the way back stopped: {back or 'still holding'}", latency_s=latency)
             return
-    if not reason:
-        out(event="done", ok=True, dream_chunks=len(played), fallback=False, reason=None, latency_s=latency)
-        return
     if a.no_fallback:
-        out(event="done", ok=False, dream_chunks=len(played), fallback=False, reason=reason, latency_s=latency)
+        out(event="done", ok=False, held=False, dream_chunks=len(played), fallback=False, reason=reason,
+            latency_s=latency)
         return
     if refused:
         why = next((w for k, w in (("table", "it would have bumped the table"), ("reaches", "it bends a joint too far"),
@@ -285,8 +306,8 @@ def main():
         fb = wait_done(stage, "right", g, time.monotonic() + 60)
         if fb:
             break
-    out(event="done", ok=False, dream_chunks=len(played), fallback=not fb, reason=reason + (f"; fallback: {fb}" if fb else ""),
-        latency_s=latency)
+    out(event="done", ok=False, held=False, dream_chunks=len(played), fallback=not fb,
+        reason=reason + (f"; fallback: {fb}" if fb else ""), latency_s=latency)
 
 
 if __name__ == "__main__":

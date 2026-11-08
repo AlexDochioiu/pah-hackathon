@@ -181,3 +181,8 @@
   falls back to `pick_lars`; `[dream:pick_lars]` tag. 5 billed calls on real frames: ~1-3 s round trips, and Dream-1
   stays at rest (≤ 0.06 rad per joint), refused by the checker (j2/j3 jitter past their lower stops), so the show
   plays our own pick. The left wrist camera is on USB 2 (15 fps max).
+- Nov 7 ~22:10: Dream-1 full pick through our checker. dreamcli's real "pick up the green frog and hold it up" run
+  (drun2) replayed on the kin stage passes once `/trajectory` lets the fingertips alone brush the table to −3 mm
+  (its grasps: 2.3 and −0.2 mm in our model; owner's call); joints ≤ 0.05 rad past a stop are clamped. `dream_run.py`
+  now skips idle chunks, asks until the stage holds Lars and a chunk lifts him 40 mm, and leaves him held (eef
+  head, the real run's task text, `--pick-s` 60).

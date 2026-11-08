@@ -332,6 +332,12 @@ assert traj([q0], [1.0])[0] == 200  # from wherever it stopped, straight away
 st.wait()
 assert np.allclose(st.cmd_q["right"], q0)
 assert not st.props["right"]  # the first reach closed to 0.2 without "carry": nothing held
+code, r = traj([np.r_[q0[0], -0.05, -0.04, q0[3:]]], [2.0])  # just past the j2/j3 fold stops: clamped onto them
+assert code == 200 and r["clamped"] == 2, r
+st.wait()
+assert np.allclose(st.cmd_q["right"][1:3], show.SAFE_LO[1:3])
+assert traj([np.r_[q0[0], -0.1, q0[2:]]], [2.0])[0] == 409  # further past: refused
+assert traj([q0], [1.0])[0] == 200; st.wait()
 # "carry": a trajectory that ends closed holds the prop, like pick_lars; holding, the gripper never moves until a
 # trajectory that ends open (or place_lars) puts it down.
 assert traj(reach, [2, 4, 6, 8, 10], g=[1.0, 0.8, 0.5, 0.2, 0.0], carry="block")[0] == 409  # not a carried prop
@@ -369,9 +375,21 @@ assert code == 200 and r["props"]["right"] is False and not any(st.props.values(
 st.wait()
 assert np.allclose(st.cmd_q["right"], q0) and abs(st.cmd_g["right"] - 1.0) < 1e-6
 assert call("/talk", {"arm": "right"})[0] == 200 and call("/talk", {"arm": "right", "on": False})[0] == 200
+# The fingertips may brush the table (TRAJ_TIP_FLOOR, -3 mm; Dream-1's real Lars grasp, Nov 7 drun2 chunk 15), a dive
+# may not. P: that grasp's lowest row (fingertips -0.2 mm in the model); j2 +0.0065 -> -2 mm, +0.037 -> -10 mm.
+P = np.array([0.3012, 1.6716, 0.9099, -0.6801, -0.1039, 0.0946])
+lo_tip, lo_body = st._lowest("right", [P + [0, 0.0065, 0, 0, 0, 0]])
+assert -0.0025 < lo_tip < -0.0015 and lo_body > 0.05, (lo_tip, lo_body)
+code, r = traj([P + [0, 0.0065, 0, 0, 0, 0]], [4.0])
+assert code == 200, r
+st.wait()
+assert traj([q0], [4.0])[0] == 200; st.wait()
+code, r = traj([P + [0, 0.037, 0, 0, 0, 0]], [4.0])
+assert code == 409 and "table" in r["error"], r
 print("trajectories ok: slowed to 0.3 rad/s, played like a pick; table dive, limit, other arm, bad input refused; freeze;"
       " carry: held from a trajectory closing from open (grip kept by gestures and trajectories, /talk and /grip refused), "
-      "put down by an opening one")
+      "put down by an opening one; joints just past a stop clamped; a -2 mm fingertip brush passes, a -10 mm dive is "
+      "refused")
 
 assert call("/duet", {"name": "cheers"})[0] == 200
 time.sleep(0.5)

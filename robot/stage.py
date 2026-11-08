@@ -53,12 +53,14 @@ API (JSON in and out; "arm" is left | right | both, default both):
                                        name: "lars"): a trajectory that ends with the gripper closed holds it from then on,
                                        like pick_lars (gestures keep the grip, /talk refused). While it holds one, a
                                        trajectory keeps the grip, unless it ends open: that puts it down. Answers
-                                       {"ok","name","duration_s","peak_rad_s","slowed","props"}; /freeze stops it dead for good
+                                       {"ok","name","duration_s","peak_rad_s","slowed","props","clamped","tip_mm","tip_end_mm"}; /freeze
+                                       stops it dead for good
 Every motion is checked before it starts (limits, table clearance with any props, 15 cm from the other arm's committed
 motion); a refused request returns 409 with the reason and nothing moves.
 """
 import argparse, collections, json, signal, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import mujoco
 import numpy as np
 import duets, mouth, show
 
@@ -77,6 +79,10 @@ TRAJ_MAX_KEYS, TRAJ_MAX_S = 2000, 60.0
 TRAJ_RAMP = np.linspace(4.0, 1.0, 8)  # the first and last keys' segments stretched this much: a gentle start and stop
 TRAJ_CLOSED = 0.35           # a "carry" trajectory ending with the gripper at or below this holds the prop
 TRAJ_OPEN = 0.6              # one ending at or above this, holding a prop, puts it down
+TRAJ_TIP_FLOOR = -0.003      # m: the fingertips may brush the table this far in (Dream-1's real grasps: 2.3 and
+                             # -0.2 mm in the model, harmless); every other part keeps show.TABLE_FLOOR (3 mm)
+TRAJ_CLAMP = 0.05            # rad: a key this little past a joint's safe limit is clamped onto it, not refused (Dream-1
+                             # jitters ~0.02 past the j2/j3 fold stops at rest); further past is still refused
 
 
 class StageError(Exception):
@@ -617,7 +623,8 @@ class Stage:
         show.Checker as a one-arm absolute path with the TABLE_* rule (check_side: limits, speed, acceleration, CLEAR
         above TABLE_NEAR, TABLE_VMAX and TABLE_FLOOR below it), lean back no further than rest or its start (like a
         fold), and clear the other arm's committed motion by GAP (_commit). The arm must be free (holding or idling).
-        Like a pick it runs to its end; /freeze brakes it on its path and it is dropped.
+        Like a pick it runs to its end; /freeze brakes it on its path and it is dropped. Joint values up to TRAJ_CLAMP
+        past show.SAFE_LO/SAFE_HI are clamped onto them (the reply counts them in "clamped").
         Props, like pick_lars/place_lars: with carry (a carried prop's name), one that closes the gripper from at
         or above TRAJ_OPEN to at or below TRAJ_CLOSED at its end takes the prop (props[arm], checked with it in hand from where the gripper last closes).
         Holding one, the gripper keeps its grip (g ignored) unless g ends at or above TRAJ_OPEN: that puts it down
@@ -638,6 +645,9 @@ class Stage:
                 raise StageError("g must be one gripper value in 0..1 per time")
         if carry is not None and carry not in self.carried:
             raise StageError(f"carry must be a carried prop ({sorted(self.carried)}), not {carry!r}")
+        lo, hi = show.SAFE_LO, show.SAFE_HI
+        clamped = int(np.sum((q < lo) & (q >= lo - TRAJ_CLAMP)) + np.sum((q > hi) & (q <= hi + TRAJ_CLAMP)))
+        q = np.where((q < lo) & (q >= lo - TRAJ_CLAMP), lo, np.where((q > hi) & (q <= hi + TRAJ_CLAMP), hi, q))
         speed = float(np.clip(speed, 0.1, 1.0))
         vcap = TRAJ_VMAX * speed
         with self.lock:
@@ -694,8 +704,19 @@ class Stage:
             if gest.duration > TRAJ_MAX_S:
                 raise StageError(f"{arm} {name}: {gest.duration:.0f} s once slowed to {vcap:.2f} rad/s "
                                  f"(> {TRAJ_MAX_S:.0f} s): too much motion for one trajectory")
-            probs = [p for p in self.ck.check_side(gest) if "leans back" not in p]
+            floor = show.TABLE_FLOOR
+            show.TABLE_FLOOR = TRAJ_TIP_FLOOR  # ponytail: module global swapped under self.lock (every check runs under
+            try:                               # it); a floor argument on check_side if that ever changes
+                probs = [p for p in self.ck.check_side(gest) if "leans back" not in p]
+            finally:
+                show.TABLE_FLOOR = floor
+            tip, body = self._lowest(arm, Q)
+            if body < floor:  # the tips alone get TRAJ_TIP_FLOOR: anything else this low is refused
+                probs.append(f"{arm}: a part other than the fingertips is {body*1000:.0f} mm above the table "
+                             f"(needs {floor*1000:.0f})")
             probs += self.ck.lean_problems(arm, Q, fold=True)  # as far back as rest or where it starts, like a fold
+            print(f"{arm} {name}: lowest fingertip {tip*1000:.1f} mm, other parts {body*1000:.1f} mm above the table"
+                  + (" (refused)" if probs else ""), flush=True)
             if probs:
                 raise StageError(f"{arm} {name}: " + "; ".join(probs))
             plan = Plan(name, Q, G, self.ck.swept[show.key(name, arm)], gest, hold=True)
@@ -709,7 +730,21 @@ class Stage:
                 print(f"{arm} arm {'takes' if after else 'puts down'} {prop} ({name})", flush=True)
             return {"ok": True, "arm": arm, "name": name, "speed": round(speed, 2),
                     "duration_s": round((len(Q) - 1) / show.HZ, 2), "peak_rad_s": round(float(v.max()), 3),
-                    "slowed": round(gest.duration / asked, 2), "props": dict(self.props)}
+                    "slowed": round(gest.duration / asked, 2), "props": dict(self.props), "clamped": clamped,
+                    "tip_mm": round(tip * 1000, 1), "tip_end_mm": round(self._lowest(arm, Q[-1:])[0] * 1000, 1)}
+
+    def _lowest(self, arm, Q):
+        """(fingertips, every other moving part): the lowest point above the arm's table over Q, m."""
+        sc, tip, body = self.ck.scene, np.inf, np.inf
+        for q in Q:
+            sc.set(arm, q); sc.forward()
+            for k, pts, r in sc.geoms[arm]:
+                z = float(np.min(sc.d.geom_xpos[k][2] + pts @ sc.d.geom_xmat[k].reshape(3, 3)[2] - r)) - show.TABLE_Z[arm]
+                if "_tip_" in mujoco.mj_id2name(sc.m, mujoco.mjtObj.mjOBJ_BODY, sc.m.geom_bodyid[k]):
+                    tip = min(tip, z)
+                else:
+                    body = min(body, z)
+        return tip, body
 
     def busy(self, sides=SIDES):
         with self.lock:

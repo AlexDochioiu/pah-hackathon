@@ -136,9 +136,9 @@ PROPS_TAG = "props"  # [props:left|right|both] -> POST /props on for that arm ([
 # own gestures); [props:none] -> off for both
 PICK_TAG, PLACE_TAG = "pick", "place"  # [pick:lars] / [place:lars] -> POST /play pick_lars / place_lars (its arm)
 DREAM_TAG = "dream"  # [dream:pick_lars] -> robot/dream_run.py: Dream-1 picks Lars through our checker, else pick_lars
-DREAM_TASKS = {"pick_lars": "pick up the green frog"}  # its task text for Dream-1; other names: "pick_x" -> "pick x"
-DREAM_BUSY_S = 60.0  # no fills meanwhile
-# DREAM_ARGS (env): more dream_run.py options, e.g. "--replay robot/lars/dream_chunks.json" for a rehearsal, no Dream call
+DREAM_TASKS = {"pick_lars": "pick up the green frog and hold it up"}  # Dream-1 task text (the real picks, Nov 7); other names: "pick_x" -> "pick x"
+DREAM_BUSY_S = 90.0  # no fills meanwhile (the preview opens in ~15 s, then up to --pick-s 60 s)
+# DREAM_ARGS (env): more dream_run.py options, e.g. "--replay robot/lars/dream_pick.json" for a rehearsal, no Dream call
 DREAM_RUN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "robot", "dream_run.py")
 FACINGS = {"each_other": "each_other", "other": "each_other", "eachother": "each_other", "together": "each_other",
            "audience": "audience", "front": "audience", "us": "audience", "out": "audience", "forward": "audience"}

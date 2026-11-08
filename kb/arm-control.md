@@ -43,8 +43,13 @@ an external joint trajectory on one arm. `robot/dream_run.py` sends Dream-1's ch
 - Checked like a pick (`show.Checker.check_side` with the table rule: limits, 4 cm clearance, 0.3 rad/s and 3 mm
   within 5 cm of the table), lean-back no further than rest or its start, 15 cm from the other arm's committed
   motion. A refusal is a 409 with the reason; nothing moves.
+- Two allowances for Dream-1 (owner, Nov 7): the fingertips alone may brush the table down to −3 mm
+  (`TRAJ_TIP_FLOOR`; its real Lars grasps reached 2.3 and −0.2 mm in our model), and joint values up to 0.05 rad past
+  a safe limit are clamped onto it (`TRAJ_CLAMP`; its jitter at the j2/j3 fold stops). The stage log prints each
+  trajectory's lowest fingertip and other-part clearance; the reply has `clamped`, `tip_mm` and `tip_end_mm`.
 - The arm must be free (done or idling). Like a pick it runs to its end; `/freeze` brakes it on its path and it is
-  never resumed. Answers `{"ok", "name", "duration_s", "peak_rad_s", "slowed", "props"}`; `GET /state` shows it as
+  never resumed. Answers `{"ok", "name", "duration_s", "peak_rad_s", "slowed", "props", "clamped", "tip_mm",
+  "tip_end_mm"}`; `GET /state` shows it as
   the arm's `playing`.
 - Props: with `carry`, a trajectory that closes the gripper from ≥ 0.6 to ≤ 0.35 at its end takes the prop, as
   `pick_lars` does: from then on gestures keep the grip, `/talk` and opening `/grip` are refused, and later
