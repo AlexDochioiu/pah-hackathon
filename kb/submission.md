@@ -121,15 +121,16 @@ Lars on his dock; table clear; volume checked; Michael at the e-stop.
 | Time | Act | Who does what |
 |---|---|---|
 | 0:00 | 0, cold open (~10 s) | Alex starts a nervous pitch. Mid-sentence, Alex clicks: act 1 cuts in. |
-| 0:10 | 1, the takeover (~31 s) | Lars stops Alex; the arms rise and present. Auto-advance runs acts 2 and 3. |
-| 0:45 | 2, the founders (~41 s) | Each founder is pointed at in turn (a look or nod stand-in); applause ensemble. |
-| 1:30 | 3, the pitch (~36 s) | Dragon, knight, space wars; the "Built with" card on screen. |
-| 2:10 | 4, "Who wants a story?" (~8 s) | Darius brings the volunteer to the laptop and hands them the button. |
+| 0:10 | 1, the takeover (~13 s) | Lars stops Alex: "Down here. Yes. The frog." Auto-advance runs acts 2 to 4. |
+| 0:23 | 2, the pickup (~19 s) | The Lars pick if it's on (otherwise straight on); the arms rise and present. |
+| 0:45 | 3, the founders (~39 s) | Each founder waves when named; applause ensemble. |
+| 1:30 | 4, the pitch (~36 s) | Dragon, knight, space wars; the "Built with" card on screen. |
+| 2:10 | 5, "Who wants a story?" (~8 s) | Darius brings the volunteer to the laptop and hands them the button. |
 | 2:30 | live story (~2:00, the ask included) | Volunteer holds, asks, releases. The volunteer or the room may cut in. |
-| 4:30 | 5, the finale (~19 s) | After "The end!", Alex clicks to act 5 (manual cue, it stops a story politely). |
+| 4:30 | 6, the finale (~20 s) | After "The end!", Alex clicks to act 6 (manual cue, it stops a story politely). |
 | 4:50 | end | Tip hats. Darius presses Esc: the arms fold to rest, music off. |
 
-Acts 0–3 are about 1:57 of audio plus laughs; budget ~30 s for laughs and the walk-up. Auto-advance doesn't wait
+Acts 0–4 are about 1:57 of audio plus laughs; budget ~30 s for laughs and the walk-up. Auto-advance doesn't wait
 for laughs: a click cuts the act playing and takes over, and the chain goes on from there.
 
 ### Fallbacks
@@ -147,7 +148,7 @@ for laughs: a click cuts the act playing and takes over, and the chain goes on f
 |---|---|
 | Story agent, sync, voices, sounds, stories with the real arms | Ran: a full real-arm story run (Nov 7 ~20:15), sync fixes after it. |
 | Gesture library on the real arms | Partly: bring-up at 50 % passed on the 13:00 library; 10 reworked gestures passed at 50 % on both arms. Table-contact moves, prop moves, hand ensembles (hug, clap) and deep facing: simulation only. |
-| The show (`/show`, acts 0–5) | On the fake stage; not yet run end to end on the real arms. |
+| The show (`/show`, acts 0–6) | On the fake stage; not yet run end to end on the real arms. |
 | Our own Lars pick (`pick_lars`) | The face-up bake picked and placed Lars on the real arms; the current face-down bake: sim only. `LARS_PICK = off` in the show. |
 | Dream-1 zero-shot with `dreamcli` | Ran on the real arms: picked Lars and lifted him. |
 | Dream-1 through our stage (`/trajectory`, checker, grip lock) | Passes on the laptop kinematic sim with the real run's chunks. **Real arms: pending.** |

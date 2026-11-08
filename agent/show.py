@@ -529,7 +529,7 @@ class ShowRunner:
 
     def auto_next(self, act: Act) -> Act | None:
         """The act auto-advance plays after `act`: the next one, if `act` is scripted and a live act is still to
-        come (so 1 -> 2 -> 3 -> 4, and never into the finale after the live act)."""
+        come (so 1 -> 2 -> 3 -> 4 -> 5, and never into the finale after the live act)."""
         nxt = self.script.act(act.number + 1)
         if act.kind != SCRIPTED or nxt is None or nxt.kind == HUMAN:
             return None

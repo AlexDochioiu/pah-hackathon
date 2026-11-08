@@ -335,8 +335,8 @@ kept in the browser (`localStorage.storyMode`).
 ## Show mode (the hackathon presentation)
 Clicker-cued acts: the stage hands cut in on a founder, Lars hosts, introduces the founders and the project, then
 hands over to the live story mode. One voice only, Lars's (owner, Nov 7): the arms never speak, they react with
-gestures; `ShowRunner` sets `agent.host_only`, so even a live-demo character line is read by Lars. Budget: acts 0-3
-at most 2:00, act 4 at most 10 s, act 5 at most 20 s, the live story about 2 minutes (test_show checks the
+gestures; `ShowRunner` sets `agent.host_only`, so even a live-demo character line is read by Lars. Budget: acts 0-4
+at most 2:00, act 5 at most 10 s, act 6 at most 20 s, the live story about 2 minutes (test_show checks the
 estimates; the table is in [show.md](show.md)). Rehearsal how-to: [show.md](show.md). Script: `agent/show.md` (format in its header).
 - `http://127.0.0.1:8790/show` (same `app.py`): `/token?mode=show` dispatches the worker with metadata
   `{"mode":"show"}`; `storyteller.py` then skips the greeting, appends the script's "Live context" to the prompt

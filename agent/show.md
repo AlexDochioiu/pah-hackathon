@@ -17,35 +17,35 @@ How to write it:
   `{?!KEY}` only when it is off (both may stack).
 - `<!-- comments -->` are never spoken; they show on the page as notes for the presenters.
 - Lars is the host and narrator, never a character. No pronouns for Lars, or for the founders: names or "they".
-- Budget (owner, Nov 7; about 5 minutes with the demo): acts 0-3 together at most 2:00, act 4 at most 10 s, act 5
-  at most 20 s. tests/test_show.py checks the estimates; kb/show.md has the table.
+- Budget (owner, Nov 7; about 5 minutes with the demo): acts 0-4 together at most 2:00 (Dream off), act 5 at most
+  10 s, act 6 at most 20 s. tests/test_show.py checks the estimates; kb/show.md has the table.
 
 ## Config
 
 ```ini
 SHOW_NAME = Stage Hands             # the project
 HOST_NAME = Lars                    # the host: Lars, the green plush frog on the table (prompt.md uses it too)
-FOUNDER_1 = Alex                    # named in act 2; no point (owner, Nov 8: the founders wave themselves)
+FOUNDER_1 = Alex                    # named in act 3; no point (owner, Nov 8: the founders wave themselves)
 FOUNDER_2 = Michael
 FOUNDER_3 = Darius
 # A gesture option chain: the first the stage has wins; options after "|" are fallbacks for an older stage.
 LARS_POINT = right:point_at_lars | right:double_take        # "Down here.": an arm points at Lars on the table
 # The finale's threat: the left arm creeps to the e-stop and hovers ~5 cm above it, then pulls back. Never a press.
 PANIC_REACH = left:panic_reach | left:slow_turn
-LARS_PICK = off                     # on: in act 1 the right arm lifts Lars from the dock (needs someone at the e-stop)
+LARS_PICK = off                     # on: in act 2 the right arm lifts Lars from the dock (needs someone at the e-stop)
 # The pick line gives ~7 s of talk while Lars goes up and ~6 s while Lars goes down, with no other right-arm tag:
 # sized for the speed-1 bake (pick 4.7 s, place 4.8 s). Check it on the fake stage before turning it on.
 LARS_PICK_UP = pick:lars | right:point_at_lars | right:double_take    # falls back while the stage lacks pick_lars
 LARS_PUT_DOWN = place:lars | right:nod
-# Off until it works on the real arms. on: act 1's pick is Dream-1's ([dream:pick_lars], robot/dream_run.py; it wins
-# over LARS_PICK). About 90 s at half speed: its own lines and the patter fill it, so act 1 runs well over budget.
+# Off until it works on the real arms. on: act 2's pick is Dream-1's ([dream:pick_lars], robot/dream_run.py; it wins
+# over LARS_PICK). About 90 s: its own lines and the patter fill it, so act 2 runs well over budget.
 # A miss: the arm facepalms, a sad trombone, one DREAM_OOPS quip, then our own pick_lars. Needs someone at the e-stop.
 DREAM_PICK = off
-DREAM_ARGS = --speed 0.5 --hold --pick-s 90 --patter 6         # --hold: it ends holding Lars, so {LARS_PUT_DOWN} puts him back
+DREAM_ARGS = --speed 1.0 --hold --pick-s 90 --patter 6         # --hold: it ends holding Lars, so {LARS_PUT_DOWN} puts him back
 DREAM_OOPS = Ah, frog-nabbit. | Nobody saw that. | That was a practice grab.
 # The "Built with" card: the /show page shows it during act BUILT_WITH_ACT. One line per tool,
 # "tool: how we use it". Add a sponsor's tool as the next BUILT_n. List only what the code really uses.
-BUILT_WITH_ACT = 3
+BUILT_WITH_ACT = 4
 BUILT_1 = LiveKit Agents + Inference: speech to text, the LLM and the voices, in a real-time room with hold-to-talk
 BUILT_2 = Fish Audio (through LiveKit Inference): every voice you hear
 BUILT_3 = i2rt YAM arms on the MakerMods station: the two stage hands
@@ -70,13 +70,17 @@ Stop. Stop, stop, stop. [both:shake_head]
 Thirty hours awake, and the pitch is: it's like... a robot? [right:facepalm]
 We'll take it from here. [left:nod]
 Good evening, humans! I'm {HOST_NAME}. Down here. {LARS_POINT} Yes. The frog.
+
+## Act 2: The pickup
+<!-- Its own cue, so the clicker can jump straight here. With LARS_PICK and DREAM_PICK off it skips the pick and goes straight into the intro. -->
+[face:audience]
 {?LARS_PICK}{?!DREAM_PICK} A little higher, please. {LARS_PICK_UP} Higher. Higher! Thank you. Hello, back row! I can see all your laptops from up here. Okay, down again, I get dizzy. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know. A tiny bit to the left. Perfect.
 {?DREAM_PICK} Tonight, a world first: Dream-1 picks me up, live. No rehearsal. [dream:pick_lars] Hello, back row! I can see all your laptops from up here. Okay, down again. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know.
 I host the show, I tell the stories, and these two are my stage hands. [both:present]
 Stage hands. Because they're hands. That joke cost forty dollars in API credits. [right:tremble_excited] [left:eye_roll] [sfx:rimshot]
 Please welcome... [sfx:tada] {SHOW_NAME}! [both:ta_da] [sfx:applause] [music:funny]
 
-## Act 2: The founders
+## Act 3: The founders
 <!-- The founders stand behind the arms and wave when their name comes up. -->
 [face:audience]
 First, {FOUNDER_1}! Hasn't blinked since Friday. We checked: we have cameras. [right:double_take]
@@ -85,7 +89,7 @@ And {FOUNDER_3}! Calls them the kids. Kids working thirty hours unpaid: that's n
 On day one, the table tipped over. With them on it. [both:cower] Nobody filed a report. [left:shake_head]
 Give it up for {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}! [ensemble:clap] [sfx:applause]
 
-## Act 3: The pitch
+## Act 4: The pitch
 <!-- About thirty seconds: what it does. The "Built with" card is on the page for this act. -->
 [face:audience]
 Here's how it works. You say any story out loud, I make it up on the spot, and these two act it out, live.
@@ -96,13 +100,13 @@ Anyone can jump in, mid-story, and the story bends. Last night someone made the 
 It ate a salad. Menacingly. Then it raised a seed round. [left:eat]
 It's all up on the screen: every move checked in simulation first, and a digital twin of both arms in Dimensional's simulator. [both:present]
 
-## Act 4: The demo (live)
+## Act 5: The demo (live)
 <!-- After this line the live story mode runs: a volunteer holds the button at the laptop and asks for a story. -->
 [face:audience] [music:none]
 Enough talk. Who wants a story? [left:point_at_audience]
 Come up, hold the big yellow button, and tell me what happens. [right:tremble_excited]
 
-## Act 5: The finale
+## Act 6: The finale
 <!-- Works from any state: it stops a story politely. Esc (STOP) afterwards folds the arms and ends the music. -->
 <!-- The threat: one arm creeps to the e-stop and hovers above it, never touching (a press drops both arms limp). -->
 [face:audience]

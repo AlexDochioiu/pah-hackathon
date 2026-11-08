@@ -105,7 +105,7 @@
   <div id="built"><h2>Built with</h2><ul></ul></div>
   <div id="keys">Next: → · PageDown · Space &nbsp;|&nbsp; Back: ← · PageUp &nbsp;|&nbsp; Jump: 1–9 (0: start over)
     &nbsp;|&nbsp; STOP: Esc. The talk button works in the demo act.
-    &nbsp;|&nbsp; <label><input type="checkbox" id="auto" checked> auto-advance</label> (acts 2–4 follow on their own; the finale is always a cue)</div>
+    &nbsp;|&nbsp; <label><input type="checkbox" id="auto" checked> auto-advance</label> (acts 2–5 follow on their own; the finale is always a cue)</div>
 </section>
 <div id="say">Starting…</div>
 <button id="talk" disabled>HOLD TO TALK<small>or hold the space bar</small><span id="level"><i></i></span></button>
@@ -139,7 +139,7 @@ function showAttr(k) { return agent ? agent.attributes["show." + k] : undefined;
 function actOf(n) { return script && script.acts.find((a) => a.act === n); }
 function liveNow() { const a = actOf(current); return !SHOW || (a && a.kind === "live" && showAttr("act") === String(current)); }
 
-// auto-advance (show.py ShowRunner.auto): the worker plays acts 2-4 on its own; the page follows its cursor
+// auto-advance (show.py ShowRunner.auto): the worker plays acts 2-5 on its own; the page follows its cursor
 let autoOn = localStorage.getItem("show.auto") !== "0", lastAdvanced = null, autoSent = null;
 $("auto").checked = autoOn;
 $("auto").addEventListener("change", () => { autoOn = $("auto").checked; localStorage.setItem("show.auto", autoOn ? "1" : "0"); render(); });

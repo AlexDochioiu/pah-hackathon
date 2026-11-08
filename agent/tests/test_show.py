@@ -139,10 +139,10 @@ def test_show_md_is_complete_and_every_tag_exists_on_the_stage():
     s = Script.load(SHOW_MD, book)
     assert s.warnings == []
     assert (s.show_name, s.host_name, s.founders) == ("Stage Hands", "Lars", ["Alex", "Michael", "Darius"])
-    assert [a.kind for a in s.acts] == [HUMAN, SCRIPTED, SCRIPTED, SCRIPTED, LIVE, SCRIPTED]
-    assert "Lars" in s.act(1).text and "Stage Hands" in s.act(1).text and "Lars" in s.live_context
+    assert [a.kind for a in s.acts] == [HUMAN, SCRIPTED, SCRIPTED, SCRIPTED, SCRIPTED, LIVE, SCRIPTED]
+    assert "Lars" in s.act(1).text and "Stage Hands" in s.act(2).text and "Lars" in s.live_context
     for name in s.founders:
-        assert name in s.act(2).text and name in s.act(5).text
+        assert name in s.act(3).text and name in s.act(6).text
     for act in s.acts:
         assert "{" not in act.text and "}" not in act.text, act.number
         for t in tags(act.text):
@@ -160,23 +160,26 @@ def test_show_md_is_complete_and_every_tag_exists_on_the_stage():
                 assert t.name in FACINGS, (act.number, t.raw)
             else:
                 pytest.fail(f"act {act.number}: unexpected tag {t.raw}")
-    assert '"' not in s.act(1).spoken.replace("…", "")  # no quoted lines left over either
+    assert not any('"' in s.act(n).spoken.replace("…", "") for n in (1, 2))  # no quoted lines left over either
     # the takeover cuts in hard: the snap to the audience, then the first word at once
     assert s.act(1).split_lead()[0] == "[face:audience]"
-    assert "[both:present]" in s.act(1).text  # the stage hands are lifted as they're introduced
+    assert s.act(1).spoken.endswith("Yes. The frog.")  # the clicker can jump straight to the pickup (act 2)
+    assert s.act(2).split_lead()[0] == "[face:audience]"
+    assert "[both:present]" in s.act(2).text  # the stage hands are lifted as they're introduced
     # owner, Nov 8: the founders are named, not pointed at (they wave themselves); Lars's point still falls back
     assert "point_back" not in SHOW_MD.read_text() and "@" not in "".join(s.config[f"FOUNDER_{n}"] for n in "123")
     assert "[right:double_take]" in s.act(1).text
     assert sum("table" in a.spoken for a in s.acts) == 1  # one table gag, not three
-    # the budget (owner, Nov 7; ~5 minutes with the demo): acts 0-3 <= 2:00, the demo intro <= 10 s, the finale <= 20 s
+    # the budget (owner, Nov 7; ~5 minutes with the demo): acts 0-4 <= 2:00 (Dream off), the demo intro <= 10 s,
+    # the finale <= 20 s
     # (the estimate is the host voice's measured pace plus the tails: within ~2 s of the real audio, Nov 7)
     est = {a.number: a.estimate_s(book.durations | book.duets) for a in s.acts}
     print(est)
-    assert 80 < sum(est[n] for n in range(4)) <= 120, est
-    assert est[4] <= 10 and est[5] <= 20, est
+    assert 80 < sum(est[n] for n in range(5)) <= 120, est
+    assert est[5] <= 10 and est[6] <= 20, est
     # the "Built with" card: what the code really uses, shown during the pitch
     tools = " ".join(b["tool"] for b in s.built_with)
-    assert s.built_with_act == 3 and all(b["how"] for b in s.built_with)
+    assert s.built_with_act == 4 and all(b["how"] for b in s.built_with)
     for name in ("LiveKit", "Fish Audio", "YAM", "MuJoCo", "OpenCV", "CC0", "Claude Code", "Dimensional"):
         assert name in tools, name
     assert "Dream" not in tools  # commented out until the Dream-1 pick works on the real arms
@@ -184,11 +187,18 @@ def test_show_md_is_complete_and_every_tag_exists_on_the_stage():
 
 def test_lars_pick_line_uses_the_baked_guest_tags():
     text = SHOW_MD.read_text().replace("LARS_PICK = off", "LARS_PICK = on")
-    act1 = Script.parse(text, stage_book()).act(1).text
-    assert "[pick:lars]" in act1 and "[place:lars]" in act1
-    after = act1.split("[place:lars]")[1].split("[")[0]  # no tag for the right arm while Lars goes down
+    act2 = Script.parse(text, stage_book()).act(2).text
+    assert "[pick:lars]" in act2 and "[place:lars]" in act2
+    after = act2.split("[place:lars]")[1].split("[")[0]  # no tag for the right arm while Lars goes down
     assert len(after.split()) >= 10, after
-    assert "[pick:lars]" not in Script.parse(text, GestureBook({"double_take": 1.0, "nod": 1.0})).act(1).text
+    assert "[pick:lars]" not in Script.parse(text, GestureBook({"double_take": 1.0, "nod": 1.0})).act(2).text
+
+
+def test_pickup_act_without_any_pick_goes_straight_into_the_intro():
+    s = Script.load(SHOW_MD, stage_book())  # LARS_PICK and DREAM_PICK both off
+    act2 = s.act(2)
+    assert act2.title == "The pickup" and act2.split_lead()[0] == "[face:audience]"
+    assert act2.spoken.startswith("I host the show") and "pick" not in act2.text and "place" not in act2.text
 
 
 def test_story_has_an_unnamed_narrator_and_the_show_has_lars():
@@ -381,9 +391,11 @@ Hi.
 Act two now.
 ## Act 3: Three
 Act three now.
-## Act 4: Demo (live)
+## Act 4: Four
+Act four now.
+## Act 5: Demo (live)
 Who wants a story?
-## Act 5: Finale
+## Act 6: Finale
 Goodnight.
 """
 
@@ -398,20 +410,29 @@ def _record_plays(runner):
     return played
 
 
-async def test_auto_advance_runs_acts_one_to_four_and_stops_before_the_finale(tmp_path, monkeypatch):
+async def test_pickup_act_without_any_pick_plays_its_remaining_lines(tmp_path):
+    async with Show(Script.load(SHOW_MD), tmp_path, audio_s=0.4) as show:
+        show.runner.play(2)
+        await asyncio.sleep(1.5)
+        assert show.runner.state != "playing" and show.runner.act == 2
+        assert "".join(show.tts_inputs).lstrip().startswith("I host the show")
+        assert ("face", "audience") in show.kinds()
+
+
+async def test_auto_advance_runs_acts_one_to_five_and_stops_before_the_finale(tmp_path, monkeypatch):
     import show as show_mod
     monkeypatch.setattr(show_mod, "AUTO_GAP_S", 0.1)
     async with Show(Script.parse(AUTO), tmp_path, audio_s=0.4) as show:
         played = _record_plays(show.runner)
         show.runner.play(1)
-        await asyncio.sleep(3.5)
-        assert played == [1, 2, 3, 4] and show.runner.state == "live"
-        assert show.runner.advanced.startswith("4.")  # the page moves its cursor to act 4
+        await asyncio.sleep(4.5)
+        assert played == [1, 2, 3, 4, 5] and show.runner.state == "live"
+        assert show.runner.advanced.startswith("5.")  # the page moves its cursor to act 5, the demo
         await asyncio.sleep(1.0)
-        assert played == [1, 2, 3, 4]  # never into the finale: that's a manual cue
-        show.runner.play(5)
+        assert played == [1, 2, 3, 4, 5]  # never into the finale: that's a manual cue
+        show.runner.play(6)
         await asyncio.sleep(1.2)
-        assert played == [1, 2, 3, 4, 5] and show.runner.state == "done"
+        assert played == [1, 2, 3, 4, 5, 6] and show.runner.state == "done"
 
 
 async def test_a_manual_jump_mid_chain_takes_over_and_the_chain_goes_on_from_there(tmp_path, monkeypatch):
@@ -422,29 +443,29 @@ async def test_a_manual_jump_mid_chain_takes_over_and_the_chain_goes_on_from_the
         show.runner.play(1)
         await asyncio.sleep(0.2)
         show.runner.play(3)  # mid act 1: cuts it, act 2 is skipped
-        await asyncio.sleep(2.2)
-        assert played == [1, 3, 4]
+        await asyncio.sleep(3.2)
+        assert played == [1, 3, 4, 5]
         show.runner.set_auto(False)  # the page's toggle off: one act at a time
         show.runner.play(2)
         await asyncio.sleep(1.2)
-        assert played == [1, 3, 4, 2] and show.runner.state == "done"
+        assert played == [1, 3, 4, 5, 2] and show.runner.state == "done"
 
 
 # --- Dream-1 in the show (DREAM_PICK, off by default) ----------------------------------------------------------
 
 def test_dream_pick_variant_parses_and_resolves():
     book = stage_book()
-    assert "[dream:" not in Script.load(SHOW_MD, book).act(1).text  # off by default
+    assert "[dream:" not in Script.load(SHOW_MD, book).act(2).text  # off by default
     text = SHOW_MD.read_text().replace("DREAM_PICK = off", "DREAM_PICK = on").replace("LARS_PICK = off", "LARS_PICK = on")
     s = Script.parse(text, book)
     assert s.warnings == []
-    act1 = s.act(1)
+    pickup = s.act(2)
     # Dream-1's pick wins over LARS_PICK ({?LARS_PICK}{?!DREAM_PICK}); it ends held, our place puts Lars back
-    assert "[dream:pick_lars]" in act1.text and "[pick:lars]" not in act1.text and "[place:lars]" in act1.text
-    first, second = dream_parts(act1.split_lead()[1])
+    assert "[dream:pick_lars]" in pickup.text and "[pick:lars]" not in pickup.text and "[place:lars]" in pickup.text
+    first, second = dream_parts(pickup.split_lead()[1])
     assert first.endswith("[dream:pick_lars]") and second.startswith("Hello, back row!")
-    assert act1.estimate_s(book.durations | book.duets) > 90  # the Dream-1 run is in the estimate
-    assert s.config["DREAM_ARGS"].split()[:3] == ["--speed", "0.5", "--hold"]
+    assert pickup.estimate_s(book.durations | book.duets) > 90  # the Dream-1 run is in the estimate
+    assert s.config["DREAM_ARGS"].split()[:3] == ["--speed", "1.0", "--hold"]
     assert len(s.config["DREAM_OOPS"].split("|")) == 3
 
 
