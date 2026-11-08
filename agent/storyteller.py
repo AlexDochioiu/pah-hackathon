@@ -192,14 +192,18 @@ class StoryClock:
 
 class Storyteller(Agent):
     def __init__(self, *, instructions: str, voices: dict[str, tts.TTS] | None = None,
-                 book: GestureBook | None = None, host_only: bool = False, narrator: str = STORY_VOICE) -> None:
+                 book: GestureBook | None = None, host_only: bool = False, narrator: str = STORY_VOICE,
+                 story_tts: tts.TTS | None = None) -> None:
         super().__init__(instructions=instructions)
         self.narrator = narrator  # the session TTS's Fish voice id, for its playout gain (voices.VOICE_GAIN_DB)
         self.voices = voices or {}  # palette name -> TTS; a voice missing here is read by the narrator
         self.cast = dict(DEFAULT_CAST)  # arm -> palette name, recast by [voice:left=...] tags
         self.cast_locked: set[str] = set()  # arms cast in this story: no recast until a new one (new_story)
         self.book = book
-        self.host_only = host_only  # show mode: the host reads every line, quotes included (owner, Nov 7)
+        self.host_only = host_only  # show mode: the host reads every scripted line, quotes included (owner, Nov 7)
+        # show mode's live story: the storyteller narrates and the characters get their voices (owner, Nov 8);
+        # ShowRunner sets story_voiced once the live act's own lines are said
+        self.story_tts, self.story_voiced = story_tts, False
         self.scripted = False  # a scripted show act is playing: no fill moves, no sfx budget, no story clock
         self._marks: weakref.WeakKeyDictionary[object, RunMarks] = weakref.WeakKeyDictionary()  # per reply
 
@@ -244,6 +248,10 @@ class Storyteller(Agent):
         expressive = activity._resolve_expressive_options() is not None
 
         def narrate(t):
+            if self.story_voiced and self.story_tts is not None:
+                self.story_tts._set_expressive(expressive)
+                return with_gain(stream_tts(self.story_tts, t, self.session.conn_options.tts_conn_options),
+                                 voice_gain(STORY_TTS_VOICE))
             return with_gain(Agent.default.tts_node(self, t, model_settings), voice_gain(self.narrator))
 
         def speak(name: str):
@@ -253,7 +261,7 @@ class Storyteller(Agent):
             gain = voice_gain(PALETTE[name].id)
             return lambda t: with_gain(stream_tts(voice, t, self.session.conn_options.tts_conn_options), gain)
 
-        if self.host_only:
+        if self.host_only and not self.story_voiced:
             speak = lambda name: narrate  # noqa: E731 - every quoted line in the host's voice
         marks = RunMarks()
         if speech := _SpeechHandleContextVar.get(None):
@@ -312,7 +320,10 @@ async def entrypoint(ctx: JobContext) -> None:
     # one TTS per character voice, connected now: a cold connection would add ~1.5 s to a character's first line.
     # Show mode: none (the host reads every line).
     voices = ({name: inference.TTS(model=TTS_MODEL, voice=v.id) for name, v in PALETTE.items()}
-              if CHARACTER_VOICES and not show else {})
+              if CHARACTER_VOICES else {})  # show mode too: its live story (owner, Nov 8)
+    story_tts = inference.TTS(model=TTS_MODEL, voice=STORY_TTS_VOICE) if show else None
+    if story_tts is not None:
+        story_tts.prewarm()
     for voice in voices.values():
         voice.prewarm()
 
@@ -320,14 +331,14 @@ async def entrypoint(ctx: JobContext) -> None:
         await board.aclose()  # STOP or the end of the session: music and sfx go silent at once
         stage.send("/rest")
         await stage.aclose()
-        for voice in voices.values():
+        for voice in [*voices.values(), *([story_tts] if story_tts else [])]:
             await voice.aclose()
 
     ctx.add_shutdown_callback(shutdown)
 
     agent = Storyteller(instructions=build_instructions(book, sound_book, script, show=show)
                         + (script.live_prompt() if show else ""), voices=voices, book=book, host_only=show,
-                        narrator=narrator_voice(show))
+                        narrator=narrator_voice(show), story_tts=story_tts)
     clock = StoryClock(session, agent, director)  # ~2-minute stories: logs each one's length, nudges a wrap-up
     gestures = GestureSync(book, stage.play, director.request_continue, stage.face, stage.talk,
                            on_sound=lambda kind, name: board.cue(kind, name, budget=not agent.scripted),

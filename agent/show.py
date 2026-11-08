@@ -440,6 +440,7 @@ class ShowRunner:
         self.act = number if act else 0
         self.live = False
         self.agent.scripted = True  # no fill moves, no sfx budget; the story clock stops
+        self.agent.story_voiced = False  # every scripted act: Lars's voice
         if act is None or act.kind == HUMAN:
             self.state = "ready"
             logger.info("show: act %d (%s): ready", self.act, act.title if act else "-")
@@ -524,6 +525,8 @@ class ShowRunner:
         if gen != self._gen:
             return
         self.state = "live" if act.kind == LIVE else "done"
+        if act.kind == LIVE:  # Lars has handed over: the storyteller's voice and the characters' from here
+            self.agent.story_voiced = True
         self._publish()
         if self.auto and (nxt := self.auto_next(act)) is not None:
             self._auto = asyncio.create_task(self._advance(nxt.number, gen))
