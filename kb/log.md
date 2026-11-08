@@ -74,3 +74,5 @@
   other by default. Franchise asks (Star Wars, Pokemon, aliens vs predators…): every scene faces each other, every
   quote has a talk tag, untagged actions 45 → 33. Still missing: look around/spot, jump back/leap out, duck/dodge,
   land/stomp, snap jaws, beat chest, snore, sigh, hop.
+- Owner rule (Nov 7 evening): while the station is unattended, don't run anything on the real arms that comes close
+  to the table (death collapse, fist bang, the Lars pick's grasp). Those wait for someone at the e-stop.
