@@ -42,7 +42,8 @@ SFX_TAG, MUSIC_TAG = "sfx", "music"
 SOUND_TAGS = (SFX_TAG, MUSIC_TAG)
 MUSIC_OFF = ("none", "off", "stop", "no", "silence", "quiet", "nothing")
 
-SFX_VOLUME = float(os.getenv("SFX_VOLUME", "0.2"))  # -12 dB from Nov 7's 0.8: a hit sits ~6 LU under the narrator
+SFX_VOLUME = float(os.getenv("SFX_VOLUME", "0.2"))  # -12 dB from Nov 7's 0.8 (owner: quieter). Measured Nov 7 night:
+# a hit's loudest 400 ms is ~-34 LUFS here (median of the library), ~16 LU under the narrator's typical 3 s (-18)
 SFX_MIN_GAP_S = float(os.getenv("SFX_MIN_GAP_S", "12"))  # story budget: at most one sfx per this many seconds
 SFX_BUFFER_MS = int(os.getenv("SFX_BUFFER_MS", "150"))  # the sound track's send queue (LiveKit's default 400 + a
 # 100 ms mix block kept every sfx ~0.5 s behind its cue while music played); what is queued is cued that much early
@@ -53,7 +54,7 @@ SFX_BLOCK_S = 0.02  # mix block
 OFFERED_NOT = {"gallop", "evil_laugh", "rifle", "stomp", "debris", "spaceship", "magic", "kiss", "laugh_track",
                "laugh_big"}
 MUSIC_VOLUME = float(os.getenv("MUSIC_VOLUME", "0.35"))  # nobody talking
-MUSIC_DUCKED = float(os.getenv("MUSIC_DUCKED", "0.15"))  # under speech: ~17 dB below the voice
+MUSIC_DUCKED = float(os.getenv("MUSIC_DUCKED", "0.15"))  # under speech: ~-36.5 LUFS, ~19 LU under the voices
 MUSIC_FADE_S = 1.5  # crossfade between tracks, fade-in of the first one
 DUCK_S, UNDUCK_S = 0.25, 1.2  # glide time down to MUSIC_DUCKED and back up
 

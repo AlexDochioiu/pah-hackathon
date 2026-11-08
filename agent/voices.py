@@ -13,10 +13,12 @@ from __future__ import annotations
 import asyncio
 import difflib
 import logging
+import os
 import re
 from collections.abc import AsyncIterable, AsyncIterator, Callable
 from dataclasses import dataclass
 
+import numpy as np
 from livekit import rtc
 from livekit.agents import utils
 from livekit.agents.types import NOT_GIVEN
@@ -49,6 +51,47 @@ PALETTE: dict[str, Voice] = {
 ALIASES = {"robot": "deep", "robotic": "deep", "machine": "deep", "alien": "deep", "android": "deep",
            "cyborg": "deep", "computer": "deep"}
 DEFAULT_CAST = {"left": "deep", "right": "squeaky"}  # until the story casts its own
+
+# Playout gain per Fish voice id, in dB, so every voice lands near the storyteller's loudness: out of the TTS they
+# were up to 12 LU apart (squeaky the quietest). Measured Nov 7 night: the mean integrated loudness of three takes
+# per voice (two identical lines and the round-2 casting sample) against the storyteller's -17.4 LUFS. One voice's
+# takes still vary by up to ~3 LU. A soft knee keeps the boosted peaks from clipping (`apply_gain`).
+VOICE_GAIN_DB: dict[str, float] = {
+    STORY_VOICE: 0.0,             # -17.4 LUFS: the reference
+    HOST_VOICE: 5.5,              # Lars, -23.1
+    PALETTE["deep"].id: 3.5,      # -20.7
+    PALETTE["squeaky"].id: 12.0,  # -29.3
+    PALETTE["old"].id: 6.0,       # -23.2
+    PALETTE["child"].id: -1.0,    # -16.5
+    PALETTE["witch"].id: 5.5,     # -23.0
+    PALETTE["pirate"].id: 6.0,    # -23.2
+}
+VOICE_GAIN = os.getenv("VOICE_GAIN", "1") == "1"  # 0: every voice as the TTS sends it
+_KNEE, _CEIL = 0.8, 0.94  # of full scale: samples past the knee bend smoothly toward the ceiling (-0.5 dBFS)
+
+
+def voice_gain(voice_id: str) -> float:
+    """The linear playout gain for a Fish voice id (1.0 for an unmeasured voice, or with VOICE_GAIN=0)."""
+    return 10 ** (VOICE_GAIN_DB.get(voice_id, 0.0) / 20) if VOICE_GAIN else 1.0
+
+
+def apply_gain(frame: rtc.AudioFrame, gain: float) -> rtc.AudioFrame:
+    """`frame` scaled by `gain`; samples past `_KNEE` of full scale bend toward `_CEIL`, never clip."""
+    if gain == 1.0:
+        return frame
+    x = np.frombuffer(frame.data, dtype=np.int16).astype(np.float32) * (gain / 32768.0)
+    over = np.abs(x) > _KNEE
+    if over.any():
+        a = np.abs(x[over])
+        x[over] = np.sign(x[over]) * (_KNEE + (_CEIL - _KNEE) * np.tanh((a - _KNEE) / (_CEIL - _KNEE)))
+    out = np.clip(np.round(x * 32768.0), -32768, 32767).astype(np.int16)
+    return rtc.AudioFrame(out.tobytes(), frame.sample_rate, frame.num_channels, frame.samples_per_channel,
+                          userdata=dict(frame.userdata))
+
+
+async def with_gain(frames: AsyncIterable[rtc.AudioFrame], gain: float) -> AsyncIterator[rtc.AudioFrame]:
+    async for frame in frames:
+        yield apply_gain(frame, gain)
 VOICE_TAG = "voice"
 _CAST_TAG = re.compile(r"^\[\s*voice\s*:\s*(left|right)\s*[=:]\s*([A-Za-z][A-Za-z _-]*?)\s*\]$", re.IGNORECASE)
 

@@ -190,3 +190,13 @@
   how to run, safety model, built with, licences) and [submission.md](submission.md) (form text at 150 and 400 words,
   how Dream-1 is used, challenges incl. the motor "loss communication" dropouts on Dream-1's long reaches, the
   5-minute run sheet with roles and fallbacks, a what-ran-where table). Library: 75 solo gestures, 35 duets/ensembles.
+- Nov 7 night: per-voice playout gain (`voices.VOICE_GAIN_DB`, applied in `Storyteller.tts_node`, soft knee at 0.8 FS
+  bending to -0.5 dBFS; `VOICE_GAIN=0` turns it off). Out of the TTS the voices were 12.8 LU apart (mean of three
+  takes per voice): storyteller -17.4 LUFS, Lars -23.1, deep -20.7, squeaky -29.3, old -23.2, child -16.5, witch
+  -23.0, pirate -23.2. Gains +5.5 / +3.5 / +12 / +6 / -1 / +5.5 / +6 dB put every voice within ~1.2 LU of the
+  storyteller on average (one voice's takes still vary ~3 LU). Music ducked sits ~19 LU under the voices (on target,
+  unchanged). Sfx at 0.2: a hit's loudest 400 ms ~-34 LUFS, ~15-19 LU under the narration (the old "~6 LU" comment
+  was wrong); raising it is Q2 on the round-4 review page. The show's cached acts re-synthesise once (new tts node).
+- Nov 7 night: round-4 review page `/Users/alexandrudochioiu/.review-pages/pah-round-4/index.html` (13 cards: voice
+  gains, sfx level, laugh, borderline/dropped sfx, present, kiss, mime solos and duets, chef_kiss/flick, hit sounds,
+  show roles, Dream-1 miss reaction placeholder).

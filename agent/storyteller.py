@@ -32,7 +32,7 @@ from live import LiveTurns, interruption_options, is_live
 from show import Script, ShowRunner, is_show
 from sounds import SoundBook, Soundboard
 from voices import (DEFAULT_CAST, HOST_VOICE, PALETTE, STORY_VOICE, RunMarks, Tidy, describe_palette, stream_tts,
-                    timestamp_runs, voiced_tts)
+                    timestamp_runs, voice_gain, voiced_tts, with_gain)
 
 HERE = Path(__file__).parent
 load_dotenv(HERE / ".env")
@@ -190,8 +190,9 @@ class StoryClock:
 
 class Storyteller(Agent):
     def __init__(self, *, instructions: str, voices: dict[str, tts.TTS] | None = None,
-                 book: GestureBook | None = None, host_only: bool = False) -> None:
+                 book: GestureBook | None = None, host_only: bool = False, narrator: str = STORY_VOICE) -> None:
         super().__init__(instructions=instructions)
+        self.narrator = narrator  # the session TTS's Fish voice id, for its playout gain (voices.VOICE_GAIN_DB)
         self.voices = voices or {}  # palette name -> TTS; a voice missing here is read by the narrator
         self.cast = dict(DEFAULT_CAST)  # arm -> palette name, recast by [voice:left=...] tags
         self.cast_locked: set[str] = set()  # arms cast in this story: no recast until a new one (new_story)
@@ -235,18 +236,20 @@ class Storyteller(Agent):
             yield chunk
 
     async def tts_node(self, text, model_settings):
-        """Narration in the session's voice, each character's quoted lines in its own (voices.py)."""
+        """Narration in the session's voice, each character's quoted lines in its own (voices.py), each voice at
+        its own playout gain so they all sit at the storyteller's loudness."""
         activity = self._get_activity_or_raise()
         expressive = activity._resolve_expressive_options() is not None
 
         def narrate(t):
-            return Agent.default.tts_node(self, t, model_settings)
+            return with_gain(Agent.default.tts_node(self, t, model_settings), voice_gain(self.narrator))
 
         def speak(name: str):
             if (voice := self.voices.get(name)) is None:
                 return narrate
             voice._set_expressive(expressive)  # what the default tts_node does for the session TTS
-            return lambda t: stream_tts(voice, t, self.session.conn_options.tts_conn_options)
+            gain = voice_gain(PALETTE[name].id)
+            return lambda t: with_gain(stream_tts(voice, t, self.session.conn_options.tts_conn_options), gain)
 
         if self.host_only:
             speak = lambda name: narrate  # noqa: E731 - every quoted line in the host's voice
@@ -317,7 +320,8 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.add_shutdown_callback(shutdown)
 
     agent = Storyteller(instructions=build_instructions(book, sound_book, script, show=show)
-                        + (script.live_prompt() if show else ""), voices=voices, book=book, host_only=show)
+                        + (script.live_prompt() if show else ""), voices=voices, book=book, host_only=show,
+                        narrator=narrator_voice(show))
     clock = StoryClock(session, agent, director)  # ~2-minute stories: logs each one's length, nudges a wrap-up
     gestures = GestureSync(book, stage.play, director.request_continue, stage.face, stage.talk,
                            on_sound=lambda kind, name: board.cue(kind, name, budget=not agent.scripted),

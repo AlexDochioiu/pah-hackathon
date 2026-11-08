@@ -92,6 +92,12 @@ quote, the span its mouth flaps for) by that character's own voice. A quote with
   | `child` | `a3d56467a193409984ce245f8f371c9a` | bright, bouncy child ("Noah") | |
   | `witch` | `d056e4cabd094165b66a1acd65e00cc0` | menacing, dramatic British woman ("Witch") | ~190 Hz |
   | `pirate` | `4d78f878f023424cb77975a6dea180a6` | gruff sea dog: pirates, sailors, scallywags | |
+- Loudness (Nov 7 night): each voice gets a fixed playout gain (`voices.VOICE_GAIN_DB`, by Fish voice id) so it
+  sits at the storyteller's -17.4 LUFS: Lars +5.5, deep +3.5, squeaky +12, old +6, child -1, witch +5.5, pirate +6 dB
+  (they were 12.8 LU apart; now within ~1.2 LU on average, one voice's takes still vary ~3 LU). `Storyteller.tts_node`
+  wraps each run's frames (`with_gain`); a soft knee bends samples past 0.8 FS toward -0.5 dBFS instead of clipping
+  (~0.1% of samples). `VOICE_GAIN=0` turns it off. A new voice id gets 0 dB until measured: synthesise a line or two,
+  `ffmpeg -af ebur128`, set the gain to -17.4 minus its integrated loudness.
 - The robot voice is gone (it sounded awful, owner Nov 7): `robot`, `robotic`, `machine`, `alien`, `android`,
   `cyborg`, `computer` map to `deep` (`voices.ALIASES`).
 - Story mode's narrator is an unnamed storyteller (`STORY_VOICE`, David); Lars hosts only the show (`HOST_VOICE`).
@@ -210,6 +216,8 @@ The prompt says the same: no written laughter, short lines.
 - Volumes (env overrides): `SFX_VOLUME` 0.2 (12 dB under the old 0.8; the files were re-levelled to -18 LUFS
   short-term, Nov 7); music `MUSIC_VOLUME` 0.35 when nobody talks, ducked to
   `MUSIC_DUCKED` 0.15 while the narrator (`agent_state_changed` speaking) or the listener (`user_state_changed`) speaks.
+  Measured Nov 7 night: ducked music sits ~19 LU under the voices; a hit at 0.2 peaks (400 ms) ~-34 LUFS, ~15-19 LU
+  under the narration.
   The music source is our own looping frame generator that glides its gain (down in 0.25 s, up in 1.2 s); a new
   `[music:x]` fades the old track out and the new one in over 1.5 s. Offline mix check: music about -34 dBFS RMS
   between lines, -41 dBFS ducked, an explosion about -17 dBFS.
