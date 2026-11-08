@@ -92,12 +92,13 @@ quote, the span its mouth flaps for) by that character's own voice. A quote with
   | `child` | `a3d56467a193409984ce245f8f371c9a` | bright, bouncy child ("Noah") | |
   | `witch` | `d056e4cabd094165b66a1acd65e00cc0` | menacing, dramatic British woman ("Witch") | ~190 Hz |
   | `pirate` | `4d78f878f023424cb77975a6dea180a6` | gruff sea dog: pirates, sailors, scallywags | |
-- Loudness (Nov 7 night): each voice gets a fixed playout gain (`voices.VOICE_GAIN_DB`, by Fish voice id) so it
-  sits at the storyteller's -17.4 LUFS: Lars +5.5, deep +3.5, squeaky +12, old +6, child -1, witch +5.5, pirate +6 dB
-  (they were 12.8 LU apart; now within ~1.2 LU on average, one voice's takes still vary ~3 LU). `Storyteller.tts_node`
-  wraps each run's frames (`with_gain`); a soft knee bends samples past 0.8 FS toward -0.5 dBFS instead of clipping
-  (~0.1% of samples). `VOICE_GAIN=0` turns it off. A new voice id gets 0 dB until measured: synthesise a line or two,
-  `ffmpeg -af ebur128`, set the gain to -17.4 minus its integrated loudness.
+- Loudness: each voice can get a fixed playout gain (`voices.VOICE_GAIN_DB`, by Fish voice id). Measured Nov 7
+  night (mean of three takes, integrated): storyteller -17.4 LUFS, Lars -23.1, deep -20.7, squeaky -29.3, old -23.2,
+  child -16.5, witch -23.0, pirate -23.2 (12.8 LU apart; one voice's takes vary ~3 LU). Gains in use (owner, round 4,
+  Nov 8): witch +5.5 dB, child -1 dB, every other voice 0 dB; the proposed boosts for Lars (+5.5), deep (+3.5),
+  squeaky (+12), old (+6) and pirate (+6) were declined. `Storyteller.tts_node` wraps each run's frames
+  (`with_gain`); a soft knee bends samples past 0.8 FS toward -0.5 dBFS instead of clipping. `VOICE_GAIN=0` turns
+  it off. A new voice id gets 0 dB.
 - The robot voice is gone (it sounded awful, owner Nov 7): `robot`, `robotic`, `machine`, `alien`, `android`,
   `cyborg`, `computer` map to `deep` (`voices.ALIASES`).
 - Story mode's narrator is an unnamed storyteller (`STORY_VOICE`, David); Lars hosts only the show (`HOST_VOICE`).
@@ -213,11 +214,11 @@ The prompt says the same: no written laughter, short lines.
   first, then the next each time that mood starts). A new file is picked up automatically (describe non-obvious
   names in `ABOUT`/`MUSIC_ABOUT` in `sounds.py`, add common other words to `SFX_SYNONYMS`/`MUSIC_SYNONYMS`).
   Tag names (sfx files, mood folders) must be letters and underscores (no digits: the tag parser rejects them).
-- Volumes (env overrides): `SFX_VOLUME` 0.2 (12 dB under the old 0.8; the files were re-levelled to -18 LUFS
-  short-term, Nov 7); music `MUSIC_VOLUME` 0.35 when nobody talks, ducked to
+- Volumes (env overrides): `SFX_VOLUME` 0.4 (owner, round 4, Nov 8; it was 0.2 from Nov 7 evening, 0.8 before; the
+  files were re-levelled to -18 LUFS short-term, Nov 7); music `MUSIC_VOLUME` 0.35 when nobody talks, ducked to
   `MUSIC_DUCKED` 0.15 while the narrator (`agent_state_changed` speaking) or the listener (`user_state_changed`) speaks.
-  Measured Nov 7 night: ducked music sits ~19 LU under the voices; a hit at 0.2 peaks (400 ms) ~-34 LUFS, ~15-19 LU
-  under the narration.
+  Measured Nov 7 night: ducked music sits ~19 LU under the storyteller; a hit at 0.2 peaks (400 ms) ~-34 LUFS,
+  ~15-19 LU under the narration, so 0.4 puts it ~10-13 LU under.
   The music source is our own looping frame generator that glides its gain (down in 0.25 s, up in 1.2 s); a new
   `[music:x]` fades the old track out and the new one in over 1.5 s. Offline mix check: music about -34 dBFS RMS
   between lines, -41 dBFS ducked, an explosion about -17 dBFS.
@@ -238,10 +239,12 @@ The prompt says the same: no written laughter, short lines.
 - Budget (stories and comedy): at most one sfx per `SFX_MIN_GAP_S` (12 s), about one per beat; a gesture's own
   hit sound counts. Over budget it is dropped and logged ("dropped [sfx:x]: budget"). Scripted show acts are exempt.
 - Not offered (files kept, `sounds.OFFERED_NOT`; the prompt doesn't list them and a tag maps to a near sound or is
-  dropped): gallop, evil_laugh, rifle (→ gunshot), stomp (→ footsteps), debris (→ crash), spaceship (→ flyby), magic
-  (→ spell), kiss, laugh_track, laugh_big. double_take has no hit sound.
+  dropped): evil_laugh, stomp (→ footsteps), spaceship (→ flyby), magic (→ spell), kiss, laugh_track and laugh_big
+  (→ laugh). Rifle, gallop and debris are offered again, and all 23 borderline sfx stay (owner, round 4, Nov 8).
+  double_take has no hit sound.
 - Comedy mode (prompt "Comedy show"): the opening offers a story or a comedy show; the two arms are a double act
-  (the set's two characters, cast once), `[music:lounge]`, `[sfx:rimshot]` after a punchline, crickets or
+  (the set's two characters, cast once), `[music:lounge]`, `[sfx:rimshot]` or `[sfx:laugh]` after a punchline (`laugh`:
+  `sfx/crowd/laugh.ogg`, a 2 s small-crowd burst, the owner's round-4 pick of four CC0 candidates), crickets or
   sad_trombone for a deliberate flop; about 2 minutes like a story.
 
 ## Interruptions and idle

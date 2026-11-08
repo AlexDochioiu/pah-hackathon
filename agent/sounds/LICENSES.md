@@ -81,6 +81,7 @@ on 2026-11-07.
 | `sfx/crowd/laugh_track.ogg` | Freesound [#383207](https://freesound.org/s/383207/) | Kinoton | Sitcom Laughter 9x, Small Audience | CC0 |
 | `sfx/crowd/laugh_big.ogg` | Freesound [#581528](https://freesound.org/s/581528/) | HowardV | live audience comedy show genuine laughter_moderate.wav | CC0 |
 | `sfx/crowd/rimshot.ogg` | Freesound [#271208](https://freesound.org/s/271208/) | OverlookHotelRecords | Baddum Tish - Comedy Rimshots - classic rim shot.wav | CC0 |
+| `sfx/crowd/laugh.ogg` | Freesound [#242244](https://freesound.org/s/242244/) | ehohnke | ShortStockLaughter2.wav (from its 128 kbps preview; whole file, 30 ms fade-in, 0.35 s fade-out, high-passed at 80 Hz; added Nov 8) | CC0 |
 | `sfx/crowd/crickets.ogg` | Freesound [#129678](https://freesound.org/s/129678/) | FreethinkerAnon | crickets | CC0 |
 | `sfx/crowd/sad_trombone.ogg` | Freesound [#175409](https://freesound.org/s/175409/) | kirbydx | wah wah sad trombone.wav | CC0 |
 

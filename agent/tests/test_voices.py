@@ -126,7 +126,7 @@ def test_gain_scales_quiet_samples_and_keeps_the_frame_shape():
 
 def test_gain_bends_loud_peaks_under_full_scale_instead_of_clipping():
     ramp = np.linspace(-32768, 32767, 2001).astype(np.int16)
-    out = _samples(apply_gain(_frame(ramp), 10 ** (12 / 20))).astype(int)  # squeaky's boost on a full-scale ramp
+    out = _samples(apply_gain(_frame(ramp), 10 ** (12 / 20))).astype(int)  # a +12 dB boost on a full-scale ramp
     assert out.max() <= 0.95 * 32767 and out.min() >= -0.95 * 32768  # under -0.5 dBFS: no wrap, no flat-top clip
     assert np.all(np.diff(out) >= 0)  # still monotonic: louder in stays louder out
     assert out.max() > 0.9 * 32767  # and the peaks still get loud
@@ -142,7 +142,9 @@ def test_every_voice_has_a_measured_gain():
         assert vid in VOICE_GAIN_DB
     assert VOICE_GAIN_DB[STORY_VOICE] == 0.0  # the storyteller is the reference
     assert voice_gain(STORY_VOICE) == 1.0 and voice_gain("an unmeasured voice") == 1.0
-    assert abs(voice_gain(PALETTE["squeaky"].id) - 10 ** (VOICE_GAIN_DB[PALETTE["squeaky"].id] / 20)) < 1e-9
+    assert abs(voice_gain(PALETTE["witch"].id) - 10 ** (5.5 / 20)) < 1e-9  # the one boost kept (owner, round 4)
+    assert abs(voice_gain(PALETTE["child"].id) - 10 ** (-1 / 20)) < 1e-9
+    assert voice_gain(HOST_VOICE) == 1.0 and voice_gain(PALETTE["squeaky"].id) == 1.0  # boosts declined
 
 
 def test_with_gain_streams_every_frame():

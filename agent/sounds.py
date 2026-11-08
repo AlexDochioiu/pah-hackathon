@@ -42,17 +42,16 @@ SFX_TAG, MUSIC_TAG = "sfx", "music"
 SOUND_TAGS = (SFX_TAG, MUSIC_TAG)
 MUSIC_OFF = ("none", "off", "stop", "no", "silence", "quiet", "nothing")
 
-SFX_VOLUME = float(os.getenv("SFX_VOLUME", "0.2"))  # -12 dB from Nov 7's 0.8 (owner: quieter). Measured Nov 7 night:
-# a hit's loudest 400 ms is ~-34 LUFS here (median of the library), ~16 LU under the narrator's typical 3 s (-18)
+SFX_VOLUME = float(os.getenv("SFX_VOLUME", "0.4"))  # owner, round 4 (Nov 8): 0.4. At 0.2 a hit's loudest 400 ms
+# measured ~-34 LUFS (median of the library), 15-19 LU under the narration; at 0.4 ~-28, ~10-13 LU under
 SFX_MIN_GAP_S = float(os.getenv("SFX_MIN_GAP_S", "12"))  # story budget: at most one sfx per this many seconds
 SFX_BUFFER_MS = int(os.getenv("SFX_BUFFER_MS", "150"))  # the sound track's send queue (LiveKit's default 400 + a
 # 100 ms mix block kept every sfx ~0.5 s behind its cue while music played); what is queued is cued that much early
 SFX_BLOCK_S = 0.02  # mix block
-# Kept on disk, never offered or played (Nov 7 listening proxy, kb/storyteller.md): clipped (gallop), squashed or
-# droning (rifle, spaceship), sub-bass mud on a small speaker (stomp, debris), piercing hiss (magic, kiss), too long and
-# hammy (evil_laugh); laugh_track / laugh_big sound canned (owner, Nov 7: replacements on a review page).
-OFFERED_NOT = {"gallop", "evil_laugh", "rifle", "stomp", "debris", "spaceship", "magic", "kiss", "laugh_track",
-               "laugh_big"}
+# Kept on disk, never offered or played (Nov 7 listening proxy, kb/storyteller.md): droning (spaceship), sub-bass mud
+# on a small speaker (stomp), piercing hiss (magic, kiss), too long and hammy (evil_laugh); laugh_track / laugh_big
+# sound canned (owner, Nov 7; `laugh` replaced them in round 4). Rifle, gallop and debris are back (owner, round 4).
+OFFERED_NOT = {"evil_laugh", "stomp", "spaceship", "magic", "kiss", "laugh_track", "laugh_big"}
 MUSIC_VOLUME = float(os.getenv("MUSIC_VOLUME", "0.35"))  # nobody talking
 MUSIC_DUCKED = float(os.getenv("MUSIC_DUCKED", "0.15"))  # under speech: ~-36.5 LUFS, ~19 LU under the voices
 MUSIC_FADE_S = 1.5  # crossfade between tracks, fade-in of the first one
@@ -68,6 +67,8 @@ ABOUT = {
     "spell": "a spell is cast", "poof": "vanish in smoke",
     "zip": "a quick cartoon zip", "tada": "a tada fanfare", "drum_roll": "before a reveal",
     "rimshot": "ba-dum-tss, after a punchline", "crickets": "nobody laughed, after a flop",
+    "laugh": "a small crowd laughs, after a big punchline", "rifle": "a machine-gun burst",
+    "gallop": "a horse gallops", "debris": "an explosion and falling rubble",
     "sad_trombone": "wah-wah-waaah, a flop",
     "slide_whistle": "a cartoon fall", "gasp": "the crowd gasps",
     "audience_ooh": "the audience goes ooooh", "audience_aww": "the audience goes awww",
@@ -107,12 +108,14 @@ SFX_SYNONYMS = {
     "chirp": "bird", "meow": "cat", "bark": "dog", "woof": "dog", "ribbit": "frog", "croak": "frog",
     "drumroll": "drum_roll", "fanfare": "tada", "clap": "applause",
     "claps": "applause", "clapping": "applause", "hooray": "cheer", "crowd": "cheer", "cheering": "cheer",
-    "badumtss": "rimshot", "ba_dum_tss": "rimshot",
+    "badumtss": "rimshot", "ba_dum_tss": "rimshot", "laughter": "laugh", "laughing": "laugh", "chuckle": "laugh",
+    "giggle": "laugh", "haha": "laugh", "audience_laugh": "laugh", "crowd_laugh": "laugh", "horse": "gallop",
+    "machinegun": "rifle",
     "drum": "rimshot", "cricket": "crickets", "silence": "crickets", "trombone": "sad_trombone", "fail": "sad_trombone",
     "wah_wah": "sad_trombone", "ooh": "audience_ooh", "oooh": "audience_ooh", "aww": "audience_aww",
     "awww": "audience_aww", "whistle": "slide_whistle",
     # the unoffered files, to their nearest offered sound (none for the rest)
-    "rifle": "gunshot", "stomp": "footsteps", "debris": "crash", "spaceship": "flyby", "magic": "spell",
+    "stomp": "footsteps", "spaceship": "flyby", "magic": "spell", "laugh_track": "laugh", "laugh_big": "laugh",
 }
 MUSIC_SYNONYMS = {
     "quest": "adventure", "journey": "adventure", "happy": "adventure", "scary": "spooky", "creepy": "spooky",

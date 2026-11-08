@@ -218,3 +218,8 @@
   fallback ends held) and a miss check after each chunk: an `oops` event, `facepalm` through `/play`, then our own
   pick. Live mode: sad trombone and one LLM line about the miss. Kin stage: an empty-grip replay and a dropped-in-
   the-closing-chunk replay (reads as a timeout: the kin stage never took him) both facepalmed and fell back.
+- Nov 8 (round-4 audio answers): voice boosts declined except the witch's (+5.5 dB; child keeps -1 dB; Lars, deep,
+  squeaky, old, pirate back to 0); `SFX_VOLUME` 0.2 → 0.4; a crowd laugh `[sfx:laugh]` (`sfx/crowd/laugh.ogg`,
+  Freesound #242244 by ehohnke, CC0, levelled to the crowd files: max momentary -18.5 LUFS) after punchlines in
+  comedy, laugh_track/laugh_big map to it; rifle, gallop and debris offered again; all 23 borderline sfx kept; sounds
+  on the visible hit unchanged.

@@ -72,11 +72,11 @@ def test_tags_first_leaves_sound_tags_where_they_are():
 def test_library_and_fuzzy_names():
     assert len(LIBRARY.sfx) >= 60 and len(LIBRARY.music) >= 15
     assert all(len(tracks) >= 2 for tracks in LIBRARY.music.values()), {m: len(t) for m, t in LIBRARY.music.items()}
-    for name in ("explosion", "rimshot", "crickets", "sad_trombone", "applause", "frog", "gunshot", "cannon"):
+    for name in ("explosion", "rimshot", "crickets", "sad_trombone", "applause", "frog", "gunshot", "cannon", "laugh",
+                 "rifle", "gallop", "debris"):  # laugh, rifle, gallop, debris: owner, round 4
         assert name in LIBRARY.sfx
     for name in sounds.OFFERED_NOT:  # on disk, never offered or played
-        assert name not in LIBRARY.sfx and LIBRARY.resolve_sfx(name) in (None, "gunshot", "footsteps", "crash",
-                                                                          "flyby", "spell")
+        assert name not in LIBRARY.sfx and LIBRARY.resolve_sfx(name) in (None, "footsteps", "flyby", "spell", "laugh")
     assert not list(sounds.SOUNDS_DIR.glob("sfx/*/record_scratch.ogg"))
     assert all(len(n) <= 16 and n.replace("_", "").isalpha() for n in LIBRARY.sfx)  # short, tag-safe names
     assert LIBRARY.resolve_sfx("explosion") == "explosion"
@@ -87,7 +87,8 @@ def test_library_and_fuzzy_names():
     assert LIBRARY.resolve_sfx("evil_laugh") is None and LIBRARY.resolve_sfx("scratch") is None
     assert LIBRARY.resolve_sfx("stomp") == "footsteps" and LIBRARY.resolve_sfx("sparkle") == "spell"
     assert LIBRARY.resolve_sfx("kaboom") == "explosion"
-    assert LIBRARY.resolve_sfx("laughter") is None and LIBRARY.resolve_sfx("laugh_track") is None
+    assert LIBRARY.resolve_sfx("laughter") == "laugh" and LIBRARY.resolve_sfx("laugh_track") == "laugh"
+    assert LIBRARY.resolve_sfx("laugh_big") == "laugh" and LIBRARY.resolve_sfx("rifle") == "rifle"
     assert LIBRARY.resolve_sfx("ba-dum-tss") == "rimshot"
     assert LIBRARY.resolve_sfx("explosoin") == "explosion"
     assert LIBRARY.resolve_sfx("xylophone_solo") is None
