@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import Any, Callable
 
 from gestures import Stage
 
@@ -21,6 +21,7 @@ class Director:
         self.user_state, self.agent_state = "listening", "initializing"
         self.continue_pending = False  # the last scene ended with [next] and was heard to the end
         self.holding = False  # push-to-talk: the listener holds the talk button
+        self.freeze_on_speech = True  # live chat (live.LiveTurns): freeze on a real cut-in, not on any VAD speech
         self._timer: asyncio.Task | None = None
         session.on("user_state_changed", self._on_user_state)
         session.on("agent_state_changed", self._on_agent_state)
@@ -50,7 +51,7 @@ class Director:
 
     def _on_user_state(self, ev: Any) -> None:
         self.user_state = ev.new_state
-        if ev.new_state == "speaking":
+        if ev.new_state == "speaking" and self.freeze_on_speech:
             self._listener_cut_in()
         else:
             self._reschedule()
@@ -91,8 +92,9 @@ class PushToTalk:
     # interim transcript is used.
     TRANSCRIPT_TIMEOUT_S = 2.5
 
-    def __init__(self, session: Any, director: Director) -> None:
+    def __init__(self, session: Any, director: Director, hush: Callable[[], None] | None = None) -> None:
         self._session, self._director = session, director
+        self._hush = hush  # stops the sound effects (storyteller.py), as a live-chat cut-in does
         self._turn = 0
 
     def register(self, participant: Any) -> None:
@@ -110,6 +112,8 @@ class PushToTalk:
     def start_turn(self) -> None:
         self._turn += 1
         self._director.hold()
+        if self._hush:
+            self._hush()
         self._session.interrupt()
         self._session.clear_user_turn()
         self._session.input.set_audio_enabled(True)

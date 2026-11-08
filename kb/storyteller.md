@@ -15,6 +15,7 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 | `agent/voices.py` | Character voices: the voice palette, the voice-run splitter, parallel synthesis, run timing. |
 | `agent/director.py` | Freeze when the listener talks, idle when the stage is quiet, auto-continue to the next scene. |
 | `agent/app.py`, `agent/web/index.html` | Story Theatre: hold-to-talk web page plus the PTT worker it runs. |
+| `agent/live.py` | Live chat, the story page's open-mic mode: interruption knobs and the cut-in stage direction. |
 | `agent/show.py`, `agent/show.md` | Show mode: the clicker-cued presentation and its script. |
 | `agent/fake_stage.py` | Stdlib stand-in for `robot/stage.py`, same API, prints what the arms would do. |
 | `agent/telephony/dispatch-rule.json` | SIP dispatch rule for a phone number (not applied yet). |
@@ -164,8 +165,9 @@ quote, the span its mouth flaps for) by that character's own voice. A quote with
   upcoming hit; one in a later sentence plays when spoken, as before. Refused gesture: a pending `[sfx]` plays at
   once. A hit already past plays now unless that sound already played. `SFX_SYNC_MS` (agent/.env, default 0)
   shifts every scheduled sound: the sim measures ~12 ms from POST to the first commanded sample, so tune it by ear
-  on the real arms. Known gap: an interruption does not cancel hit sounds already scheduled (ponytail: they are
-  at most a few seconds out).
+  on the real arms. A listener cut-in (a push-to-talk press, or a live-chat interruption) stops the sound effects
+  already playing (`Soundboard.stop_sfx`; the music only ducks) and cancels hit sounds still scheduled
+  (`GestureSync.cancel_sounds` → `Hit.cancel`): the frozen arms never reach those hits. A show cue doesn't.
 - Comedy mode (prompt "Comedy show"): the opening offers a story or a comedy show; the arms do stand-up (two
   comedians, comedian and heckler, or a double act), `[music:lounge]`, and `[sfx:rimshot]` / `[sfx:laugh_track]`
   after small punchlines, `[sfx:laugh_big]` only after the best joke or two, with crickets or sad_trombone for a
@@ -174,6 +176,7 @@ quote, the span its mouth flaps for) by that character's own voice. A quote with
 ## Interruptions and idle
 - `user_state_changed` → `speaking`: `POST /freeze` at once (VAD start of speech, before STT), and any pending
   next scene is cancelled. The prompt tells the LLM to answer with one playful line and carry on with the change.
+  This is the console/`dev` behaviour; push-to-talk freezes on the press, live chat on a real cut-in (below).
 - Agent listening and nobody talking: `POST /idle` after `IDLE_AFTER_S` (1.5 s), or later if the last gesture
   (`busy_until`, from the gesture durations) is still playing, so the final bow finishes.
 - Session start: `POST /stage`, then the greeting. Session end: `POST /rest`.
@@ -200,8 +203,8 @@ works). The talk button (or the space bar) is the only way in: the mic is ignore
   station. Stage down shows "stage: offline".
 - Agent side (`PTT=1`): `turn_detection="manual"`, input audio off after `session.start()`, and three RPC methods on
   the agent's participant (`director.PushToTalk`), which the page calls:
-  - `start_turn`: freeze the arms (same as listener speech, and no idling while held, `Director.hold`), interrupt,
-    clear the user turn, audio on.
+  - `start_turn`: freeze the arms (same as listener speech, and no idling while held, `Director.hold`), stop the
+    sound effects (`hush`), interrupt, clear the user turn, audio on.
   - `end_turn`: audio off, `commit_user_turn(transcript_timeout=2.5)`. The arms stay frozen until the commit
     resolves, then the usual idle/next-scene logic resumes. A press shorter than 250 ms is sent as `cancel_turn`.
   - `cancel_turn`: audio off, clear the user turn (also sent when the window loses focus mid-hold).
@@ -210,6 +213,42 @@ works). The talk button (or the space bar) is the only way in: the mic is ignore
   transcript until `transcript_timeout`, then uses what it has. At 10 s that made replies start 13 s after release;
   at 2.5 s they start ~3.5 s after.
 - The page loads `livekit-client` 2.23.0 from jsDelivr (the venue needs internet for LiveKit anyway).
+
+## Live chat: the story page's open-mic mode
+The `mode: hold to talk ⇄` chip in the story page's header (not on `/show`) flips to `mode: live chat`: the
+audience just talks, and can cut the storyteller off mid-sentence. Hold to talk stays the default; the choice is
+kept in the browser (`localStorage.storyMode`).
+- Switching ends the current story and starts a fresh room in the new mode (the greeting comes again). LiveKit
+  1.8.11 can change `turn_detection` (`session.update_options`) and the audio input at runtime, but not the
+  interruption options, so a fresh room was the simpler, cleaner path.
+- Page: `/token?mode=live` → dispatch metadata `{"mode":"live"}` (`app.dispatch_metadata`). The talk button turns
+  into a mint "LIVE CHAT" panel with a mic level meter (`createAudioAnalyser` on the local mic track) and the
+  agent's state ("listening: just talk", "talk any time to cut in"); press and space do nothing. The mic is
+  captured with `echoCancellation`, `noiseSuppression` and `autoGainControl` on (checked in Chrome's track
+  settings): the voice plays from the same laptop.
+- Agent (`agent/live.py`, `live.is_live`): audio input on, `inference.TurnDetector()`, silero VAD (LiveKit's
+  default `inference.VAD`, built into livekit-agents 1.8: no plugin needed), noise cancellation as before, and the
+  interruption knobs below. `live.LiveTurns` replaces the director's freeze-on-any-VAD-speech
+  (`Director.freeze_on_speech = False`): the arms freeze, the pending next scene drops and the sound effects stop
+  (`hush`) when the voice actually stops for the listener (agent state speaking → listening while the user speaks),
+  the same as a push-to-talk press. A final transcript between scenes also drops the pending next scene.
+- Knobs (agent/.env, read per session):
+
+  | Env | Default | LiveKit's | What |
+  |---|---|---|---|
+  | `LIVE_INTERRUPT_MODE` | `adaptive` | auto | `adaptive`: LiveKit's model tells a cut-in from "uh-huh" (on in `dev`); `vad`: any speech |
+  | `LIVE_MIN_INTERRUPT_S` | 0.6 | 0.5 | speech this long before it counts as an interruption |
+  | `LIVE_MIN_INTERRUPT_WORDS` | 2 | 0 | transcribed words needed too; a one-word "stop" doesn't cut in (0 = off) |
+  | `LIVE_RESUME` | 1 | 1 | a cut-in that turns out to be noise: the voice resumes where it paused |
+  | `LIVE_FALSE_INTERRUPT_S` | 2.0 | 2.0 | silence after a cut-in with no words before it counts as noise |
+- A false interruption (noise that paused the voice) still froze the arms and stopped the sfx; the voice resumes
+  and the next tags fire, but the frozen gesture doesn't finish.
+- Checked Nov 7 (fake stage `--backend kin`, headless Chrome with a looping recorded sentence as the mic): the
+  toggle, the meter, the turn detector (sentence heard, reply), and an interruption every loop mid-reply ("live:
+  the listener cut in" in the worker log). Not checkable headless: echo from a real speaker, a noisy room, how the
+  guards feel.
+- Headless test gotcha: Chrome's `--use-file-for-fake-audio-capture` needs `--disable-features=AudioServiceSandbox`
+  on macOS, or the mic is silent ("Failed to read … as input to the fake device").
 
 ## Show mode (the hackathon presentation)
 Clicker-cued acts: the arms cut in on a founder, introduce Lars, the founders and the project, then hand over to

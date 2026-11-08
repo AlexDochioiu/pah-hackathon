@@ -5,7 +5,7 @@ Update this page when a piece is added or a connection changes. Details live on 
 ```
  laptop                                              station (robot PC)
  ┌──────────────────────────────┐                    ┌──────────────────────────────┐
- │ web page (hold to talk, STOP)│ ◄── room audio ──┐ │ stage.py --real  :8770       │
+ │ web page (hold/live, STOP)   │ ◄── room audio ──┐ │ stage.py --real  :8770       │
  │   agent/web/index.html       │                  │ │  gestures/duets/ensembles    │
  │ app.py :8790 ── runs ──► storyteller worker ────┼─┼─► /play /duet /stance /talk  │
  │                              │  LiveKit room    │ │   /props /freeze /rest       │
@@ -16,7 +16,9 @@ Update this page when a piece is added or a connection changes. Details live on 
 ```
 
 ## The chain, one sentence at a time
-1. The user holds the button and talks. The web page sends the audio to the LiveKit room.
+1. The user holds the button and talks. The web page sends the audio to the LiveKit room. (Or, with the story
+   page's `mode: live chat` toggle, just talks: open mic, LiveKit's VAD + turn detector take the turns and a cut-in
+   interrupts the storyteller; `agent/live.py`, a fresh room per mode.)
 2. The storyteller (`agent/storyteller.py`) runs STT → LLM. The LLM writes narration with inline tags
    (`[left:roar]`, `[duet:hug]`, `[talk:left] "…"`, `[face:each_other]`, `[props:right]`, `[sfx:x]`,
    `[music:x]`, and soon `[pick:lars]`). The prompt is `agent/prompt.md`; the gesture list in it comes from the stage server.

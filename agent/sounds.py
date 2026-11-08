@@ -262,6 +262,12 @@ class Soundboard:
             handle.stop()
             self._music = None
 
+    def stop_sfx(self) -> None:
+        """The listener cut in: the sound effects stop with the voice (the music keeps going, ducked)."""
+        for handle in list(self._sfx):
+            handle.stop()
+        self._sfx.clear()
+
     def stop_all(self) -> None:
         """STOP / end of the show: silence everything at once."""
         self.stop_music(fade=False)

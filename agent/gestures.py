@@ -24,6 +24,7 @@ import logging
 import os
 import re
 import time
+import weakref
 from collections.abc import AsyncIterable, Callable
 from dataclasses import dataclass
 
@@ -349,6 +350,13 @@ class Hit:
         self._played.add(name)
         self._play(name)
 
+    def cancel(self) -> None:
+        """The listener cut in and the arms froze: the hits never land, so their sounds never play."""
+        for h in self._timers:
+            h.cancel()
+        self._timers = []
+        self._play = lambda _name: None  # also for a stage reply (started) or an [sfx] that comes after this
+
 
 class GestureBook:
     """The gestures the stage knows, and mapping of whatever the LLM wrote onto them."""
@@ -569,6 +577,13 @@ class GestureSink(io.TextOutput):
         self._toys: dict[str, str | None] = {"left": None, "right": None}  # toy kind each arm holds ([props:left car])
         self._hit: Hit | None = None  # the hits of this sentence's gesture: its [sfx] tags land on them
         self._ended = False  # the text so far ends a sentence: the next word starts a new one
+        self._hits: weakref.WeakSet[Hit] = weakref.WeakSet()  # alive while a sound is still to come
+
+    def cancel_sounds(self) -> None:
+        """An interruption: drop every hit sound still scheduled."""
+        for hit in list(self._hits):
+            hit.cancel()
+        self._hit = None  # the next reply's [sfx] plays when spoken, not on a cancelled hit
 
     def _talk(self, arm: str | None) -> None:
         if self._talker and self._on_talk:
@@ -653,6 +668,7 @@ class GestureSink(io.TextOutput):
             return
         hit = Hit(snd[1], snd[0], lambda n: self._on_sound(SFX_TAG, n) if self._on_sound else None)
         self._hit = hit
+        self._hits.add(hit)
         self._play(arm, name, secs, on_start=hit.started)
 
     async def capture_text(self, text: str) -> None:
@@ -681,10 +697,16 @@ class GestureSync:
         self._book, self._play, self._on_continue, self._on_face = book, play, on_continue, on_face
         self._on_talk, self._on_sound = on_talk, on_sound
         self.sync: TranscriptSynchronizer | None = None
+        self.sink: GestureSink | None = None
+
+    def cancel_sounds(self) -> None:
+        """An interruption: hit sounds still scheduled never play (see Hit.cancel)."""
+        if self.sink:
+            self.sink.cancel_sounds()
 
     def install(self, output: io.AgentOutput) -> None:
-        sink = GestureSink(self._book, self._play, self._on_continue, next_in_chain=output.transcription,
-                           on_face=self._on_face, on_talk=self._on_talk, on_sound=self._on_sound)
+        sink = self.sink = GestureSink(self._book, self._play, self._on_continue, next_in_chain=output.transcription,
+                                       on_face=self._on_face, on_talk=self._on_talk, on_sound=self._on_sound)
         if output.audio is None:  # text-only (console --text): nothing to sync to, fire as the text streams
             logger.warning("no audio output: gestures fire as the text arrives, not synced to speech")
             output.transcription = sink

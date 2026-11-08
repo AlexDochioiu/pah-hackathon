@@ -143,6 +143,11 @@
 - Nov 7 ~20:00: ufo_abduct back under 8 s (7.9): the hover is 2.1 s (was 2.3), trembling 0.2 s less; the rise into
   the beam keeps its 1.0 s and the saucer's bob its phase against it (a faster rise closed at 5.5–6.4 cm/s). Previews
   re-rendered for every move the Round 3 table/offset changed (gifs, each_other(_props) gifs, sound mp4s).
+- Nov 7 ~20:10: Live chat mode on the story page (`agent/live.py`): a header chip flips between hold to talk (default)
+  and an open mic with LiveKit's turn detector, silero VAD and interruptions, in a fresh room. Guards (env):
+  `LIVE_MIN_INTERRUPT_S` 0.6, `LIVE_MIN_INTERRUPT_WORDS` 2, `LIVE_INTERRUPT_MODE` adaptive, `LIVE_RESUME` 1,
+  `LIVE_FALSE_INTERRUPT_S` 2.0. A real cut-in freezes the arms like a press; a cut-in (live or press) now also
+  stops the sound effects and cancels scheduled hit sounds. Checked with headless Chrome feeding a recorded sentence.
 - Nov 7 ~20:30: rub_hands under 8 s (7.9: three rubs, the big moves at FAST). The owner saw fist_bump as a kiss
   (two heads meeting mouth to mouth): renamed `kiss`, same trajectory, `sound` kiss at 3.3 s (its closest contact
   3.32 s); agent synonyms kiss/smooch/kissed/true love's kiss (the fist bump words deal/partners/bro dropped).

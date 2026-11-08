@@ -34,6 +34,15 @@
   #talk.held { background:var(--tomato); color:var(--paper); transform:translateY(6px); box-shadow:0 2px 0 var(--ink); }
   #talk:disabled { background:var(--cream-deep); color:var(--ink-soft); cursor:not-allowed; }
   #talk:focus-visible { outline:4px solid var(--sky); outline-offset:4px; }
+  /* live chat (open mic): the talk button turns into a mic level meter */
+  #talk.live { background:var(--mint); cursor:default; }
+  #talk.live:disabled { background:var(--cream-deep); }
+  #level { display:none; width:70%; height:18px; margin:12px auto 0; border:var(--line); border-radius:var(--r-pill);
+           background:var(--paper); overflow:hidden; }
+  #talk.live #level { display:block; }
+  #level i { display:block; height:100%; width:0; background:var(--ink); }
+  button.chip { font-family:inherit; color:var(--ink); cursor:pointer; }
+  body.show-mode #c-mode { display:none; }
   #stop { display:block; margin:0 auto; width:min(560px, 90vw); height:64px; border:var(--line); border-radius:var(--r-md);
           background:var(--tomato); color:var(--paper); font:800 30px var(--font-body); letter-spacing:1px;
           box-shadow:0 5px 0 var(--ink); cursor:pointer; }
@@ -78,6 +87,7 @@
   <span class="chip" id="c-room">room</span>
   <span class="chip" id="c-agent">storyteller</span>
   <span class="chip" id="c-stage">stage</span>
+  <button class="chip" id="c-mode">mode</button>
   <a class="chip" id="mode" href="/show">Show mode →</a>
 </header>
 <section id="show">
@@ -89,7 +99,7 @@
     &nbsp;|&nbsp; STOP: Esc. The talk button works in the demo act.</div>
 </section>
 <div id="say">Starting…</div>
-<button id="talk" disabled>HOLD TO TALK<small>or hold the space bar</small></button>
+<button id="talk" disabled>HOLD TO TALK<small>or hold the space bar</small><span id="level"><i></i></span></button>
 <button id="stop">■ STOP<small style="font-size:16px;font-weight:600"> &nbsp;arms freeze, then rest · Esc</small></button>
 <div id="transcript"></div>
 <footer><span id="f-version">version ?</span><span id="f-room"></span><span id="f-stage"></span></footer>
@@ -109,6 +119,9 @@ const segments = new Map();  // segment id -> <p>
 const SHOW = location.pathname.replace(/\/+$/, "") === "/show";
 let script = null, current = 0, pendingCue = null;
 if (SHOW) { document.body.classList.add("show-mode"); $("mode").textContent = "← Story mode"; $("mode").href = "/"; }
+// story page only: "Hold to talk" (the default) or "Live chat" (open mic, the agent takes the turns; agent/live.py)
+let LIVE = !SHOW && localStorage.getItem("storyMode") === "live";
+let level = null;  // live chat: the mic's analyser, for the level meter
 
 function chip(id, text, cls) { const el = $(id); el.textContent = text; el.className = "chip " + (cls || ""); }
 
@@ -150,13 +163,19 @@ function renderShow() {
 
 function render() {
   const ready = room !== null && agent !== null;
+  if (!room && level) stopLevel();  // the room went (STOP, a mode switch, a server restart): so does the meter
   talk.disabled = !ready || !liveNow();
   talk.classList.toggle("held", holding);
-  talk.firstChild.textContent = holding ? "LISTENING…" : "HOLD TO TALK";
-  talk.querySelector("small").textContent = holding ? "let go when you're done" : SHOW ? (liveNow() ? "hold it while you talk" : "lights up in the demo act") : "or hold the space bar";
+  talk.classList.toggle("live", LIVE);
+  const st = agentState();
+  chip("c-mode", LIVE ? "mode: live chat ⇄" : "mode: hold to talk ⇄", LIVE ? "ok" : "");
+  $("c-mode").title = LIVE ? "Switch to hold to talk (starts a new story)" : "Switch to live chat: open mic, talk any time (starts a new story)";
+  talk.firstChild.textContent = LIVE ? "LIVE CHAT" : holding ? "LISTENING…" : "HOLD TO TALK";
+  talk.querySelector("small").textContent = LIVE ? ({ listening: "listening: just talk", speaking: "talk any time to cut in",
+                                                       thinking: "thinking…" }[st] || "open mic")
+    : holding ? "let go when you're done" : SHOW ? (liveNow() ? "hold it while you talk" : "lights up in the demo act") : "or hold the space bar";
   renderShow();
   flushCue();
-  const st = agentState();
   chip("c-agent", agent ? "storyteller: " + st : (room ? "storyteller: not here yet" : "storyteller"),
        agent ? "ok" : (room ? "wait" : ""));
   if (!serverUp) say.textContent = "Server restarting…";
@@ -164,6 +183,7 @@ function render() {
   else if (!agent) say.textContent = "Waiting for the storyteller…";
   else if (holding) say.textContent = "Listening to you…";
   else if (SHOW && !liveNow() && st === "listening") say.textContent = "Waiting for the next cue";
+  else if (LIVE && (st === "listening" || st === "speaking")) say.textContent = st === "listening" ? "Listening: just talk" : "Telling the story (talk to cut in)";
   else say.textContent = { speaking: "Telling the story", thinking: "Thinking…", listening: "Hold the button and talk",
                            initializing: "Getting ready…" }[st] || st;
 }
@@ -200,7 +220,8 @@ async function connect() {
   connecting = true;
   chip("c-room", "room: joining", "wait");
   try {
-    const t = await (await fetch(SHOW ? "/token?mode=show" : "/token", { cache: "no-store" })).json();
+    const t = await (await fetch(SHOW ? "/token?mode=show" : LIVE ? "/token?mode=live" : "/token", { cache: "no-store" })).json();
+    // the voice plays from the laptop speaker in the same room: the browser's echo cancellation keeps it off the mic
     const r = new LK.Room({ audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     r.on(LK.RoomEvent.ParticipantConnected, findAgent)
      .on(LK.RoomEvent.ParticipantDisconnected, findAgent)
@@ -212,7 +233,7 @@ async function connect() {
      .on(LK.RoomEvent.AudioPlaybackStatusChanged, () => $("banner").classList.toggle("show", !r.canPlaybackAudio))
      .on(LK.RoomEvent.Disconnected, (reason) => {
         if (room !== r) return;
-        room = null; agent = null; holding = false;
+        room = null; agent = null; holding = false; stopLevel();
         parked = reason === LK.DisconnectReason.ROOM_DELETED;  // another window took the story, or the server stopped
         chip("c-room", "room: left", "bad");
         render();
@@ -231,7 +252,8 @@ async function connect() {
     $("f-room").textContent = "room " + t.room;
     chip("c-room", "room: joined", "ok");
     findAgent();
-    await r.localParticipant.setMicrophoneEnabled(true);
+    const mic = await r.localParticipant.setMicrophoneEnabled(true);
+    if (LIVE && mic && mic.track) startLevel(mic.track);
     $("banner").classList.toggle("show", !r.canPlaybackAudio);
   } catch (e) {
     console.error(e);
@@ -249,8 +271,40 @@ function rpc(method, payload) {
     .catch((e) => { console.error(method, e); say.textContent = "Couldn't reach the storyteller (" + method + ")"; });
 }
 
+function startLevel(track) {
+  stopLevel();
+  const a = LK.createAudioAnalyser(track, { cloneTrack: true }), bar = $("level").firstChild;
+  level = a;
+  const tick = () => {
+    if (level !== a) return;
+    bar.style.width = Math.round(a.calculateVolume() * 100) + "%";  // 0..1
+    requestAnimationFrame(tick);
+  };
+  tick();
+}
+function stopLevel() {
+  if (level) { level.cleanup(); level = null; }
+  $("level").firstChild.style.width = "0";
+}
+// Chrome starts an AudioContext made without a click suspended: any click wakes the meter
+document.addEventListener("click", () => { if (level && level.analyser.context.state === "suspended") level.analyser.context.resume(); });
+
+// the mode toggle: a fresh room in the other mode (the next /token closes this one)
+$("c-mode").addEventListener("click", async (e) => {
+  e.stopPropagation();
+  if (connecting) return;
+  LIVE = !LIVE;
+  localStorage.setItem("storyMode", LIVE ? "live" : "hold");
+  release(true); stopLevel();
+  parked = false; stopped = false;
+  const r = room; room = null; agent = null;
+  render();
+  if (r) await r.disconnect();
+  poll();
+});
+
 function press() {
-  if (holding || talk.disabled) return;
+  if (holding || talk.disabled || LIVE) return;
   holding = true; holdStart = Date.now();
   if (room) room.startAudio();
   rpc("start_turn");

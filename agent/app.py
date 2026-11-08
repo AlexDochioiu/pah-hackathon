@@ -4,7 +4,8 @@
 
 Runs the storyteller worker in push-to-talk mode (PTT=1) as a subprocess, serves web/index.html, mints LiveKit
 tokens that dispatch that worker into a fresh room, and reports whether the stage server answers. Ctrl-C (or
-SIGTERM) stops the worker too. Starting it again while one is running replaces the old one, worker included.
+SIGTERM) stops the worker too. The story page's mode toggle can start a room in live chat instead (open mic,
+?mode=live, see live.py). Starting it again while one is running replaces the old one, worker included.
 It only ever talks to STAGE_URL; it starts nothing on the robot station.
 
 Env (agent/.env, the environment wins): LIVEKIT_URL/API_KEY/API_SECRET, STAGE_URL, APP_PORT (8790),
@@ -173,6 +174,11 @@ class Worker:
 
 # --- web ----------------------------------------------------------------------------------------------------------
 
+def dispatch_metadata(mode: str | None) -> str:
+    """The job metadata for a page's mode: show (show.is_show), live chat (live.is_live), or "" for push-to-talk."""
+    return json.dumps({"mode": mode}) if mode in ("show", "live") else ""
+
+
 class App:
     def __init__(self, worker: Worker) -> None:
         self.worker = worker
@@ -188,8 +194,9 @@ class App:
 
     async def token(self, req: web.Request) -> web.Response:
         """A fresh room per page join, with the PTT worker dispatched into it. The previous room is closed, so
-        only one story drives the arms at a time. `?mode=show` (the /show page) starts the worker in show mode."""
-        metadata = json.dumps({"mode": "show"}) if req.query.get("mode") == "show" else ""
+        only one story drives the arms at a time. `?mode=show` (the /show page) starts the worker in show mode,
+        `?mode=live` (the story page's toggle) in live chat (live.py); anything else is push-to-talk."""
+        metadata = dispatch_metadata(req.query.get("mode"))
         self.rooms += 1
         old, self.room = self.room, f"story-{BOOT}-{self.rooms}"
         if old:
@@ -202,7 +209,7 @@ class App:
             .with_room_config(api.RoomConfiguration(agents=[api.RoomAgentDispatch(agent_name=AGENT_NAME, metadata=metadata)]))
             .to_jwt()
         )
-        log.info("page joined room %s%s", self.room, " (show)" if metadata else "")
+        log.info("page joined room %s%s", self.room, f" ({req.query['mode']})" if metadata else "")
         return web.json_response({"url": os.environ["LIVEKIT_URL"], "token": token, "room": self.room},
                                  headers={"Cache-Control": "no-store"})
 

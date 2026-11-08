@@ -24,6 +24,7 @@ from livekit.plugins import noise_cancellation
 
 from director import Director, PushToTalk
 from gestures import DEFAULT_GESTURES, GestureBook, GestureSync, Stage, tags_first
+from live import LiveTurns, interruption_options, is_live
 from show import Script, ShowRunner, is_show
 from sounds import SoundBook, Soundboard
 from voices import DEFAULT_CAST, NARRATOR_VOICE, PALETTE, RunMarks, describe_palette, stream_tts, timestamp_runs, voiced_tts
@@ -123,6 +124,8 @@ async def entrypoint(ctx: JobContext) -> None:
                        await stage.fetch_duets("ensemble"), stage.about, stage.sides, stage.sounds)
     logger.info("gestures: %s; duets: %s", ", ".join(book.names), book.describe_duets())
     show = is_show(ctx.job.metadata)  # the page's /show route: scripted acts on cue (show.py)
+    live = is_live(ctx.job.metadata)  # the story page's "Live chat" toggle: open mic (live.py)
+    ptt = PTT and not live
     script = Script.load(book=book)
 
     session = AgentSession(
@@ -131,8 +134,9 @@ async def entrypoint(ctx: JobContext) -> None:
         tts=inference.TTS(model=TTS_MODEL, voice=TTS_VOICE),
         turn_handling=TurnHandlingOptions(
             # LiveKit's turn detector decides when the listener is done; in push-to-talk the button release does
-            turn_detection="manual" if PTT else inference.TurnDetector(),
+            turn_detection="manual" if ptt else inference.TurnDetector(),
             preemptive_generation={"enabled": True},  # start the reply before the turn is confirmed over
+            **({"interruption": interruption_options()} if live else {}),  # noisy-room guards (live.py)
         ),
         expressive=EXPRESSIVE,
         # Gestures ride on the LLM text, which the voice must never read out: Storyteller.tts_node drops the tags
@@ -167,13 +171,21 @@ async def entrypoint(ctx: JobContext) -> None:
         room_options=room_io.RoomOptions(audio_input=room_io.AudioInputOptions(noise_cancellation=_noise_cancellation)),
     )
     gestures.install(session.output)  # after start: wraps the outputs start() set up
-    if PTT:
+    if ptt:
         session.input.set_audio_enabled(False)  # deaf until the button is held
     await ctx.connect()
     await board.start(ctx.room, session)
-    if PTT:
-        PushToTalk(session, director).register(ctx.room.local_participant)
+
+    def hush() -> None:  # the listener cut in: sound effects stop with the voice (the music only ducks)
+        board.stop_sfx()
+        gestures.cancel_sounds()
+
+    if ptt:
+        PushToTalk(session, director, hush).register(ctx.room.local_participant)
         logger.info("push-to-talk: listening only while the talk button is held")
+    elif live:
+        LiveTurns(session, director, hush)
+        logger.info("live chat: open mic, turn detector, interruptions %s", interruption_options())
 
     stage.face("audience")  # a new show starts facing the audience (and at the stage pose)
     if show:  # act 0: silent until the first cue
