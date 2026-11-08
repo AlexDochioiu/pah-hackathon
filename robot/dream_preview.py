@@ -52,15 +52,10 @@ def get_state(url):
         return json.loads(r.read())
 
 
-GRIP_FLOOR = 0.25  # the measured gripper Dream-1 sees never reads below this (see arm_obs)
-
-
 def arm_obs(s):
     """One arm of /state as the adapter reads it: measured joints, measured gripper."""
     grip = s.get("grip_measured", s.get("grip"))
-    # Lars is soft: squeezed he reads ~0.05, like closing on air, and Dream-1 lets go to retry (owner, Nov 8). Show it
-    # a gripper that stopped on something. ponytail: knob GRIP_FLOOR; a real empty close looks like a grab too.
-    return types.SimpleNamespace(positions_rad=np.asarray(s["measured"], float), gripper=max(float(grip), GRIP_FLOOR))
+    return types.SimpleNamespace(positions_rad=np.asarray(s["measured"], float), gripper=float(grip))
 
 
 def log_call(**kw):
