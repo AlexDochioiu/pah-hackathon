@@ -32,6 +32,8 @@ SPOT_back_left = left:point_back_left | left:look_at_other
 SPOT_back_centre = right:point_back_centre | right:nod
 SPOT_back_right = right:point_back_right | right:look_at_other
 LARS_POINT = right:point_at_lars | right:double_take        # "Down here.": an arm points at Lars on the table
+# The finale's threat: the left arm creeps to the e-stop and hovers ~5 cm above it, then pulls back. Never a press.
+PANIC_REACH = left:panic_reach | left:slow_turn
 LARS_PICK = off                     # on: in act 1 the right arm lifts Lars from the dock (needs someone at the e-stop)
 # The pick line gives ~7 s of talk while Lars goes up and ~6 s while Lars goes down, with no other right-arm tag:
 # sized for the speed-1 bake (pick 4.7 s, place 4.8 s). Check it on the fake stage before turning it on.
@@ -97,10 +99,13 @@ Come up, hold the big yellow button, and tell me what happens. [right:tremble_ex
 
 ## Act 5: The finale
 <!-- Works from any state: it stops a story politely. Esc (STOP) afterwards folds the arms and ends the music. -->
-[face:audience] [music:victory]
-And that's where we stop: the judges have a schedule, and we have an API bill.
-We were {SHOW_NAME}: {HOST_NAME}, the stage hands, and {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}!
-Thank you, and goodnight! [duet:tip_hats] [sfx:applause]
+<!-- The threat: one arm creeps to the e-stop and hovers above it, never touching (a press drops both arms limp). -->
+[face:audience]
+One small note for the judges. [right:nod]
+It's first prize, or these two end it all. {PANIC_REACH} [sfx:drum_roll]
+Kidding. Mostly. [right:shake_head]
+[music:victory] We were {SHOW_NAME}: {HOST_NAME}, the stage hands, and {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}!
+Goodnight! [duet:tip_hats] [sfx:applause]
 
 ## Live context
 You are on stage right now, at a hackathon demo, in front of judges and an audience. You, {HOST_NAME}, just ran
