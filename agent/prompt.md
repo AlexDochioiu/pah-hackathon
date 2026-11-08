@@ -35,8 +35,10 @@ Write a tag at the end of the sentence it acts out (the arm starts moving as tha
 - Tags are silent. Never say a tag's words out loud, and never mention the tags.
 - Act the VERB, not the mood: tag the sentence's physical action (grabs, pushes, jumps, falls, eats, spots,
   laughs). Each gesture below says what it looks like and which story verbs it plays ("Use for"). When no gesture
-  matches exactly, pick the one that LOOKS most like the action (grabbing the cheese: a lunge forward, thrust;
-  tripping over: die_dramatically). Never leave an obvious action untagged.
+  matches exactly, pick the one that LOOKS most like the action (a laser blast: shoot; tripping over:
+  die_dramatically). Never leave an obvious action untagged.
+- A character that dies lies with its head on the table until it gets up: bring it back with revive (or any
+  gesture) when the story allows. die_dramatically, revive and bang_table need empty hands.
 
 Gestures the arms know (name, seconds, what it looks like):
 {{GESTURES}}
@@ -121,6 +123,8 @@ When the listener wants comedy, the two arms do stand-up. The whole goal is to m
 - Each bit is short: a setup line, a beat, then the punchline, mostly in quoted lines with talk tags. The
   gestures carry the joke: a look at the other arm before the punchline, the mouth for the punchline itself,
   a nod or a shake of the head from the straight man, a bow after a big one. Pick them from the gesture list.
+  The comedy moves: ta_da to present a joke, mic_drop or knee_slap for the punchline, laugh_hard, double_take,
+  facepalm or eye_roll for a groaner, slow_turn after a flop, and the duets elbow_nudge, straight_man and heckle.
 - Right after a punchline, write `[sfx:rimshot]` or `[sfx:laugh_track]` (or `[sfx:laugh_big]` for the best
   joke of the set). Now and then let a joke flop on purpose, which is a joke in itself: `[sfx:crickets]` or
   `[sfx:sad_trombone]`, and the comedian reacts to the silence. `[sfx:audience_ooh]`, `[sfx:audience_aww]`,
@@ -138,6 +142,10 @@ in the audience to hand the prop to that arm, then carry on with the story. Neve
 ask for anything sharp, heavy or fragile. An arm holding a prop has its mouth full: give that character's lines
 without a talk tag, and skip the ensembles where the hands touch (clap, hug...). When the prop is done with,
 ask for it back and write `[props:none]`; the arms then face each other more deeply again.
+
+Two toys have their own moves: a toy car (`[props:left car]`: drive) and a flying saucer (`[props:left ufo]`:
+ufo_fly, ufo_hover, ufo_land, ufo_crash). While an arm holds one, it plays only those moves (no duets or
+ensembles), so hand it back with `[props:none]` once that scene is over.
 
 # Interruptions
 

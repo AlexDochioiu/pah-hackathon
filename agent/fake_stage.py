@@ -3,7 +3,7 @@
     python3 fake_stage.py [--port 8770]
 
 Same API as the real stage server (robot/): GET /gestures, GET /state, POST /play {"arm","gesture","speed"},
-GET /duets, POST /duet {"name","speed"}, POST /talk {"arm","on"}, POST /freeze, /idle, /stage, /rest, /stance {"stance": "audience"|"each_other"}, /props {"arm","on"}. Standard library only.
+GET /duets, POST /duet {"name","speed"}, POST /talk {"arm","on"}, POST /freeze, /idle, /stage, /rest, /stance {"stance": "audience"|"each_other"}, /props {"arm","on","kind"}. Standard library only.
 """
 from __future__ import annotations
 
@@ -13,15 +13,22 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 GESTURES = {
-    "wave": 2.0, "bow": 2.5, "nod": 1.0, "shake_head": 1.5, "slash": 1.2, "thrust": 1.2, "block": 1.0,
-    "celebrate": 2.5, "cower": 2.0, "die_dramatically": 3.0, "gallop": 2.5, "roar": 2.0, "sneak": 2.5,
-    "look_at_other": 1.5, "point_at_audience": 1.5, "gripper_clap": 1.5, "idle_breathe": 3.0,
+    "bang_table": 6.9, "beat_chest": 6.9, "bite": 3.2, "block": 4.5, "bow": 2.9, "celebrate": 4.8, "chef_kiss": 3.4,
+    "cower": 3.8, "cry": 4.4, "die_dramatically": 5.8, "dodge": 2.7, "double_take": 4.4, "drive": 15.0, "duck": 3.3,
+    "eat": 4.5, "eye_roll": 4.8, "facepalm": 4.4, "flick": 2.7, "gallop": 3.0, "grab": 2.5, "gripper_clap": 2.4,
+    "hop": 4.7, "idle_breathe": 4.0, "italian": 5.4, "italian_exasperated": 7.2, "knee_slap": 5.9, "laugh": 4.2,
+    "laugh_hard": 6.0, "lift_heavy": 4.6, "look_around": 3.8, "look_at_other": 2.8, "mic_drop": 6.1, "nod": 2.5,
+    "point_at_audience": 2.8, "pounce": 3.5, "pull": 3.2, "push": 3.4, "revive": 5.5, "roar": 3.6, "shake_head":
+    2.9, "shoot": 5.0, "sigh": 4.4, "slash": 3.9, "slow_turn": 6.0, "sneak": 4.6, "sneeze": 3.5, "snore": 6.2,
+    "startle": 3.0, "stir_frantic": 8.2, "stir_lazy": 10.5, "stomp": 4.6, "ta_da": 4.1, "throw": 2.9, "thrust": 3.0,
+    "tremble_excited": 3.1, "ufo_crash": 11.5, "ufo_fly": 13.6, "ufo_hover": 8.0, "ufo_land": 13.0, "wave": 4.7
 }
-DUETS = {"cross_swords": 8.7, "cheers": 9.0, "poke": 8.8, "quick_draw": 7.7, "tip_hats": 5.6, "copycat": 7.3,
-         "car_ride": 6.8}
-ENSEMBLES = {"chomp": 5.6, "wings": 7.1, "this_big": 3.5, "shrug": 2.3, "rocket": 5.9, "waves": 3.7, "storm": 4.9,
-             "gate_opening": 4.8, "explosion": 6.7, "row_boat": 4.8, "once_upon_a_time": 4.0, "the_end": 4.0,
-             "clap": 8.2, "rub_hands": 10.0, "hug": 7.5, "pull_rope": 13.3, "heart": 7.7}
+DUETS = {"cheers": 8.7, "copycat": 7.3, "cross_swords": 8.4, "elbow_nudge": 7.1, "heckle": 8.1, "place_hat": 8.8,
+         "poke": 8.1, "quick_draw": 8.9, "straight_man": 9.6, "tip_hats": 5.6}
+ENSEMBLES = {"car_ride": 8.6, "cauldron": 10.4, "chomp": 9.3, "clap": 8.2, "drum_roll": 9.0, "explosion": 8.6,
+             "fist_bump": 7.2, "gate_opening": 9.9, "heart": 8.1, "high_five": 8.1, "hug": 7.6, "once_upon_a_time":
+             8.1, "pull_rope": 13.7, "rocket": 5.9, "row_boat": 8.2, "rub_hands": 10.0, "shrug": 4.7, "storm": 4.9,
+             "the_end": 4.0, "this_big": 3.5, "waves": 3.7, "wings": 7.1}
 T0 = time.monotonic()
 state = {"mode": "rest", "stance": "audience", "props": {"left": False, "right": False}, "arms": {"left": None, "right": None}}  # arm -> {"gesture", "until"} while playing
 
@@ -96,7 +103,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._reply(200, {"ok": True, "stance": body["stance"]})
         if self.path == "/props":
             for a in (("left", "right") if body.get("arm") in (None, "both") else (body.get("arm"),)):
-                state["props"][a] = bool(body.get("on", True))
+                state["props"][a] = (body.get("kind") or True) if body.get("on", True) else False
             log(f"PROPS  {state['props']}")
             return self._reply(200, {"ok": True, "props": state["props"]})
         if self.path in ("/freeze", "/idle", "/stage", "/rest"):

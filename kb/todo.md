@@ -13,9 +13,9 @@ Status: 🔨 being built · 👀 waiting for owner review · ⏸ waiting for som
 | Character voices: narrator + a distinct voice per arm, casting palette | 🔨 | [storyteller.md](storyteller.md); samples go on a review page |
 | Sound effects + background music, played on the laptop through the web page | 👀 | Built: `[sfx:x]`, `[music:x]`, 32 CC0 sfx + 9 loops in `agent/sounds/`; samples for the owner to listen to; not yet heard in a live session |
 | Comedy mode: double act, laugh track / rimshot / crickets after punchlines | 🔨 | Sounds + prompt "Comedy show" done; comedy gestures with the gesture work |
-| Gesture batch 3b: lower height, limp death + revive, fist bang + drum roll, stirring, Italian hands, high five, fist bump, hat on head, gun recoil, reworks (chomp, explosion, gate, once upon, row boat, shrug, car ride, quick draw), face-acting solos | 🔨 | Sim previews → round-3b review page |
-| Comedy gestures: double take, mic drop, facepalm, knee slap, eye roll, ta-da, slow turn, laugh hard; elbow nudge, straight man, heckle | 🔨 | After 3b |
-| Prop moves: toy car (drive, chase), spaceship (fly, hover/abduct, land, crash) | 🔨 later | Spaceship: the team is finding one with a grip point (the bath-bomb UFO was dropped) |
+| Gesture batch 3b: lower height, limp death + revive, fist bang + drum roll, stirring, Italian hands, high five, fist bump, hat on head, gun recoil, reworks (chomp, explosion, gate, once upon, row boat, shrug, car ride, quick draw), face-acting solos | 👀 | Done in sim (see commit log), previews → round-3b review page |
+| Comedy gestures: double take, mic drop, facepalm, knee slap, eye roll, ta-da, slow turn, laugh hard; elbow nudge, straight man, heckle | 👀 | Done in sim with 3b; on the round-3b review page |
+| Prop moves: toy car (drive, chase), spaceship (fly, hover/abduct, land, crash) | 🔨 | Solos done in sim (drive, ufo_fly/hover/land/crash, `/props` kinds, previews); still open: car_chase duet, UFO abduct duet over the other head (needs per-arm prop kinds in duets.py). Spaceship: the team is finding one with a grip point (the bath-bomb UFO was dropped) |
 | Lars pick from a fixed dock, saved as `pick_lars` / `place_lars` gestures, `[pick:lars]` tag | 🔨 | Sim GIF first; real runs start at speed 0.3, ramp 0.5 → 0.75 → 1.0 only after several clean picks |
 | Live prop pick anywhere on the table, 5 s total (detect < 50 ms, plan < 200 ms, move ~4.5 s) | 🔨 after dock | Colour/shape detector on the overhead camera; one grasp template per prop |
 

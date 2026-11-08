@@ -204,6 +204,24 @@ class Seq:
         self.q = {"left": self.rows[-1][1].copy(), "right": self.rows[-1][2].copy()}
         return self.wait(hold) if hold else self
 
+    def path(self, fl, fr=None, T=1.0, warp=show.quintic):
+        """Both arms along curves: fl(u) / fr(u) give targets as move() takes them (Cartesian (p, R) or joint deltas
+        from stage; None = stay), u = 0..1 warped in time, sampled every DT with the IK seeded along the way (circles,
+        loops). fr=None mirrors fl. The duration is NOT stretched to the speed limits: the checker has the last word."""
+        n = max(1, int(np.ceil(T / DT)))
+        for k in range(1, n + 1):
+            u = warp(k / n) if warp else k / n
+            tl = fl(u)
+            tr = fr(u) if fr else (mirror_target(*tl) if isinstance(tl, tuple) else tl)
+            q = {}
+            for s, tgt in (("left", tl), ("right", tr)):
+                tg = self._target(s, tgt)
+                q[s] = self._solve(s, tg[1], tg[2], self.q[s]) if tg[0] == "x" else tg[1]
+            self.t += T / n
+            self.rows.append((self.t, q["left"], q["right"]))
+            self.q = q
+        return self
+
     def wait(self, T):
         n = max(1, int(round(T / DT)))
         for _ in range(n):
@@ -215,13 +233,14 @@ class Seq:
         self.marks[name] = self.t
         return self
 
-    def grip(self, side, g, T=1.0):
-        """Gripper side to g (0 closed .. 1 open) over T s from now (runs alongside the following moves)."""
+    def grip(self, side, g, T=1.0, after=0.0):
+        """Gripper side to g (0 closed .. 1 open) over T s from `after` s from now (runs alongside the following
+        moves)."""
         gs = self.grips[side]
         g0 = gs[-1][1] if gs else 1.0
         if not gs:
             gs.append((0.0, g0))
-        gs += [(self.t, gs[-1][1]), (self.t + T, g)]
+        gs += [(self.t + after, gs[-1][1]), (self.t + after + T, g)]
         return self
 
     def here(self, side):
@@ -230,7 +249,7 @@ class Seq:
     def home(self, T=1.0):
         return self.move(np.zeros(6), T=T)
 
-    def duet(self, name, about, contact, prop=None, kind="duet", props=True):
+    def duet(self, name, about, contact, prop=None, kind="duet", props=True, table=None):
         rows = self.rows
         keys = []
         for t, ql, qr in rows:
@@ -251,6 +270,8 @@ class Seq:
             d["prop"] = prop
         if not props:
             d["props"] = False  # empty hands: checked without the prop sticks, refused while one is held
+        if table:
+            d["table"] = table  # the hands may touch the table (show.TABLE_PARTS, empty hands only)
         return d
 
 
@@ -268,6 +289,19 @@ def sword(y, z, az, el, x=0.33):
 def creep(D, vc=0.024):
     """Approach-law settings for a short final creep of D metres at vc (the whole move is the slow zone)."""
     return dict(zone=D, vc=vc, vmax=vc, acc=1.0, taper=0.06)
+
+
+def glide(e=0.2):
+    """Time warp for Seq.path: smooth start and stop (sin^2 ramps over a fraction e at each end), steady between."""
+    x = np.linspace(0, 1, 2001)
+    v = np.sin(np.pi / 2 * np.clip(np.minimum(x, 1 - x) / e, 0, 1)) ** 2
+    c = np.concatenate([[0], np.cumsum((v[1:] + v[:-1]) / 2)]); c /= c[-1]
+    return lambda u: float(np.interp(u, x, c))
+
+
+def mir(p):
+    """The mirror image of a point (left side <-> right side, about the midplane)."""
+    return np.array([p[0] + 2 * MID_X, 2 * MID_Y - p[1], p[2]])
 
 
 def cross_swords():
@@ -289,7 +323,7 @@ def cross_swords():
         p = clash(z)[0][0]
         return sword(p[1] + dy, p[2] + dz, az=az, el=0.5, x=p[0])
 
-    z = 0.60
+    z = 0.50                                                             # the lowered stage (Nov 7): was 0.60
     s.move(out(z, 0.10, 0.0, 0.35), T=0.8, hold=0.1)                     # en garde
     s.move(out(z, 0.09, 0.06, 0.15), T=0.45)                             # wind up: out and up
     s.move(*clash(z, sep=gap + 0.07), T=0.4)                             # swing: X formed, still apart in depth
@@ -340,7 +374,7 @@ def tips(az, el, z, x=0.33, gap=0.015, sep=0.0):
 
 def cheers():
     s = Seq()
-    az, el, z = 0.9, 0.55, 0.66
+    az, el, z = 0.9, 0.55, 0.56                                           # lowered stage (Nov 7): was 0.66
     s.move(*tips(0.35, el, z - 0.04, sep=0.16), T=0.9, hold=0.1)         # raise the glasses
     s.move(*tips(0.25, el + 0.15, z + 0.02, sep=0.19), T=0.45)           # anticipation: lift and lean back out
     s.move(*tips(az, el, z, sep=0.05), T=0.5)                             # swing in, tips nearly touching
@@ -379,23 +413,84 @@ def poke():
                    {"left": ["prop"], "right": ["prop"], "min": 0.04}])
 
 
+def head_top(side, q, back=0.085, band=0.035):
+    """Where a hat rests on the side's head at joints q: the point above the gripper body `back` m behind the grasp
+    site, at the highest point of the hand (gripper, fingers on the prop) within `band` m of it in x."""
+    m, d = SC.m, SC.d
+    SC.set(side, q, duets.G_ON_PROP); mujoco.mj_kinematics(m, d)
+    i = SC.site[side]
+    c = d.site_xpos[i] - back * d.site_xmat[i].reshape(3, 3)[:, 2]
+    top = -np.inf
+    for g in range(m.ngeom):
+        if m.body(m.geom_bodyid[g]).name in [duets.PRE[side] + b for b in ("gripper", "tip_left", "tip_right")] \
+                and m.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH:
+            mid = m.geom_dataid[g]
+            v = m.mesh_vert[m.mesh_vertadr[mid]: m.mesh_vertadr[mid] + m.mesh_vertnum[mid]]
+            w = d.geom_xpos[g] + v @ d.geom_xmat[g].reshape(3, 3).T
+            w = w[np.abs(w[:, 0] - c[0]) < band]
+            if len(w):
+                top = max(top, float(w[:, 2].max()))
+    return np.array([c[0], c[1], top])
+
+
+def place_hat():
+    """The left crowns the right: it raises its prop like a hat, brings it over the right's head and lays it gently
+    across the top of the gripper; the right ducks its head to take it, then straightens up proudly."""
+    s = Seq()
+    duck = pose(j2=-0.02, j3=-0.1, p=-0.12)                                    # the right lowers its head a little
+    proud = pose(j2=0.04, j3=0.05, p=0.12, j5=0.15)                            # chin up, a turn to the audience
+    qd = show.stage_pose("right") + show.mirror(duck, "right")
+    top = head_top("right", qd, back=0.055)                                    # over the finger roots
+
+    def hat(gap, dy=0.0, el=-0.06):
+        a = aim(1.75, el)                                                      # across the head, from the front-left
+        end = top + [0.0, -0.03 + dy, show.PROP_R + gap]                       # the prop's far end, past the head centre
+        return end - show.PROP_LEN * a, a
+
+    s.move(hat(0.16, dy=0.08, el=0.15), pose(p=0.15, j5=0.2), T=1.0, mirror=False, hold=0.25)  # hat held up high;
+    # the right looks up at it
+    s.move(hat(0.05), duck, T=0.6, mirror=False)                                # over the head; the right ducks
+    s.move(hat(0.012), None, approach=dict(zone=0.04, vc=0.04, vmax=0.25, acc=1.0, taper=0.06),
+           mirror=False, hold=0.5)                                              # lay it on, gently
+    s.move(hat(0.07, dy=0.03), None, T=0.3, line=True, mirror=False)           # let go
+    s.move(hat(0.16, dy=0.08, el=0.1), proud, T=0.5, mirror=False)             # the right, proud, chin up
+    s.move(np.zeros(6), None, T=0.8, mirror=False)
+    s.move(None, np.zeros(6), T=0.6, mirror=False)
+    return s.duet("place_hat", "The left raises its prop like a hat and lays it gently on the right's head; the "
+                  "right ducks to take it, then straightens up proudly.",
+                  [{"left": ["prop"], "right": HAND, "min": 0.008}, {"left": HAND, "right": HAND, "min": 0.05},
+                   {"left": HAND, "right": ["prop"], "min": 0.05}, {"left": ["prop"], "right": ["prop"], "min": 0.04}])
+
+
 FACE = pose(j1=-0.2, j5=0.25)  # the each_other stance (show.FACING_LEFT), as a delta
 
 
 def quick_draw():
-    """Western standoff: face each other, hands low at the holsters, twitch... DRAW! The left fires (recoil), the right
-    is hit, rears back and slumps."""
+    """Western standoff: guns (props) low in the holsters, fingers twitch... DRAW! The left is faster: BANG, its gun
+    kicks up with the recoil; the right, hit mid-draw, jerks back, drops its gun and slumps. The left raises its
+    barrel: smoke."""
     s = Seq()
-    low = FACE + pose(j2=-0.1, j3=-0.25, p=-0.55)
-    s.move(low, T=0.8, hold=0.7)                                           # the standoff
-    s.move(low + pose(j6=0.3), T=0.25).move(low, T=0.25, hold=0.5)        # twitchy fingers
-    aimq = FACE + pose(j2=0.05, j3=0.15, p=0.05)
-    s.move(aimq, T=0.35, hold=0.3)                                         # DRAW
-    s.move(aimq + pose(p=0.35, j2=-0.03), aimq + pose(j1=0.15, p=0.4, j5=-0.2), T=0.25, mirror=False)  # BANG / hit
-    s.move(aimq, aimq + pose(j1=0.25, j2=0.05, j3=-0.35, p=-1.0, j5=-0.3, j6=0.5), T=0.9, mirror=False, hold=0.6)
+    st = show.stage_pose("left")
+
+    def solve(p, a, seed=st):
+        return Seq()._solve("left", np.array(p, float), frame(a), seed) - st
+    gun = solve((0.38, -0.09, 0.40), aim(1.15, 0.03))                         # aimed in, at the other
+    hip = gun + pose(j1=0.15, j2=-0.05, j3=-0.25, p=-0.6, j5=-0.35)          # low at the hip, barrel down
+    s.move(hip, T=0.9, hold=0.3)                                              # the standoff
+    s.move(hip + pose(j6=0.25, p=0.06), hip, T=0.3, mirror=False)             # the left's fingers twitch...
+    s.move(hip, hip + pose(j6=0.25, p=0.06), T=0.3, mirror=False)             # ...the right's
+    s.move(hip, T=0.3, hold=0.4)                                              # ...wait for it
+    s.move(gun, hip + 0.45 * (gun - hip), T=0.6, mirror=False)                # DRAW! the left is faster
+    s.wait(0.08)
+    dl, dr = deltas(s)
+    s.move(dl + pose(j2=-0.03, j3=0.06, p=0.28), dr + pose(j1=0.15, j2=-0.04, p=0.3, j5=-0.2, j6=0.3), T=0.3,
+           mirror=False)                                                       # BANG: recoil; the right is hit
+    s.move(dl, dr + pose(j1=0.2, j2=0.1, j3=-0.15, p=-0.6, j5=-0.3, j6=0.6), T=1.0, mirror=False, hold=0.3)  # slumps
+    s.move(dl + pose(j3=0.15, p=0.7, j5=-0.3), None, T=0.6, mirror=False, hold=0.4)  # barrel up: smoke
     s.home(T=1.0)
-    return s.duet("quick_draw", "Western standoff: face each other, hands low, twitch, draw! The left fires, the "
-                  "right is hit, rears back and slumps.", [])
+    return s.duet("quick_draw", "Western standoff: guns low at the hips, fingers twitch... DRAW! The left is faster: "
+                  "BANG, its gun kicks up; the right, hit mid-draw, jerks back, drops its gun and slumps; the left "
+                  "raises its smoking barrel.", [])
 
 
 def tip_hats():
@@ -426,16 +521,88 @@ def copycat():
                   "catches it; the right looks away, innocent.", [])
 
 
-def car_ride():
-    """The left drives (steering wheel on j6), the right rides along: both lean into the turns and bounce on bumps."""
+# ---------------------------------------------------------------- stand-up comedy: a double act (empty hands)
+LOOK = show.FACING_LEFT  # the head turned ~66 deg toward the other arm (the each_other stance), as a delta
+
+
+def elbow_nudge():
+    """"Get it? Get it?": the left leans in beside the right and nudges it with the side of its head, three quick
+    little pokes (they stop ~5 cm short, outside the slow zone), mouth flapping; the right stays deadpan; the left
+    grins (mouth wide open, head up)."""
     s = Seq()
-    for t, (yaw, roll) in enumerate([(0.15, 0.6), (-0.15, -0.6), (0.15, 0.6), (0.0, 0.0)]):
-        bump = pose(j2=0.03, j3=0.08) if t % 2 else np.zeros(6)
-        # same world direction for both: the right arm's j1 delta is negated (show.mirror flips it back)
-        s.move(pose(j1=yaw, j6=roll) + bump, pose(j1=-yaw, j5=-yaw) + bump, T=0.7, mirror=False, hold=0.15)
-    s.home(T=0.6)
-    return s.duet("car_ride", "The left steers a car (the wheel turns), the right rides along: both lean into the "
-                  "turns and bounce on a bump.", [])
+    (pl, rl), (pr, rr) = meet(0.55, 0.1, 0.42, x=0.38, gap=0.13)              # side by side, heads ~13 cm apart
+    st = show.stage_pose
+    qr = ik("right", pr, rr, st("right"))[0]
+    a, b = 0.0, 0.15                                                          # the nudge: the left alone, to ~5.5 cm
+    for _ in range(12):
+        c = (a + b) / 2
+        a, b = (c, b) if hand_gap(ik("left", pl - [0, c, 0], rl, st("left"))[0], qr) > 0.055 else (a, c)
+    pn = pl - [0, a, 0]
+    s.move((pl, rl), (pr, rr), T=1.0, mirror=False, hold=0.3)                 # the left leans in, the right waits
+    for k in range(3):
+        s.grip("left", 0.3, 0.12)
+        s.move((pn, rl), None, T=0.3, line=True, mirror=False)                # nudge
+        s.grip("left", 1.0, 0.12)
+        s.move((pl, rl), None, T=0.3, line=True, mirror=False, hold=0.05)     # get it?
+    s.move((pl + [0, 0.02, 0.02], rl), None, T=0.35, line=True, mirror=False)
+    dl, dr = deltas(s)
+    s.move(dl + pose(p=0.3, j6=0.25), dr + pose(j5=-0.15), T=0.5, mirror=False, hold=0.8)  # grin; the right: no
+    s.home(T=0.9)
+    return s.duet("elbow_nudge", "\"Get it? Get it?\": the left leans in beside the right and nudges it with the side "
+                  "of its head, three quick pokes, mouth flapping; the right stays deadpan; the left grins wide.",
+                  [{"left": HAND, "right": HAND, "min": 0.03}], props=False)
+
+
+def straight_man():
+    """The left does a silly bit (bouncing, wiggling, mouth flapping); the right slowly turns its head to stare at it,
+    deadpan, and holds the stare; the left notices and freezes mid-wiggle; the right slowly turns back to the
+    audience; the left droops."""
+    s = Seq()
+    P = 0.7                                                                   # one bounce, s
+
+    def silly(u, T):
+        t = u * T
+        env = np.sin(np.pi * u) ** 2
+        w = 2 * np.pi * t / P
+        return env * pose(j2=0.03 * np.sin(w), j3=0.06 * np.sin(w), p=0.1 * np.sin(w), j6=0.25 * np.sin(w / 2),
+                          j1=0.08 * np.sin(w / 4))
+
+    T1 = 4.0
+    for k in range(int(T1 / 0.25)):                                           # mouth flapping
+        s.grip("left", 0.3 if k % 2 == 0 else 1.0, 0.12, after=0.25 * k)
+    stare = LOOK + pose(p=-0.05)
+    turn = glide(0.4)
+    s.path(lambda u: silly(u, T1), lambda u: stare * turn(np.clip((u - 0.25) / 0.55, 0, 1)), T=T1, warp=None)
+    s.wait(0.5)                                                               # the stare
+    s.move(LOOK + pose(p=0.1), None, T=0.4, mirror=False, hold=0.6)           # the left notices: caught, frozen
+    s.move(pose(p=-0.3, j2=0.03), np.zeros(6), T=1.3, mirror=False, hold=0.3)  # the right turns back; the left droops
+    s.home(T=0.9)
+    return s.duet("straight_man", "The left does a silly bit, bouncing and wiggling with its mouth flapping; the right "
+                  "slowly turns to stare at it, deadpan; the left notices and freezes; the right turns back to the "
+                  "audience and the left droops.", [], props=False)
+
+
+def heckle():
+    """The left points at the right and laughs at it (head thrown back, bouncing, mouth flapping); the right looks,
+    then slowly droops, head hanging."""
+    s = Seq()
+    point = Seq()._solve("left", np.array([0.36, -0.08, 0.44]), frame(aim(1.1, 0.1)), show.stage_pose("left"))
+    point = point - show.stage_pose("left")
+    s.move(point, LOOK * 0.6, T=0.6, mirror=False, hold=0.25)                 # "HA!": point; the right looks over
+    laugh = point + pose(p=0.25, j2=0.02, j3=0.06)
+    droop = LOOK * 0.3 + pose(j2=0.06, j3=-0.1, p=-0.75, j6=0.2)
+    for k in range(12):                                                       # ...HA HA HA: the mouth flaps
+        s.grip("left", 0.3 if k % 2 == 0 else 1.0, 0.12, after=0.25 * k)
+    w = glide(0.3)
+    s.move(laugh, LOOK * 0.6, T=0.4, mirror=False)                            # head back...
+    s.path(lambda u: laugh + np.sin(np.pi * u) ** 2 *
+           pose(j3=0.045 * np.sin(2 * np.pi * u * 4), p=0.1 * np.sin(2 * np.pi * u * 4)),
+           lambda u: LOOK * 0.6 + w(np.clip((u - 0.2) / 0.8, 0, 1)) * (droop - LOOK * 0.6), T=2.6, warp=None)
+    s.grip("left", 1.0, 0.2)
+    s.wait(0.6)                                                               # the right hangs its head
+    s.home(T=0.9)
+    return s.duet("heckle", "The left points at the right and laughs at it, head back, bouncing, mouth flapping; the "
+                  "right looks over, then slowly droops, head hanging.", [], props=False)
 
 
 # ---------------------------------------------------------------- ensembles: both arms as ONE thing, action or mood
@@ -443,8 +610,41 @@ def car_ride():
 # unless both are given. Lean-back rule of thumb: COM x moves ~ 24*j2 - 11*j3 - 1.7*p cm and must stay > -2 cm,
 # so raising the elbow (j3+) or the head (p+) needs j2 forward with it.
 
-def ens(name, about, s):
-    return s.home(T=0.9).duet(name, about, [], kind="ensemble")
+def ens(name, about, s, contact=(), props=True, table=None):
+    return s.home(T=0.9).duet(name, about, list(contact), kind="ensemble", props=props, table=table)
+
+
+def car_ride(X=0.40, ZC=0.34, RW=0.15, A=0.7, T=5.0, BW=0.1, BD=0.015):
+    """Both hands on one big steering wheel in the middle (a circle across the stage, at 10 and 2 o'clock, the
+    grippers pointing forward through it, rolling with it): turn left, turn right, the wheel shifting into each
+    turn, two bumps on the straight, then let go. The hands stay ~29 cm apart (the sticks point forward)."""
+    s = Seq()
+
+    def bump(u, at, w=BW):
+        x = np.clip((u - at) / w, 0, 1)
+        return np.sin(np.pi * x) ** 2
+
+    def wheel(u):                                                   # u: 0..1 of the drive
+        th = A * np.sin(2 * np.pi * u) * np.sin(np.pi * u)           # left, back, right, back (smooth ends)
+        dy = 0.025 * th / A                                         # the wheel leans into the turn
+        dz = -BD * (bump(u, 0.40) + bump(u, 0.52))               # two bumps on the straight
+        c = np.array([X, MID_Y + dy, ZC + dz])
+        fwd = aim(0.0, 0.0)
+        a = np.radians(60)
+        pl = c + RW * np.array([0, np.sin(a + th), np.cos(a + th)])
+        cm = np.array([X, MID_Y - dy, ZC + dz])                     # the right hand, as its mirror image
+        pr = cm + RW * np.array([0, np.sin(a - th), np.cos(a - th)])
+        return ((pl, frame(fwd, (0, np.sin(th), np.cos(th)))),
+                mirror_target(pr, frame(fwd, (0, -np.sin(th), np.cos(th)))))
+
+    both_grip(s, 0.0, 0.6)
+    s.move(*wheel(0.0), T=1.0, mirror=False, hold=0.25)                        # hands on the wheel
+    s.path(lambda u: wheel(u)[0], lambda u: wheel(u)[1], T=T, warp=None)       # drive
+    s.wait(0.2)
+    both_grip(s, 1.0, 0.4)                                                     # we're here: let go
+    s.move(pose(j2=0.05, j3=0.1, p=0.2), T=0.6, hold=0.2)
+    return ens("car_ride", "Both hands on one big steering wheel: turn left, turn right, leaning into the turns, "
+               "bounce over two bumps, then let go: we're here.", s)
 
 
 def wings():
@@ -465,9 +665,19 @@ def this_big():
 
 
 def shrug():
+    """"Who knows?": a little dip with the hands curling, then a quick pop up with the hands thrown open and out (the
+    grippers spring open, the wrists turn the palms up and out, the heads tilt), an "eh" bob, then they drop."""
     s = Seq()
-    s.move(pose(j2=0.15, j3=0.3, p=0.35, j5=-0.2, j6=0.45), T=0.35, hold=0.7)  # heads up and tilted out
-    return ens("shrug", "Both heads pop up and tilt: a big shrug, \"who knows?\"", s)
+    both_grip(s, 0.3, 0.35)
+    s.move(pose(j2=0.03, j3=-0.08, p=-0.2), T=0.4, hold=0.1)                  # dip: shoulders sink, hands curl
+    both_grip(s, 1.0, 0.3)
+    up = pose(j1=0.3, j2=0.12, j3=0.25, p=0.0, j5=-0.4, j6=0.7)
+    s.move(up, T=0.5, hold=0.3)                                               # POP: up, palms up and out, heads tilt
+    s.move(up + pose(j2=-0.02, j3=-0.06, p=-0.05, j6=-0.1), T=0.3)            # eh...
+    s.move(up, T=0.3, hold=0.4)
+    s.move(pose(j2=-0.02, j3=-0.08, p=-0.25, j6=0.3), T=0.7, hold=0.2)        # drop: oh well
+    return ens("shrug", "\"Who knows?\": a little dip, then both pop up with the hands thrown open, palms up and out, "
+               "heads tilted, an \"eh\" bob, and they drop: oh well.", s)
 
 
 def rocket():
@@ -498,38 +708,92 @@ def storm():
 
 
 def gate_opening():
+    """A castle gate: the arms swing in level until the two sticks meet tip to tip in the middle (the closed gate),
+    it rattles, then the doors creak open on their hinges (the bases: j1 only), stop-start, then swing wide."""
     s = Seq()
-    shut = pose(j1=-0.22, j5=0.3)
-    s.move(shut, T=0.6, hold=0.4)                                           # the gate is shut
-    s.move(pose(j1=0.15, j5=0.0), T=1.2, hold=0.25)                         # creeeak...
-    s.move(pose(j1=0.55, j5=-0.25), T=1.0, hold=0.5)                        # ...wide open
-    return ens("gate_opening", "The two arms are a castle gate: shut, then slowly creaking wide open.", s)
+    az, el, z, x = 1.25, 0.0, 0.40, 0.42
+    s.move(*tips(az, el, z, x, sep=0.035), T=1.1)                          # the doors swing shut...
+    s.move(*tips(az, el, z, x), approach=dict(zone=0.03, vc=0.021, vmax=0.12, acc=1.0, taper=0.06), hold=0.35)  # ...clunk
+    shut, _ = deltas(s)
+    for a in (0.12, -0.12, 0.0):                                         # locked: rattle (j6 turns the stick in place)
+        s.move(shut + pose(j6=a), T=0.2)
+    s.wait(0.3)
+    s.move(shut + pose(j1=0.12, j6=0.05), T=0.6)                          # creeeak...
+    s.move(shut + pose(j1=0.12, j6=-0.05), T=0.26, hold=0.3)               # (stuck)
+    s.move(shut + pose(j1=0.25, j6=0.05), T=0.5)                          # ...creeeak...
+    s.move(shut + pose(j1=0.25), T=0.2, hold=0.25)
+    s.move(shut + pose(j1=0.75, j5=-0.45, p=0.05), T=1.0, hold=0.6)       # ...then they swing wide open
+    return ens("gate_opening", "A castle gate: the arms swing shut until the sticks meet in the middle, it rattles, "
+               "then the doors creak open on their hinges, stop and start, and swing wide.", s,
+               contact=[{"left": ["prop"], "right": ["prop"], "min": 0.012}])
 
 
 def explosion():
+    """The two fists huddle into one bomb in the middle, the fuse fizzes (a growing tremble), a held breath, then
+    BOOM: both fling up and out, heads thrown back, the hands springing open; the debris flutters down. Empty hands:
+    the bomb is the two fists ~5.5 cm apart (outside the slow zone, so the fling may be fast)."""
     s = Seq()
-    gather = pose(j1=-0.2, j2=-0.1, j3=-0.25, p=-0.4)
-    s.move(gather, T=0.7, hold=0.2)
-    for _ in range(2):                                                      # the fuse fizzes
-        s.move(gather + pose(j6=0.1), T=0.32).move(gather + pose(j6=-0.1), T=0.32)
-    s.move(pose(j1=0.55, j2=0.35, j3=0.5, p=1.0), T=0.5, hold=0.5)           # BOOM
-    s.move(pose(j1=0.3, j2=0.25, j3=0.0, p=-0.3), T=1.2)                    # debris drifts down
-    return ens("explosion", "Huddle in, the fuse fizzes, then BOOM: both burst outward and up, and drift down.", s)
+    both_grip(s, 0.0, 0.6)                                                      # fists
+    (pl, rl), (pr, rr) = meet(1.2, -0.25, 0.37, gap=0.056, grip=0.0)
+    s.move((pl, rl), (pr, rr), T=1.0, mirror=False, hold=0.2)                  # the bomb, heads bowed over it
+    for k, a in enumerate((0.004, 0.006, 0.008, 0.010, 0.012)):                 # the fuse fizzes: a growing tremble
+        dz = a * (-1) ** k
+        s.move((pl + [0, 0, dz], rl), (pr + [0, 0, dz], rr), T=0.16, line=True, mirror=False)
+    s.move((pl + [0, 0, -0.015], rl), (pr + [0, 0, -0.015], rr), T=0.3, line=True, mirror=False, hold=0.35)  # hush...
+    dl, _ = deltas(s)
+    boom = dl + pose(j1=0.45, j2=0.25, j3=0.5, p=0.75, j5=-0.45, j6=0.3)     # (mirrored: both arms the same)
+    both_grip(s, 1.0, 0.25, after=0.1)
+    s.move(boom, T=0.5, hold=0.35)                                              # BOOM: up and out, hands burst open
+    d = boom + pose(j1=0.1, j2=-0.05, j3=-0.35, p=-0.9, j6=-0.3)               # ...the debris drifts down
+    def flutter(ph):                                                            # side to side, wrists fluttering
+        return lambda u: boom + show.quintic(u) * (d - boom) + np.sin(np.pi * u) ** 2 * pose(j6=0.22 * np.sin(4 * np.pi * u + ph),
+                                                                          j5=0.1 * np.sin(2 * np.pi * u + ph))
+    s.path(flutter(0.0), flutter(1.5),
+           T=2.2, warp=None)
+    s.wait(0.3)
+    return ens("explosion", "Both fists huddle into one bomb in the middle, the fuse fizzes and trembles, a held "
+               "breath, then BOOM: both fling up and out, heads thrown back, hands bursting open, and the debris "
+               "flutters down.", s, contact=[{"left": HAND, "right": HAND, "min": 0.03}], props=False)
 
 
 def row_boat():
+    """Two oars (the sticks), rowing off-sync, the right half a stroke behind: each stroke dips in at the catch, pulls
+    back low, lifts out and returns high with the wrist rolled flat (the feather). A smooth loop through four keys
+    (a trig interpolant); the phase ramps up and down smoothly."""
     s = Seq()
-    reach, pull = pose(j2=0.3, j3=-0.05, p=-0.25), pose(j2=0.12, j3=0.3, p=0.25)
-    for _ in range(3):
-        s.move(reach, T=0.6).move(pull, T=0.7)
-    return ens("row_boat", "Both arms row a boat together: reach forward, pull back, three strokes.", s)
+    K = np.array([pose(j2=0.32, j3=-0.12, p=-0.4),                     # catch: forward, the blade dips in
+                  pose(j2=0.02, j3=-0.2, p=-0.3),                      # the pull ends: back, still low
+                  pose(j2=0.02, j3=0.1, p=0.05, j6=0.6),               # out of the water, feathered
+                  pose(j2=0.3, j3=0.12, p=0.0, j6=0.6)])               # the return, high and flat
+    F = np.fft.rfft(K, axis=0) / 4
+
+    def oar(ph):
+        k = np.arange(3)
+        w = np.where(k == 0, 1, 2) * np.exp(1j * np.outer(ph, k))      # trig interpolant through the 4 keys
+        return np.real(w @ F)[0]
+    N, P = 3, 1.9                                                      # strokes, seconds per stroke
+    s.move(oar(np.array([0.0])), oar(np.array([-np.pi])), T=0.9, mirror=False, hold=0.1)
+    w = glide(0.12)
+    s.path(lambda u: oar(np.array([2 * np.pi * N * w(u)])), lambda u: oar(np.array([2 * np.pi * N * w(u) - np.pi])),
+           T=N * P * 1.1, warp=None)
+    return ens("row_boat", "Both arms row a boat with the sticks as oars, off-sync: dip in, pull back, lift out and "
+               "return with the wrist rolled flat, three strokes each.", s)
 
 
 def once_upon_a_time():
+    """The storybook: the hands press together in the middle, pointing up, a closed book; it opens (the wrists turn
+    out, the tips part while the bottoms stay together: the spine), a beat to read it, then a slow, grand sweep up
+    and out."""
     s = Seq()
-    s.move(pose(j2=0.1, j3=-0.2, p=-0.55), T=0.6, hold=0.3)                 # heads down, waiting
-    s.move(pose(j1=0.45, j2=0.15, j3=0.45, p=0.6, j6=0.3), T=1.6, hold=0.6)  # a slow, grand sweep up and out
-    return ens("once_upon_a_time", "The narrator's opening flourish: heads low, then a slow grand sweep up and out.", s)
+    s.move(*meet(1.15, 0.6, 0.5, gap=0.05), T=0.9)
+    s.move(*meet(1.15, 0.6, 0.5, gap=0.012), approach=TOUCH, hold=0.4)  # the closed book
+    book, _ = deltas(s)
+    s.move(book + pose(j5=-0.55, j6=0.35, p=-0.1), T=1.1, hold=0.5)          # it opens: the pages face the audience
+    s.move(book + pose(j5=-0.6, j6=0.35, p=-0.2), T=0.4, hold=0.3)            # a beat: read it
+    s.move(pose(j1=0.45, j2=0.15, j3=0.45, p=0.6, j6=0.3), T=1.4, hold=0.6)  # once upon a time...: the grand sweep
+    return ens("once_upon_a_time", "The narrator's storybook: the hands press together in the middle like a closed "
+               "book, it opens to the audience, a beat to read it, then a slow, grand sweep up and out.", s,
+               contact=[{"left": HAND, "right": HAND, "min": 0.006}], props=False)
 
 
 def the_end():
@@ -539,14 +803,86 @@ def the_end():
     return ens("the_end", "Arms wide for \"THE END!\", then a deep bow together.", s)
 
 
-def chomp():
+def chomp(AZ=1.0, C=-0.04, X=0.38, ZC=0.40, OPEN=(0.10, 0.12, 0.14), TH=(0.12, 0.15, 0.2), GAP=0.056, SH=-0.04):
+    """One giant pair of jaws in the middle: the left hand is the upper jaw, the right the lower one, both pointing
+    in, stacked. They hinge open wide (upper up, lower down, the tips spread most, the fingers bared like teeth) and
+    SNAP shut. The snap stops ~5.5 cm short (outside the 5 cm slow zone), so it may be fast; the third bite shakes
+    its prey. Empty hands: with the sticks pointing in, the arms couldn't reach the middle."""
     s = Seq()
-    up, lo = pose(j1=-0.3, j2=0.3, j3=0.45, p=-0.35), pose(j1=-0.3, j2=0.1, j3=-0.15, p=0.35)
-    s.move(up, lo, T=0.8, mirror=False, hold=0.2)                           # the left is the upper jaw, the right the lower
-    for _ in range(3):
-        s.move(up + pose(j3=0.12, p=0.3), lo + pose(j3=-0.08, p=-0.3), T=0.4, mirror=False)  # open wide...
-        s.move(up + pose(j3=-0.05, p=-0.15), lo + pose(j3=0.05, p=0.15), T=0.25, mirror=False, hold=0.15)  # ...SNAP
-    return ens("chomp", "The two arms are one giant pair of crocodile jaws: open wide and snap shut, three times.", s)
+
+    def jaw(h, th, lo, shake=0.0):                       # h: lift of the upper jaw, th: tilt of each, lo: lower z
+        up = np.array([X, MID_Y + C + shake, ZC + h]), frame(aim(AZ, th))
+        dn = mirror_target(np.array([X, MID_Y + C - shake, lo]), frame(aim(AZ, -th)))
+        return up, dn
+
+    a, b = ZC - 0.25, ZC                                 # shut: the lower jaw just GAP under the upper one
+    st = show.stage_pose
+    for _ in range(12):
+        z = (a + b) / 2
+        (pl, rl), (pr, rr) = jaw(0.0, SH, z)
+        qL = ik("left", pl, rl, st("left"))[0]; qR = ik("right", pr, rr, st("right"))[0]
+        a, b = (a, z) if hand_gap(qL, qR, 0.3) < GAP else (z, b)
+    z0 = a
+    shut = jaw(0.0, SH, z0)
+    both_grip(s, 0.3, 0.5)
+    s.move(*jaw(0.04, 0.1, z0 - 0.03), T=0.9, mirror=False)            # the jaws rise into the middle
+    s.move(*shut, T=0.4, mirror=False, hold=0.25)                      # shut, lurking
+    for k, (o, th) in enumerate(zip(OPEN, TH)):
+        both_grip(s, 1.0, 0.4)                                         # open wide: teeth bared
+        s.move(*jaw(o, th, z0 - 0.6 * o), T=0.6, mirror=False, hold=0.3 if k == 2 else 0.1)
+        both_grip(s, 0.3, 0.25)
+        s.move(*shut, T=0.3, mirror=False, hold=0.15)                  # SNAP!
+    for sh in (0.025, -0.025, 0.02, 0.0):                              # got it: shake the prey
+        s.move(*jaw(0.0, SH, z0, shake=sh), T=0.26, mirror=False)
+    s.wait(0.25)
+    both_grip(s, 1.0, 0.6)
+    return ens("chomp", "The two arms are one giant pair of jaws in the middle, the left hand the upper jaw and the "
+               "right the lower: they open wide, fingers bared like teeth, and SNAP shut, three times, then shake the "
+               "prey.", s, contact=[{"left": HAND, "right": HAND, "min": 0.03}], props=False)
+
+
+POT = np.array([0.42, MID_Y, 0.27])  # the witches' cauldron: the spoon tips stir around here (on the midplane)
+
+
+def cauldron():
+    """Two witches share one cauldron: closed grippers angle down into it like spoons; one stirs (the tip circles the
+    pot, the handle leaning out along the circle) while the other holds back and its head follows the spoon; swap.
+    The wrist can't point much steeper than ~45 deg down (j4 limit), so the pot sits low and forward (27 cm up)."""
+    s = Seq()
+
+    def stir(th, r=0.045, tilt=0.12):
+        tip = POT + [r * np.cos(th), r * np.sin(th), 0.0]
+        return tip, frame(aim(0.6, -0.75) + tilt * np.array([np.cos(th), np.sin(th), 0]))
+
+    turns, th0 = 1.25, 0.0                             # start in front, end on its own side (away from the other)
+    over = Seq()._solve("left", *stir(th0), show.stage_pose("left") + pose(j1=-0.6, j2=0.9, j3=1.1, p=-0.6))
+    WATCH = over - show.stage_pose("left") + pose(j1=0.6, j2=-0.35, j3=-0.3, p=0.1, j5=0.35)  # spoon up, out
+
+    def watch(th):                                                              # the head follows the spoon
+        return WATCH + pose(j5=0.12 * np.sin(th), j6=0.1 * np.sin(th))
+
+    def turn(stirrer):
+        def lt(u):
+            th = th0 + 2 * np.pi * turns * u
+            return stir(th) if stirrer == "left" else watch(th)
+
+        def rt(u):
+            th = th0 + 2 * np.pi * turns * u
+            return mirror_target(*stir(th)) if stirrer == "right" else watch(th)
+        return lt, rt
+
+    both_grip(s, 0.0, 0.5)                                                      # grip the spoons
+    s.move(*(f(0) for f in turn("left")), T=0.8, mirror=False, hold=0.15)       # the left dips in, the right peers
+    s.path(*turn("left"), T=1.8, warp=glide(0.25))                              # stir, the other watches
+    s.move(*(f(0) for f in turn("right")), T=0.6, mirror=False, hold=0.1)       # swap
+    s.path(*turn("right"), T=1.8, warp=glide(0.25))
+    s.move(watch(th0), T=0.5)                                                   # lift it out
+    for k in range(2):                                                          # cackle: heads up, hee-hee
+        s.move(WATCH + pose(p=0.3 + 0.12 * (k % 2), j6=0.15 * (-1) ** k), T=0.22)
+    s.wait(0.2)
+    return ens("cauldron", "Two witches at one cauldron: closed grippers angle down into the pot like spoons; one "
+               "stirs round and round while the other's head follows the spoon, they swap, then both cackle.", s,
+               props=False)
 
 
 # ---------------------------------------------------------------- hand-contact ensembles (empty hands only)
@@ -566,11 +902,19 @@ def hand_gap(qL, qR, grip=1.0):
                for b, hb in _PARTS["right"] if hb)
 
 
+def palm(point, normal):
+    """Rotation with the grasp axis along `point` and the flat side of the hand (site y; the fingers open along
+    site x) facing `normal`: palm(aim(...), (0, -1, 0)) = the left hand's flat side toward the other arm."""
+    z = unit(point)
+    y = np.asarray(normal, float); y = unit(y - y @ z * z)
+    return np.column_stack([np.cross(y, z), y, z])
+
+
 @functools.lru_cache(maxsize=None)
-def meet(az, el, z, x=0.36, gap=0.012, up=(0, 0, 1), dx=0.0):
-    """Left and right gripper targets (mirrored; the left dx further forward, the right dx back) where the hands are
-    `gap` apart, pointing az in and el up."""
-    R = frame(aim(az, el), up)
+def meet(az, el, z, x=0.36, gap=0.012, up=(0, 0, 1), dx=0.0, grip=1.0, normal=None):
+    """Left and right gripper targets (mirrored; the left dx further forward, the right dx back) where the hands
+    (fingers at grip) are `gap` apart, pointing az in and el up (normal: palm() instead of frame(.., up))."""
+    R = palm(aim(az, el), normal) if normal else frame(aim(az, el), up)
     lo, hi = 0.0, 0.25
     for _ in range(14):
         c = (lo + hi) / 2
@@ -578,7 +922,7 @@ def meet(az, el, z, x=0.36, gap=0.012, up=(0, 0, 1), dx=0.0):
         pR, RR = mirror_target(np.array([x - dx, MID_Y + c, z]), R)
         qL, _, _ = ik("left", pL, R, show.stage_pose("left"))
         qR, _, _ = ik("right", pR, RR, show.stage_pose("right"))
-        lo, hi = (c, hi) if hand_gap(qL, qR) < gap else (lo, c)
+        lo, hi = (c, hi) if hand_gap(qL, qR, grip) < gap else (lo, c)
     pL = np.array([x + dx, MID_Y + hi, z])
     return (pL, R), mirror_target(np.array([x - dx, MID_Y + hi, z]), R)
 
@@ -653,10 +997,102 @@ def heart():
     return hands("heart", "Both arms make a big heart: elbows up for the lobes, the hands meet at the tip, it beats.", s)
 
 
-HANDS = [clap, rub_hands, hug, pull_rope, heart]
+def deltas(s):
+    """Where both arms are now, as joint deltas from stage in the left-arm convention (for move(.., mirror=False))."""
+    return s.q["left"] - show.stage_pose("left"), show.mirror(s.q["right"] - show.stage_pose("right"), "right")
+
+
+def both_grip(s, g, T, after=0.0):
+    return s.grip("left", g, T, after).grip("right", g, T, after)
+
+
+def high_five():
+    s = Seq()
+    both_grip(s, 0.3, 0.4)
+    s.move(pose(j1=0.1, j2=-0.04, j3=-0.12, p=-0.3), T=0.45, hold=0.1)          # anticipation: dip, hands curl
+    both_grip(s, 1.0, 0.35)
+    s.move(*meet(0.9, 0.7, 0.55, gap=0.2), T=0.6, hold=0.15)                    # rise, hands spring wide open
+    s.move(*meet(1.15, 0.55, 0.53, gap=0.052), T=0.35)                          # swing in
+    s.move(*meet(1.15, 0.55, 0.53, gap=0.01), approach=TOUCH, hold=0.15)        # SLAP: palm to palm
+    s.move(*meet(1.0, 0.7, 0.56, gap=0.09), T=0.25, line=True)                 # bounce back
+    dl, dr = deltas(s)
+    up = pose(j1=0.12, p=0.25)
+    s.move(dl + up, dr + up, T=0.35, mirror=False)                             # YES!
+    for k, a in enumerate((0.15, -0.15, 0.15)):                                 # celebrate: wiggle, mouths flap
+        both_grip(s, 0.4 if k % 2 == 0 else 1.0, 0.18)
+        s.move(dl + up + pose(j6=a, j5=-a / 3), dr + up + pose(j6=a, j5=-a / 3), T=0.3, mirror=False)
+    both_grip(s, 1.0, 0.18)
+    s.move(dl + up, dr + up, T=0.3, mirror=False, hold=0.2)
+    return hands("high_five", "High five: dip, hands rise and spring open, swing in and slap palm to palm in the "
+                 "middle, bounce back, then celebrate with heads up and wiggling, flapping hands.", s)
+
+
+def fist_bump():
+    s = Seq()
+    s.grip("left", 0.0, 0.4).grip("right", 0.0, 0.4)                           # make fists
+    s.move(*meet(0.95, 0.25, 0.46, x=0.33, gap=0.25, grip=0.0), T=0.8, hold=0.25)  # wind-up: cock back and out
+    s.move(*meet(1.3, 0.0, 0.42, x=0.37, gap=0.052, grip=0.0), T=0.35)          # punch in
+    s.move(*meet(1.3, 0.0, 0.42, x=0.37, gap=0.01, grip=0.0), approach=TOUCH, hold=0.15)  # knuckles meet
+    both_grip(s, 1.0, 0.3, after=0.1)                                           # EXPLODE: fingers spring open...
+    s.move(*meet(1.3, 0.0, 0.42, x=0.37, gap=0.08, grip=0.0), T=0.2, line=True)  # ...as the hands fly apart
+    boom = pose(j1=0.4, j2=0.2, j3=0.3, p=0.45, j6=0.3)
+    s.move(boom, T=0.4)
+    both_grip(s, 0.6, 0.15)                                                     # sparks: the fingers flicker
+    s.move(boom + pose(j6=-0.15, p=-0.08), T=0.3)
+    both_grip(s, 1.0, 0.15)
+    s.move(boom, T=0.3, hold=0.3)
+    return hands("fist_bump", "Fist bump: make fists, cock back, punch in until the knuckles meet in the middle, then "
+                 "EXPLODE: the fists spring open as the hands fly apart, fingers flickering.", s)
+
+
+def law(U):
+    """Seq.path warp from a sampled time law U (u every DT, ending at 1, e.g. approach_law); use T = len(U) * DT."""
+    x, y = np.linspace(0, 1, len(U) + 1), np.concatenate([[0.0], U])
+    return lambda u: float(np.interp(u, x, y))
+
+
+def on_table(p, R, seed):
+    """Left-arm joints with the grasp site near p and rotation R, its hand's lowest point at -show.BANG_DEPTH."""
+    p = np.array(p, float)
+    for _ in range(4):
+        q = Seq()._solve("left", p, R, seed)
+        p[2] += -show.BANG_DEPTH + 0.0005 - SC.lows("left", [q])[0][0]  # 0.5 mm spare: the stored keys are rounded
+    return q
+
+
+def drum_roll():
+    """Two fists drum the table in turn, faster and faster, then both BANG together. Only the gripper and fingertips
+    touch the table; the elbows stay up (the wrists cock the fists up 5-8 cm, the knock is the head pitching down)."""
+    s = Seq()
+    st = show.stage_pose("left")
+    down = on_table((0.40, -0.06, 0.03), frame(aim(0.3, -1.0)), st + pose(j2=0.5, j3=0.3, p=-1.0)) - st
+    up, hi = down + pose(p=0.32, j2=-0.03), down + pose(p=0.42, j2=-0.05)     # wind-ups: ~5.5 and ~7.5 cm
+    both_grip(s, 0.0, 0.5)                                                      # fists
+    s.move(up, T=1.0, hold=0.2)
+    f0, f1, K = 1.0, 1.3, 3                                                     # strokes/s, accelerating; K hits each
+    T = (2 * K + 1) / (f0 + f1)
+
+    def stroke(ph):                                                             # cosine stroke: 0 = up, pi = knock
+        return down + (1 + np.cos(np.clip(ph, 0, 2 * np.pi * K))) / 2 * (up - down)
+
+    def phase(u):
+        t = u * T
+        return 2 * np.pi * (f0 * t + (f1 - f0) * t * t / (2 * T))
+    s.path(lambda u: stroke(phase(u)), lambda u: stroke(phase(u) - np.pi), T=T, warp=None)  # the roll
+    s.move(hi, T=0.45, hold=0.25)                                               # both fists up... wait for it
+    U = approach_law(0.08, zone=1e-4, vc=0.26, vmax=0.26, acc=2.0, taper=1.5)
+    s.path(lambda u: hi + u * (down - hi), T=len(U) * DT, warp=law(U))         # BANG!
+    s.wait(0.35)
+    s.move(pose(j1=0.25, j2=0.1, p=0.45), T=0.6, hold=0.35)                    # ta-da: heads up
+    return ens("drum_roll", "A drum roll on the table: two fists knock in turn, faster and faster, wind up together "
+               "and BANG at once, then heads up: ta-da!", s, props=False,
+               table={"min": -show.BANG_DEPTH, "impact": 0.3})
+
+
+HANDS = [clap, rub_hands, hug, pull_rope, heart, high_five, fist_bump]
 ENSEMBLES = [chomp, wings, this_big, shrug, rocket, waves, storm, gate_opening, explosion, row_boat, once_upon_a_time,
-             the_end]
-LIBRARY = [cross_swords, cheers, poke, quick_draw, tip_hats, copycat, car_ride] + ENSEMBLES + HANDS
+             the_end, cauldron, drum_roll, car_ride]
+LIBRARY = [cross_swords, cheers, poke, place_hat, quick_draw, tip_hats, copycat, elbow_nudge, straight_man, heckle] + ENSEMBLES + HANDS
 
 
 def main(names):

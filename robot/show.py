@@ -15,6 +15,16 @@ HZ = 50
 RIGHT_OFFSET = np.array([0.0056, 0.602, 0.0])  # right-arm frame = left-arm frame + this (calib.json)
 TABLE_Z = -0.012                               # table surface, arm frame
 PROP_LEN, PROP_R = 0.15, 0.015                 # a prop sticks out of the fingers along the grasp axis
+# What an arm can hold (Nov 7, round 3b), as checker points (site frame: z out of the fingers, x the finger-closing
+# axis) with a radius each. "stick" (True) = any handed-in prop, a foam sword; "car" and "ufo" only play their own
+# gestures (Gesture.prop). ponytail: measured from the props' listed sizes, not on the real grasp.
+_disc = [(x, y) for x in np.arange(-0.04, 0.041, 0.01) for y in np.arange(-0.04, 0.041, 0.01) if x * x + y * y <= 0.0017]
+PROP_SHAPES = {
+    "stick": ([(0, 0, z) for z in np.linspace(0, PROP_LEN, 16)], PROP_R),
+    "car": ([(0, y, 0.013) for y in np.linspace(-0.0235, 0.0235, 6)], 0.015),  # Majorette 1:64, 7.5 x 2.8 x 3 cm,
+    # gripped across the roof: its long side along y, the wheels ~2.8 cm out of the fingers
+    "ufo": ([(x, y, 0.03) for x, y in _disc] + [(0, 0, 0.012)], 0.012),  # 10 cm saucer hanging from its gripped dome
+}
 MIRROR = np.array([-1, 1, 1, 1, -1, -1])       # y -> -y: yaw (j1, j5) and roll (j6) flip, pitch joints stay
 
 # Joint limits: arm spec intersected with i2rt's model (j3 model max 3.14). j2/j3 rest on their 0 stop at home.
@@ -27,20 +37,31 @@ VMAX = 1.5                                     # rad/s, any joint
 AMAX = np.array([8.0, 8.0, 8.0, 15.0, 15.0, 15.0])  # rad/s^2; the wrist joints carry little mass
 GRIP_VMAX = 3.5  # gripper (0..1) per s: the DM4310 (~21 rad/s) turns the 6.57 rad stroke in ~0.3 s; untested
 CLEAR = 0.04                                   # m every moving link, grasp site and prop tip stay above the table
+# Table contact (Nov 7 evening), only for gestures that declare it ("table": {"min": m, "impact": m/s}) and only with
+# empty hands (or "prop": true: a prop gesture whose prop touches, a toy car driving): the gripper and fingertips
+# (TABLE_PARTS, plus that prop) may go down to `min` above the table (negative = into it, a knock), descending at <= `impact` m/s once within TABLE_ZONE of `min`; everything else (links, wrist, a prop) keeps
+# CLEAR. The real arms sag 1-2 cm and are position-controlled, so a shallow target into the table stays a small error.
+TABLE_PARTS = ("gripper", "tip_left", "tip_right")
+TABLE_ZONE = 0.05
+BANG_DEPTH = 0.004  # ponytail: calibration knob, m below the table surface a knock aims for (tune on the real arms)
 GAP = 0.15                                     # m the two arms (links + props) stay apart
 VOX = 0.01                                     # swept-volume voxel; the gap check subtracts its error (VOX*sqrt(3))
 # Don't lean back (Nov 7): the bases sit near the table's back edge and the table is light, so moving the arms' mass
 # behind the bases tips it over backward. Each arm's centre of mass (link1 and below, gripper; base frame) must stay
-# ahead of the stage pose's COM minus a margin, in every gesture, idle and blend. Folds (the stage/rest gestures and
+# ahead of the raised reference pose's COM (LEAN_REF_LEFT) minus a margin, in every gesture, idle and blend. Folds (the stage/rest gestures and
 # the server's blends and stage/rest moves, all <= 75 % of the joint limits) may lean back as far as rest or the pose
 # they start from, no further: rest is folded low and the table holds it.
 LEAN_BACK_CHECK = True  # switch: False turns the rule off everywhere (checker, stage server, arm.py)
-COM_BACK_MARGIN = 0.02  # ponytail: calibration knob, m the COM may go behind the stage pose's COM (first guess)
+COM_BACK_MARGIN = 0.02  # ponytail: calibration knob, m the COM may go behind the reference pose's COM (first guess)
 FOLD = ("stage", "rest")
 
-# Stage pose: lift.py's raised pose (gripper ~0.48 m up, facing the audience) with the "head" (gripper) level.
+# Stage pose (Nov 7 evening, lowered): the gripper ~0.37 m up and 4 cm further forward than lift.py's raised pose
+# (LEAN_REF_LEFT, ~0.48 m up), head level, facing the audience, so the action plays closer to the tabletop.
 # Not turned inward: with 15 cm props the arms have only ~0.22 m of inward room each before the 15 cm gap.
-STAGE_LEFT = np.array([0.0, 0.8, 1.2, -0.3, 0.0, 0.0])
+# The lean-back rule stays anchored at the raised pose, where the table was measured not to tip: lower and forward
+# moves the COM forward, so the lowered stage has ~3 cm more room before the limit.
+LEAN_REF_LEFT = np.array([0.0, 0.8, 1.2, -0.3, 0.0, 0.0])
+STAGE_LEFT = LEAN_REF_LEFT + np.array([0.0, 0.0, -0.5, 0.5, 0.0, 0.0])
 # Stances: the pose gestures play relative to. "audience" = STAGE_LEFT (both face the audience); "each_other" = base
 # and head yawed toward the other arm, so two characters can slash / wave / roar AT each other (left j1 < 0, j5 > 0;
 # the right arm mirrors). Every gesture is checked in each stance; one that fails a stance is refused only there.
@@ -48,7 +69,7 @@ STAGE_LEFT = np.array([0.0, 0.8, 1.2, -0.3, 0.0, 0.0])
 # WITHOUT the prop sticks and "each_other" turns the heads deep enough for eye contact (the wrist cameras, the eyes,
 # point at each other's head). While an arm holds a prop (stage /props) the "_props" variants apply: checked with
 # both props, and a shallow facing turn, since the props would cross.
-FACING_LEFT = np.array([-0.12, 0.04, 0.0, 0.04, 1.05, 0.0])      # delta from STAGE_LEFT: head ~66 deg toward the other
+FACING_LEFT = np.array([-0.08, 0.04, 0.0, 0.04, 1.05, 0.0])      # delta from STAGE_LEFT: head ~66 deg toward the other
 FACING_PROPS_LEFT = np.array([-0.2, 0.0, 0.0, 0.0, 0.25, 0.0])  # with props: ~25 deg
 PROPS = "_props"
 STANCES = {"audience": STAGE_LEFT, "each_other": STAGE_LEFT + FACING_LEFT,
@@ -117,6 +138,14 @@ def scene_spec():
         site.parent.add_geom(name="prop", type=mujoco.mjtGeom.mjGEOM_CAPSULE, fromto=[*p0, *p1], size=[PROP_R, 0, 0],
                              rgba=[0.95, 0.75, 0.1, 1] if side == "left" else [0.2, 0.6, 0.95, 1],
                              contype=0, conaffinity=0)
+        at = lambda z: list(p0 + rot.reshape(3, 3) @ [0, 0, z])
+        q = list(am.site_quat[sid])  # looks only (hidden until shown); the checker uses PROP_SHAPES
+        site.parent.add_geom(name="prop_car", type=mujoco.mjtGeom.mjGEOM_BOX, pos=at(0.013), quat=q,
+                             size=[0.014, 0.0375, 0.015], rgba=[0.85, 0.1, 0.1, 0], contype=0, conaffinity=0)
+        site.parent.add_geom(name="prop_ufo", type=mujoco.mjtGeom.mjGEOM_CYLINDER, pos=at(0.03), quat=q,
+                             size=[0.05, 0.01, 0], rgba=[0.7, 0.75, 0.8, 0], contype=0, conaffinity=0)
+        site.parent.add_geom(name="prop_ufo_dome", type=mujoco.mjtGeom.mjGEOM_SPHERE, pos=at(0.012), quat=q,
+                             size=[0.022, 0, 0], rgba=[0.5, 0.9, 0.6, 0], contype=0, conaffinity=0)
         s.attach(arm, prefix=pre, frame=w.add_frame(pos=pos))
     return s
 
@@ -131,16 +160,19 @@ class Scene:
         self.qadr = {side: np.array([m.jnt_qposadr[m.joint(f"{p}joint{i}").id] for i in range(1, 9)])
                      for side, p in (("left", "l_"), ("right", "r_"))}
         self.finger_max = float(m.jnt_range[m.joint("l_joint7").id][1])
-        self.geoms, self.site = {}, {}
-        self.props = {s: False for s in SIDES}  # does the prop stick count (clouds, sweeps, clearance)?
+        self.geoms, self.site, self.hand = {}, {}, {}
+        self.props = {s: False for s in SIDES}  # what the arm holds for the checker: False or a PROP_SHAPES kind
         self.prop_geom = {s: m.geom(p + "prop").id for s, p in (("left", "l_"), ("right", "r_"))}
+        self.prop_look = {s: {"stick": [m.geom(p + "prop").id], "car": [m.geom(p + "prop_car").id],
+                              "ufo": [m.geom(p + "prop_ufo").id, m.geom(p + "prop_ufo_dome").id]}
+                          for s, p in (("left", "l_"), ("right", "r_"))}
         for side, p in (("left", "l_"), ("right", "r_")):
             self.site[side] = m.site(f"{p}grasp_site").id
             gs = []
             for g in range(m.ngeom):
                 body = m.body(m.geom_bodyid[g]).name
-                if not body.startswith(p) or body in (p + "base", p + "link1"):  # base and link1 never move off the table
-                    continue
+                if not body.startswith(p) or body in (p + "base", p + "link1") or m.geom(g).name.startswith(p + "prop"):
+                    continue  # base and link1 never move off the table; props: PROP_SHAPES
                 if m.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH:
                     mid = m.geom_dataid[g]
                     v = m.mesh_vert[m.mesh_vertadr[mid]: m.mesh_vertadr[mid] + m.mesh_vertnum[mid]]
@@ -149,6 +181,7 @@ class Scene:
                 else:  # the prop capsule: points along its axis, each with the capsule radius
                     gs.append((g, np.outer(np.linspace(-1, 1, 16), [0, 0, m.geom_size[g][1]]), float(m.geom_size[g][0])))
             self.geoms[side] = gs
+            self.hand[side] = {g for g, _, _ in gs if m.body(m.geom_bodyid[g]).name[len(p):] in TABLE_PARTS}
 
     def set(self, side, q, grip=1.0):
         a = self.qadr[side]
@@ -158,15 +191,49 @@ class Scene:
     def forward(self):
         mujoco.mj_kinematics(self.m, self.d)
 
+    def show_prop(self, side, kind):
+        """Rendering: show only the given prop (False/None = none) in the side's gripper."""
+        for k, ids in self.prop_look[side].items():
+            for g in ids:
+                self.m.geom_rgba[g][3] = 1.0 if k == ("stick" if kind is True else kind) else 0.0
+
+    def prop_cloud(self, side):
+        """(points, radii) of the held prop for the current pose (empty when the hand is empty)."""
+        kind = self.props[side]
+        if not kind:
+            return np.zeros((0, 3)), np.zeros(0)
+        v, r = PROP_SHAPES["stick" if kind is True else kind]
+        sid = self.site[side]
+        return self.d.site_xpos[sid] + np.asarray(v) @ self.d.site_xmat[sid].reshape(3, 3).T, np.full(len(v), r)
+
     def cloud(self, side):
-        """(points (N,3), radii (N,)) of the side's moving parts for the current pose, shared frame."""
+        """(points (N,3), radii (N,)) of the side's moving parts and held prop for the current pose, shared frame."""
         pts, rad = [], []
         for g, v, r in self.geoms[side]:
-            if g == self.prop_geom[side] and not self.props[side]:
-                continue
             pts.append(self.d.geom_xpos[g] + v @ self.d.geom_xmat[g].reshape(3, 3).T)
             rad.append(np.full(len(v), r))
-        return np.concatenate(pts), np.concatenate(rad)
+        pp, pr = self.prop_cloud(side)
+        return np.concatenate(pts + [pp]), np.concatenate(rad + [pr])
+
+    def lows(self, side, Q, prop_hand=False):
+        """Per sample: (lowest point of the hand (TABLE_PARTS, plus the held prop if prop_hand), lowest point of
+        everything else), above the table."""
+        hand, other = [], []
+        for q in Q:
+            self.set(side, q); self.forward()
+            h = o = np.inf
+            for g, v, r in self.geoms[side]:
+                z = float(np.min(self.d.geom_xpos[g][2] + v @ self.d.geom_xmat[g].reshape(3, 3)[2])) - r - TABLE_Z
+                if g in self.hand[side]:
+                    h = min(h, z)
+                else:
+                    o = min(o, z)
+            pp, pr = self.prop_cloud(side)
+            if len(pp):
+                z = float(np.min(pp[:, 2] - pr)) - TABLE_Z
+                h, o = (min(h, z), o) if prop_hand else (h, min(o, z))
+            hand.append(h); other.append(o)
+        return np.array(hand), np.array(other)
 
     def sweep(self, side, Q):
         """Swept volume of joint samples Q (N,6): (voxel points, radii, lowest point above the table in m)."""
@@ -273,6 +340,8 @@ class Gesture:
         assert self.dq.shape[1] == 6 and np.all(np.diff(self.t) > 0) and self.t[0] == 0, f"{self.name}: bad keys"
         self.duration = float(self.t[-1])
         self.max_speed = None  # set by check()
+        self.table = d.get("table")  # {"min": m, "impact": m/s, "prop": bool}: the hand may touch the table (TABLE_PARTS)
+        self.prop = d.get("prop")  # a PROP_SHAPES kind the gesture needs in the hand ("car", "ufo"), else None
         self.stances = {"audience"}  # stances it passed the checker in (load_library)
 
     def samples(self, side, speed=1.0, hz=HZ, stance="audience"):
@@ -321,7 +390,7 @@ class Checker:
         m = self.scene.m
         self._link1 = {s: m.body(p + "link1").id for s, p in (("left", "l_"), ("right", "r_"))}
         self._base = {s: m.body(p + "base").id for s, p in (("left", "l_"), ("right", "r_"))}
-        self.stage_x = {s: float(self.com(s, [stage_pose(s)])[0, 0]) for s in SIDES}
+        self.stage_x = {s: float(self.com(s, [mirror(LEAN_REF_LEFT, s)])[0, 0]) for s in SIDES}  # the lean reference
         self.rest_x = {s: float(self.com(s, [HOME[s]])[0, 0]) for s in SIDES}
 
     def com(self, side, Q):
@@ -344,27 +413,42 @@ class Checker:
                     f"limit {(base - COM_BACK_MARGIN)*100:.1f} cm"]
         return []
 
-    def check_samples(self, side, Q, fold=False):
+    def check_samples(self, side, Q, fold=False, table=None):
         """Problems of one arm's absolute joint samples (limits, speed, accel, table clearance, lean-back); returns
-        (problems, sweep). fold: see lean_problems()."""
+        (problems, sweep). fold: see lean_problems(). table: a gesture's table-contact allowance (TABLE_PARTS)."""
         probs = motion_problems(Q) + self.lean_problems(side, Q, fold=fold)
         sw = self.scene.sweep(side, Q)
-        if sw[2] < CLEAR:
+        if table:
+            hand, other = self.scene.lows(side, Q, prop_hand=bool(table.get("prop")))
+            if other.min() < CLEAR:
+                probs.append(f"lowest point off the hand{' (prop included)' if any(self.scene.props.values()) else ''}"
+                             f" is {other.min()*100:.1f} cm above the table, needs {CLEAR*100:.0f} cm")
+            if hand.min() < table["min"] - 1e-6:
+                probs.append(f"the hand goes {hand.min()*100:.1f} cm above the table, allowed {table['min']*100:.1f} cm")
+            down = -np.diff(hand) * HZ
+            near = np.minimum(hand[1:], hand[:-1]) < table["min"] + TABLE_ZONE
+            if len(down) and np.any(near) and down[near].max() > table["impact"] + 1e-4:
+                probs.append(f"the hand comes down at {down[near].max()*100:.0f} cm/s near the table, "
+                             f"allowed {table['impact']*100:.0f} cm/s")
+        elif sw[2] < CLEAR:
             probs.append(f"lowest point{' (prop included)' if any(self.scene.props.values()) else ''} is {sw[2]*100:.1f} cm above the table, needs {CLEAR*100:.0f} cm")
         return probs, sw
 
     def set_props(self, on):
-        """Whether both arms' prop sticks count in what follows (sweeps, clearance, gaps)."""
-        self.scene.props = {s: bool(on) for s in SIDES}
+        """What both arms hold in what follows (sweeps, clearance, gaps): False, True (a stick), a PROP_SHAPES kind,
+        or {side: one of those}."""
+        self.scene.props = dict(on) if isinstance(on, dict) else {s: on or False for s in SIDES}
 
     def check(self, g, stance="audience"):
         """Problems of a gesture on either arm at speed 1 (empty = ok), in the stance's props mode (it stays set).
         Sets g.max_speed and caches swept volumes."""
-        self.set_props(has_props(stance))
+        self.set_props(g.prop or has_props(stance))
         probs = []
         for side in SIDES:
             Q, G = g.samples(side, stance=stance)
-            p, sw = self.check_samples(side, Q, fold=g.name in FOLD)
+            if g.table and has_props(stance) and not g.prop:
+                probs.append("touches the table: empty hands only")
+            p, sw = self.check_samples(side, Q, fold=g.name in FOLD, table=g.table)
             probs += [f"{side}: {x}" for x in p]
             self.swept[key(g.name, side, stance)] = sw
         if G is not None and (G.min() < -1e-6 or G.max() > 1 + 1e-6):
@@ -372,7 +456,7 @@ class Checker:
         Q, G = g.samples("left")
         v, a = peak_rates(Q)
         gv = np.abs(np.diff(G)).max() * HZ if G is not None and len(G) > 1 else 0.0
-        g.max_speed = float(min(1.5, VMAX / max(v.max(), 1e-6), np.sqrt(np.min(AMAX / np.maximum(a, 1e-6))),
+        g.max_speed = float(min(1.0 if g.table else 1.5, VMAX / max(v.max(), 1e-6), np.sqrt(np.min(AMAX / np.maximum(a, 1e-6))),
                                 GRIP_VMAX / max(gv, 1e-6)))
         return probs
 

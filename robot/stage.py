@@ -26,7 +26,8 @@ API (JSON in and out; "arm" is left | right | both, default both):
                                        of whatever it plays or idles, until "on": false, /freeze or 20 s
   POST /stance {"stance","speed"}      "audience" (default) or "each_other": both arms turn to the stance pose and
                                        every gesture, idle and /stage play relative to it until the next /stance
-  POST /props {"arm","on","speed"}     the arm holds a prop (or not). Empty hands are the default: the gripper is the
+  POST /props {"arm","on","speed","kind"}  the arm holds a prop (or not); kind "car"/"ufo" (show.PROP_SHAPES): a toy
+                                       that plays only its own gestures (drive, ufo_*). Empty hands are the default: the gripper is the
                                        mouth and each_other turns deep (eye contact). While any arm holds a prop,
                                        everything is checked with both props, each_other turns shallow (the arms turn
                                        there now), /talk is refused on a holding arm, gestures keep its grip, and
@@ -153,7 +154,8 @@ class Stage:
         q0, g0 = self.cmd_q[side], self.cmd_g[side]
         G = np.full(len(Q), g0) if G is None else G
         BQ, BG = show.blend(q0, Q[0], speed, g0, G[0])
-        probs, bsweep = self.ck.check_samples(side, np.vstack([q0[None], BQ, Q[:1]]), fold=True)
+        probs, bsweep = self.ck.check_samples(side, np.vstack([q0[None], BQ, Q[:1]]), fold=True,
+                                              table=self._table(side, gesture))
         if base_sweep is None:
             p2, base_sweep = self.ck.check_samples(side, Q, fold=gesture is None)
             probs += p2
@@ -163,6 +165,11 @@ class Stage:
             raise StageError(f"{side} {name}: " + "; ".join(probs))
         return Plan(name, np.vstack([q0[None], BQ, Q]), np.concatenate([[g0], BG, G]),
                     show.join(bsweep, base_sweep), gesture, loop, hold)
+
+    def _table(self, side, gesture=None):
+        """Table allowance of a blend: the gesture it leaves (a dead arm lies on the table) or the one it goes into."""
+        prev = self.plan[side].gesture
+        return (prev.table if prev is not None else None) or (gesture.table if gesture is not None else None)
 
     def _st(self):
         """The stance in use: the facing, in the props mode ("each_other_props" while any arm holds a prop)."""
@@ -176,6 +183,11 @@ class Stage:
         # always go via the audience pose
         if st not in g.stances:
             raise StageError(f"{name} is not available in the {st} stance: {self.ck.stance_rejected.get((name, st), '')}")
+        held = self.props[side]
+        if g.prop and held != g.prop:
+            raise StageError(f"{name} needs the {g.prop} in the {side} hand (POST /props with kind {g.prop!r})")
+        if held not in (False, True) and not g.prop and name not in show.FOLD:
+            raise StageError(f"the {side} arm holds the {held}: only its own gestures play (or POST /props off)")
         speed = float(np.clip(speed, 0.1, g.max_speed))
         Q, G = g.samples(side, speed, stance=st)
         if self.props[side]:
@@ -254,6 +266,8 @@ class Stage:
             self._guard()
             if not du.props and any(self.props.values()):
                 raise StageError(f"duet {name} needs empty hands; POST /props off first")
+            if any(v not in (False, True) for v in self.props.values()):
+                raise StageError(f"duet {name}: a toy is in hand; POST /props off first")
             busy = [s for s in SIDES if not (self.plan[s].done or self.plan[s].loop) or self.queue[s]]
             if busy:
                 raise StageError(f"duet {name} needs both arms free; {busy[0]} is playing {self.plan[busy[0]].name}")
@@ -272,7 +286,7 @@ class Stage:
                 sw = {}
                 for s in SIDES:
                     Qk = parts[s][k][0] if before is None else np.vstack([smp[s][0][-1:], parts[s][k][0]])
-                    probs, sw[s] = self.ck.check_samples(s, Qk, fold=True)
+                    probs, sw[s] = self.ck.check_samples(s, Qk, fold=True, table=self._table(s) if k == 0 else du.table)
                     if probs:
                         raise StageError(f"duet {name}: {s} {'into' if k == 0 else 'out of'} it: " + "; ".join(probs))
                 if show.gap(sw["left"], sw["right"]) < show.GAP:
@@ -325,6 +339,9 @@ class Stage:
                 return {"ok": True, "started": sorted(started), "queued": sorted(set(sides) - set(started))}
             plans = {s: self._gesture_plan(s, gesture, speed) for s in sides}
             self._commit({s: p for s, (p, _) in plans.items()})
+            for s in sides:
+                if self.lib[gesture].table:
+                    self.mouth[s].on = False  # a fist on the table: the mouth shuts
             for s in sides:
                 self.queue[s].clear()
             return {"ok": True, "started": sides, "speed": round(next(iter(plans.values()))[1], 2)}
@@ -397,14 +414,22 @@ class Stage:
                 self.queue[s].clear()
             return {"ok": True, "stance": stance}
 
-    def set_props(self, arm, on, speed=1.0):
-        """The arm holds a prop or not. If that changes the stance pose (each_other: deep <-> shallow), both arms turn
-        there first, checked with empty hands: the prop goes in after the call and has come out before it."""
+    def _ck_props(self, props):
+        """What the checker counts in each hand: a toy (car, ufo) where held, else a stick once any prop is out."""
+        return {s: props[s] if props[s] else any(props.values()) for s in SIDES}
+
+    def set_props(self, arm, on, speed=1.0, kind=None):
+        """The arm holds a prop or not (kind: a show.PROP_SHAPES toy such as "car" or "ufo", which then plays only its
+        own gestures; default a stick-like prop). If that changes the stance pose (each_other: deep <-> shallow),
+        both arms turn there first, checked with empty hands: the prop goes in after the call and has come out
+        before it."""
+        if kind not in (None, "stick") and kind not in show.PROP_SHAPES:
+            raise StageError(f"unknown prop kind {kind!r}; known: {sorted(show.PROP_SHAPES)}")
         with self.lock:
             self._guard()
             props = dict(self.props)
             for s in self.sides(arm):
-                props[s] = bool(on)
+                props[s] = (True if kind in (None, "stick") else kind) if on else False
             st = show.with_props(self.stance, any(props.values()))
             if np.any(show.STANCES[st] != show.STANCES[self._st()]):
                 self.ck.set_props(False)
@@ -414,11 +439,11 @@ class Stage:
                         p.hold = self.after[s] != "idle"
                     self._commit(plans)
                 finally:
-                    self.ck.set_props(any(self.props.values()))
+                    self.ck.set_props(self._ck_props(self.props))
                 for s in SIDES:
                     self.queue[s].clear()
             self.props = props
-            self.ck.set_props(any(props.values()))
+            self.ck.set_props(self._ck_props(props))
             for s in SIDES:
                 if props[s]:
                     self.mouth[s].on = False
@@ -520,6 +545,8 @@ class Stage:
                 out_q, out_g = {}, {}
                 for s in SIDES:  # the mouth overlay: small head offsets (<= 0.06 rad) and the gripper
                     out_g[s], self.dq[s] = self.mouth[s].step(self.cmd_g[s])
+                    if self.plan[s].gesture is not None and self.plan[s].gesture.table:
+                        self.dq[s] = np.zeros(6)  # touching the table: no head bob on top
                     out_q[s] = self.cmd_q[s] + self.dq[s]
                 try:
                     self.arms.command(out_q, out_g)
@@ -659,7 +686,7 @@ def serve(st, port):
                     "/duet": lambda: st.play_duet(b["name"], float(b.get("speed", 1.0))),
                     "/talk": lambda: st.talk(arm, bool(b.get("on", True))),
                     "/stance": lambda: st.set_stance(b["stance"], float(b.get("speed", 1.0))),
-                    "/props": lambda: st.set_props(arm, bool(b.get("on", True)), float(b.get("speed", 1.0))),
+                    "/props": lambda: st.set_props(arm, bool(b.get("on", True)), float(b.get("speed", 1.0)), b.get("kind")),
                     "/rest": lambda: st.go_rest(arm, float(b.get("speed", 1.0))),
                     "/grip": lambda: st.grip(arm, float(b["value"])),
                 }

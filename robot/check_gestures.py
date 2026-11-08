@@ -39,11 +39,22 @@ assert any("table" in p for p in ck.check(fake("dive", (0, [0] * 6), (3, [0, 1.3
 assert any("j4 reaches" in p for p in ck.check(fake("limit", (0, [0] * 6), (3, [0, 0, 0, 1.9, 0, 0]))))
 assert any("leans back" in p for p in ck.check(fake("lean", (0, [0] * 6), (3, [0, -0.3, 0.4, 0, 0, 0]))))
 print("checker rejects fast / table / limit / lean-back motions")
+# Table contact (round 3): only gestures that declare it, only with empty hands, only the gripper, gently enough.
+bang = ok["bang_table"]
+assert any("empty hands only" in p for p in ck.check(bang, "audience_props"))
+assert not ck.check(bang) and not ck.check(ok["die_dramatically"])
+assert any("the hand goes" in p for p in ck.check(show.Gesture(dict(bang.d, table=dict(min=0.0, impact=0.3)))))
+assert any("comes down at" in p for p in ck.check(show.Gesture(dict(bang.d, table=dict(min=-0.01, impact=0.1)))))
+dive = fake("dive", (0, [0] * 6), (3, [0, 1.3, -0.6, -0.8, 0, 0])).d
+assert any("off the hand" in p for p in ck.check(show.Gesture(dict(dive, table=dict(min=-0.5, impact=9.0)))))
+ck.set_props(False)
+print("table contact: empty hands only, depth, impact speed and link clearance enforced")
 
 # Duets: all pass; an undeclared close pair (< 15 cm) and a fast final approach (> 5 cm/s inside 5 cm) are refused.
 dc = duets.DuetChecker(ck)
 dok, dbad = duets.load_duets(dc)
-assert not dbad and {"cross_swords", "cheers", "poke", "quick_draw", "tip_hats", "copycat", "car_ride"} <= set(dok), \
+assert not dbad and {"cross_swords", "cheers", "poke", "quick_draw", "tip_hats", "copycat", "place_hat", "elbow_nudge",
+                     "straight_man", "heckle"} <= set(dok), \
     (sorted(dok), dbad)
 for d in dok.values():
     assert d.max_speed <= 1 and min(d.stats["closest_contact_cm"].values(), default=1) > 0 and d.stats["closest_other_cm"] >= 15, d.stats
@@ -53,7 +64,7 @@ fast = duets.Duet(dict(base, keys=[dict(k, t=k["t"] * 0.5) for k in base["keys"]
 assert any("closes at" in p for p in dc.check(fast)), dc.check(fast)
 ens = {n for n, d in dok.items() if d.kind == "ensemble"}
 assert {"chomp", "wings", "this_big", "shrug", "rocket", "waves", "storm", "gate_opening", "explosion", "row_boat",
-        "once_upon_a_time", "the_end"} <= ens, sorted(ens)
+        "once_upon_a_time", "the_end", "car_ride", "high_five", "fist_bump", "cauldron", "drum_roll"} <= ens, sorted(ens)
 print(f"{len(dok)} duets pass ({len(ens)} of them ensembles); undeclared contact and fast approach refused")
 
 st = stage.Stage(stage.KinArms(), "kin", warp=4)
@@ -151,6 +162,26 @@ st.wait()
 assert all(np.allclose(st.cmd_q[s], show.stage_pose(s, "each_other")) for s in show.SIDES)
 assert st.ck.scene.props == {"left": False, "right": False}
 print("props ok: /props turns each_other shallow, blocks the mouth, keeps the grip, refuses hand duets; off again")
+# Toys: a held car plays only its own gestures; its gestures need it.
+assert call("/play", {"arm": "left", "gesture": "drive"})[0] == 409  # no car in hand
+assert call("/props", {"arm": "left", "on": True, "kind": "car"})[0] == 200
+st.wait()
+assert st.ck.scene.props == {"left": "car", "right": True}
+assert call("/play", {"arm": "left", "gesture": "slash"})[0] == 409
+assert call("/play", {"arm": "left", "gesture": "ufo_hover"})[0] == 409
+assert call("/duet", {"name": "cheers"})[0] == 409
+assert call("/play", {"arm": "left", "gesture": "drive"})[0] == 200
+st.wait()
+assert call("/props", {"arm": "left", "on": False})[0] == 200 and call("/props", {"arm": "left", "kind": "kite"})[0] == 409
+st.wait()
+print("toys ok: a held car plays drive only, its gestures need it")
+assert call("/play", {"arm": "left", "gesture": "die_dramatically"})[0] == 200
+assert not st.mouth["left"].on
+st.wait()
+assert call("/play", {"arm": "left", "gesture": "revive"})[0] == 200  # up from the table again
+st.wait()
+assert np.allclose(st.cmd_q["left"], show.stage_pose("left", "each_other"))
+print("die_dramatically then revive ok")
 if "look_at_other" in ok and "each_other" not in ok["look_at_other"].stances:
     code, r = call("/play", {"arm": "left", "gesture": "look_at_other"})
     assert code == 409 and "each_other" in r["error"], r

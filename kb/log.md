@@ -88,3 +88,12 @@
 - Storyteller sound (Nov 7 late): `[sfx:name]` one-shots and `[music:mood]` loops through LiveKit's
   BackgroundAudioPlayer (`agent/sounds.py`), music ducked under speech, 32 CC0 sfx + 9 CC0 music tracks in
   `agent/sounds/`, plus a stand-up comedy mode with rimshots and laugh tracks. See [storyteller.md](storyteller.md).
+- Round 3b (sim only): working height lowered (stage j2 0.8, j3 0.7); table contact as a scoped `"table"` flag
+  (hand only, depth, impact speed; empty hands); die_dramatically is now a limp slump onto the table, with revive;
+  bang_table (fist); stir_lazy/stir_frantic; italian, italian_exasperated, chef_kiss, flick; shoot with recoil; 23
+  face-acting verbs (bite, eat, laugh, duck, dodge...); comedy solos (mic_drop, facepalm, knee_slap, eye_roll, ta_da,
+  slow_turn, laugh_hard, double_take with a tilt). Duets: high_five, fist_bump, cauldron, drum_roll, place_hat,
+  elbow_nudge, straight_man, heckle; chomp/explosion/gate/once_upon/row_boat/shrug/quick_draw reworked, car_ride
+  is now a steering-wheel ensemble. Toys: `/props` kinds `car` (drive) and `ufo` (ufo_fly/hover/land/crash), modelled
+  in `show.PROP_SHAPES`. 62 gestures, 32 duets/ensembles, all pass. Table moves and toys are never run on the real
+  arms unattended.

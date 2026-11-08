@@ -3,6 +3,7 @@
 A duet file (duets/<name>.json) holds synchronized keyframes for BOTH arms as absolute joints (solved by IK at build
 time in make_duets.py), played with the same monotone cubic at 50 Hz as gestures:
   {"name", "kind": "duet"|"ensemble", "about", "contact": [{"left": [parts], "right": [parts], "min": m}, ...],
+   "table": {"min": m, "impact": m/s} (optional: the hands may touch the table, as for a gesture; show.TABLE_PARTS),
    "props": false (optional: played with empty hands, checked without the prop sticks; hand contact),
    "prop": {"t": s, "to": "right"} (optional: the left hands its prop to the right at t),
    "keys": [{"t": s, "left": [6 rad], "right": [6 rad], "gl": 0..1, "gr": 0..1 (grips optional)}, ...]}
@@ -52,6 +53,7 @@ class Duet:
             self.g[s] = (np.array([a for a, _ in gk]), np.array([[b] for _, b in gk])) if gk else None
         self.contact = [(tuple(c["left"]), tuple(c["right"]), float(c["min"])) for c in d.get("contact", [])]
         self.prop = d.get("prop")
+        self.table = d.get("table")  # {"min", "impact"}: the hands may touch the table (show.TABLE_PARTS)
         self.props = bool(d.get("props", True))  # False: empty hands (the stage refuses it while a prop is held)
         assert all(self.q[s].shape[1] == 6 for s in SIDES) and np.all(np.diff(self.t) > 0) and self.t[0] == 0, \
             f"{self.name}: bad keys"
@@ -97,7 +99,7 @@ class DuetChecker:
         self.part = {}  # side -> {geom id: part name or None}
         for s in SIDES:
             p, parts = PRE[s], {}
-            for g, _, _ in sc.geoms[s]:
+            for g in [g for g, _, _ in sc.geoms[s]] + [sc.prop_geom[s]]:  # the stick's capsule (not in sc.geoms)
                 body = m.body(m.geom_bodyid[g]).name
                 parts[g] = ("prop" if m.geom(g).name == p + "prop" else "fingers" if body in (p + "tip_left", p + "tip_right")
                             else "gripper" if body == p + "gripper" else "wrist" if body in (p + "link4", p + "link5") else None)
@@ -148,7 +150,7 @@ class DuetChecker:
             Q, G = smp[s]
             if np.abs(Q[0] - show.stage_pose(s)).max() > 1e-3 or np.abs(Q[-1] - show.stage_pose(s)).max() > 1e-3:
                 probs.append(f"{s}: must start and end at the stage pose")
-            p, _ = self.ck.check_samples(s, Q)
+            p, _ = self.ck.check_samples(s, Q, table=duet.table)
             probs += [f"{s}: {x}" for x in p]
         self.ck.set_props(False)
         for s in SIDES:

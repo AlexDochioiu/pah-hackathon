@@ -25,8 +25,9 @@ sim on the station), then run on the real arms (results at the end).
 ## Frames and poses
 - Shared frame = the left arm's base frame: x toward the audience, y to the left arm's left, z up. The right base
   is at y = −0.602 (right frame = left frame + (0.0056, 0.602, 0)). Table at z = −0.012.
-- **Stage pose** (left arm) = `[0, 0.8, 1.2, −0.3, 0, 0]`: `lift.py`'s raised pose with the gripper ("head") level,
-  facing the audience, gripper ~0.48 m up. Not turned inward: with 15 cm props each arm has only ~0.22 m of inward
+- **Stage pose** (left arm) = `[0, 0.8, 0.7, 0.2, 0, 0]` (Nov 7 evening, lowered so the action plays closer to the
+  table): gripper ("head") level, facing the audience, ~0.37 m up. The lean-back rule stays anchored at `lift.py`'s
+  raised pose `[0, 0.8, 1.2, −0.3, 0, 0]` (`LEAN_REF_LEFT`, ~0.48 m up), where the table was measured not to tip. Not turned inward: with 15 cm props each arm has only ~0.22 m of inward
   room before the 15 cm arm-to-arm gap.
 - **Rest** = each arm's `home` in `~/.dreamlabs/station.yaml` (≈ zeros).
 
@@ -39,8 +40,9 @@ sim on the station), then run on the real arms (results at the end).
   (multiply by `[−1, 1, 1, 1, −1, −1]`: base yaw j1, wrist yaw j5 and wrist roll j6 flip).
 - Toward the other arm = j1 < 0 or j5 > 0 (left-arm convention).
 - Keys are interpolated with a monotone cubic (no overshoot) and played at 50 Hz; `speed` scales time.
-- `g` (gripper, 0 closed … 1 open) is optional; without it the gripper keeps its current value (so held props stay
-  held). Only `gripper_clap` uses it.
+- `g` (gripper, 0 closed … 1 open) is optional; without it the gripper keeps its current value. Most round-3
+  gestures act with the mouth (`mouth.py` shut 0.05, wide 0.8); while an arm holds a prop the server keeps its grip.
+- `table` (optional): table contact, see the checker.
 - `hold`: stay at the end pose instead of returning to idle (`die_dramatically`, `stage`, `rest`).
   `loop`: repeat (`idle_breathe`). `arms`: the intended use, `both` = mirrored on both arms.
 - `recorded`: set by `record.py`; `make_gestures.py` keeps such files when it regenerates.
@@ -54,6 +56,15 @@ Every gesture is checked on **both** arms at load (the server and bring-up refus
 - Table: every moving link (link2 and below, fingers), and a 15 cm × 1.5 cm-radius prop capsule sticking out of the
   fingers along the grasp axis, stays ≥ 4 cm above the table. Geometry = the hull vertices of i2rt's meshes,
   sampled every ~1 cm.
+- **Table contact** (Nov 7, round 3): a gesture (or duet) may declare `"table": {"min": m, "impact": m/s}`. Then
+  only the hand (the `gripper` and `tip_left/right` bodies) may go down to `min` above the table (negative = into
+  it: `bang_table` aims `show.BANG_DEPTH` = 4 mm in, a calibration knob), coming down at ≤ `impact` once within
+  5 cm of `min`; everything else keeps 4 cm. Empty hands only (refused in the `_props` stances). `max_speed` is
+  capped at 1 for them. A blend out of a table gesture inherits its allowance (a dead arm can get up). The real arms
+  sag 1–2 cm and are position-controlled: aiming 4 mm into the table is a small, held error. Sim only so far;
+  nobody tests them on the real arms while the station is unattended. `die_dramatically` (min 5 mm, 5 cm/s) and
+  `revive` lie a hair above the table; `bang_table` (min −4 mm, 30 cm/s) knocks it. Facing each other (head yawed
+  ~60°) the same deltas stay ~4–8 cm above the table: a knock in the air, a slump that hovers.
 - Other arm: alone on one arm, a gesture must stay ≥ 15 cm from the other arm at stage, at rest and idling, or it
   is rejected. Two gestures at once: the swept volumes (all frames, any timing) of left × right are compared for
   every pair; pairs closer than 15 cm are listed as `unsafe_pairs` (currently none; closest is `look_at_other` on
@@ -70,30 +81,78 @@ Every gesture is checked on **both** arms at load (the server and bring-up refus
   point_at_audience −6.1, gallop −5.0, bow −2.7; everything else ≥ −1.5. If the table still rocks, slow those.
 - Online (stage server): every plan (blend from wherever the arm is + gesture, or a pose move) is re-checked before it
   starts, and its swept volume must clear the other arm's **committed** motion by 15 cm; otherwise HTTP 409.
-- Assumption: props point out of the fingers along the grasp axis. A prop held crosswise is not modelled.
+- Props: `show.PROP_SHAPES` models each held prop as points with a radius in the grasp-site frame: `stick` (15 cm
+  along the grasp axis), `car` (a 1:64 toy car gripped across the roof: 7.5 cm along the finger slots, wheels 2.8 cm
+  below the site) and `ufo` (a 10 cm saucer hanging 3 cm below the gripped dome). A gesture with `"prop": kind` needs
+  that toy (`POST /props {"arm","on","kind"}`); an arm holding a toy plays only its own gestures (and the
+  folds), and duets are refused. `"table": {..., "prop": true}` lets the held toy touch the table too (drive,
+  ufo_land). Sim only, like every table-contact move.
 
-## Library (19 gestures, all pass; durations at speed 1)
-| Gesture | s | Notes |
+## Library (62 gestures, all pass; durations at speed 1; the `about` texts the storyteller sees)
+| Gesture | s | About |
 |---|---|---|
-| `stage` | 3.0 | rest → stage (library copy; the server's `/stage` plans from wherever the arm is) |
-| `rest` | 3.0 | stage → rest (`/rest` likewise plans from the current pose, via stage if needed) |
-| `idle_breathe` | 4.0 | loops while idle |
-| `wave` | 4.7 | head up, side-to-side wave ×2 |
-| `bow` | 2.9 | lean toward audience, head down |
-| `nod` | 2.5 | yes ×2 |
-| `shake_head` | 2.9 | no ×2 |
-| `slash` | 3.9 | wind up high/outside (upward, not back), chop down-across to the front |
-| `thrust` | 3.0 | raise the prop, stab forward level |
-| `block` | 4.5 | prop raised upright in front, hold |
-| `celebrate` | 4.8 | prop up high, wiggle |
-| `cower` | 3.8 | shrink down, head turned away from the other arm and down, tremble |
-| `die_dramatically` | 3.9 | stagger, slump forward and sideways (away from the other arm), droop; holds: send `/stage` or `/rest` after |
-| `gallop` | 3.0 | bounce |
-| `roar` | 3.7 | rise up tall, lunge at audience, head shake |
-| `sneak` | 4.6 | crouch, creep across, head bob |
-| `look_at_other` | 2.8 | turn head toward the other arm |
-| `point_at_audience` | 2.8 | reach forward, point |
-| `gripper_clap` | 2.4 | opens the gripper: **drops a held prop** |
+| `bang_table` | 6.9 | Make a fist and bang it on the table, twice, snarl, and once more, hard: anger, impatience, demanding, a judge's verdict. **Table contact.** |
+| `beat_chest` | 6.9 | Rise tall and pound, left-right-left-right, mouth roaring open: beat the chest like a gorilla, show off, I am the strongest! |
+| `bite` | 3.2 | Rear back with the mouth wide, then lunge and snap it shut, twice, and shake the catch: bite, snap the jaws, chomp, grab with the teeth. |
+| `block` | 4.5 | Raise the prop upright in front like a guard, hold. |
+| `bow` | 2.9 | Lean toward the audience, head down, hold, straighten. |
+| `celebrate` | 4.8 | Thrust the prop up high and wiggle it in triumph. |
+| `chef_kiss` | 3.4 | The chef's kiss: pinched fingertips peck forward, then spring open and fly up: perfect!, delicious!, magnificent, a masterpiece. |
+| `cower` | 3.8 | Shrink down, turn the head away from the other arm and down, trembling. |
+| `cry` | 4.4 | Hang the head and sob, shoulders shaking, the mouth quivering: cry, weep, sob, sad, heartbroken. |
+| `die_dramatically` | 5.8 | Gasp and shudder, then go limp: drops like a puppet with its strings cut, a small bounce, and lies dead with the head on the table, mouth slack (play revive or stage after). **Table contact.** |
+| `dodge` | 2.7 | Weave fast to one side, then the other, then back: dodge, swerve, weave, escape a blow. |
+| `double_take` | 4.4 | Glance at something, look away, then snap back, head jerking up and tilted, jaw dropped: a double take, spot, notice, wait, what?! |
+| `drive` | 15.0 | Holding a toy car, put it down on the table and drive it: vroom along over two bumps, turn toward the audience, brake, lift it off: drive, race, park, a road trip. **Table contact.** **Needs the car.** |
+| `duck` | 3.3 | Duck down fast, stay low, then peek up carefully: duck, hide, take cover, an arrow flies over. |
+| `eat` | 4.5 | Bend down and munch, chewing with the head bobbing, then look up satisfied: eat, munch, chew, gobble, taste. |
+| `eye_roll` | 4.8 | The head rolls up and around and away, then sags: an eye roll, ugh, so boring, whatever, really?, roll eyes. |
+| `facepalm` | 4.4 | The head drops into the hand and turns away, shaking slowly: facepalm, groan, a terrible pun, oh no, embarrassed, I can't believe it. |
+| `flick` | 2.7 | A dismissive flick: the hand flips up and away, fingers springing open, head turned aside: bah!, whatever, go away, never mind. |
+| `gallop` | 3.0 | Bounce up and down like riding a horse. |
+| `grab` | 2.5 | Reach out with the mouth open, snatch, and pull it back: grab, take, snatch, steal, catch. |
+| `gripper_clap` | 2.4 | Snap the gripper open and shut three times (drops a held prop!). |
+| `hop` | 4.7 | Bounce up and down three times like hopping: hop, jump, skip, a bunny, a frog. |
+| `idle_breathe` | 4.0 | Slow breathing sway; loops while idle. |
+| `italian` | 5.4 | The pinched-fingers hand: fingertips together pointing up, pumping up and down with a head tilt: "what do you want?!", arguing, insisting, explaining, complaining. |
+| `italian_exasperated` | 7.2 | Both hands pinched and pumping big, then thrown open to the sky and dropped: "mamma mia!", exasperated, fed up, giving up. |
+| `knee_slap` | 5.9 | Laugh, head thrown back, and slap the knee, three times: knee slap, that's hilarious, the joke lands, roaring with laughter. |
+| `laugh` | 4.2 | Throw the head back and laugh, ha-ha-ha, bouncing, then double over: laugh, giggle, find it funny, chuckle. |
+| `laugh_hard` | 6.0 | Crack up: head back, bouncing, the mouth flapping with laughter, then doubled over, still laughing: laugh hard, crack up, roar with laughter, can't stop laughing, LOL. |
+| `lift_heavy` | 4.6 | Bend down, grip something with the mouth and heave it up, slowly, trembling with the strain: lift, carry something heavy, pick up, struggle. |
+| `look_around` | 3.8 | Scan slowly to one side, then the other, searching: look around, search, where is it?, keep watch. |
+| `look_at_other` | 2.8 | Turn the head toward the other arm, tilt, hold. |
+| `mic_drop` | 6.1 | Hold the mic up high, let it drop (the mouth springs open), look down at it, then a smug head tilt: mic drop, nailed it, the punchline, boom. |
+| `nod` | 2.5 | Nod twice (yes). |
+| `point_at_audience` | 2.8 | Reach forward and point the prop at the audience. |
+| `pounce` | 3.5 | Crouch low, wiggle, then leap forward with the mouth open and snap it shut on the prey: pounce, leap out, lunge, attack, catch. |
+| `pull` | 3.2 | Bite onto something ahead and tug it back, hard, twice: pull, drag, tug, heave a rope. |
+| `push` | 3.4 | Lower the head and shove forward, twice, straining: push, shove, ram, butt, move a boulder. |
+| `rest` | 3.0 | Fold back down to rest. |
+| `revive` | 5.5 | Back from the dead: a twitch, another, the head lifts groggily, shakes it off and stands ready again (after die_dramatically). **Table contact.** |
+| `roar` | 3.6 | Rise up tall, lunge at the audience and shake the head. |
+| `shake_head` | 2.9 | Shake the head side to side (no). |
+| `shoot` | 5.0 | Aim the gripper like a gun barrel and fire twice, each shot kicking the head up in recoil, then blow the smoke away: shoot, fire, blast, zap, a laser. |
+| `sigh` | 4.4 | Breathe in, rising, then let it all out and sag, head drooping: sigh, tired, bored, sad, oh well. |
+| `slash` | 3.9 | Wind up high and outside, chop down and across toward the front. |
+| `slow_turn` | 6.0 | Freeze, then turn the head slowly to the audience and stare, deadpan, saying nothing: after a bad joke, deadpan, awkward silence, really?, the slow turn. |
+| `sneak` | 4.6 | Crouch low and creep across, head bobbing. |
+| `sneeze` | 3.5 | Ah... ah... head tilting back twice, mouth open, then ACHOO, a sharp snap forward: sneeze, cough, an allergy, a cold. |
+| `snore` | 6.2 | Nod off, head drooping to one side, and snore, the mouth opening on every slow breath: sleep, snore, doze, yawn, bored to sleep. |
+| `stage` | 3.0 | Rise from rest into the stage pose. |
+| `startle` | 3.0 | Jump up and back in fright, mouth wide, trembling, then calm down: a scare, startle, jump back, gasp, eek! |
+| `stir_frantic` | 8.2 | Stir a pot fast and frantically, head bobbing: whisking, cooking in a hurry, mixing a potion before it boils over. |
+| `stir_lazy` | 10.5 | Hold a spoon down in a pot and stir slow, lazy circles, then look up content: cooking, brewing a potion, mixing, waiting. |
+| `stomp` | 4.6 | Lift high and stamp down hard, twice: stomp, march, land heavily, stamp in anger, a giant's step. |
+| `ta_da` | 4.1 | Gather in, then swing up and out to the audience with a flourish, mouth wide: ta-da, presenting, voila, here it is, a big reveal, a magic trick. |
+| `throw` | 2.9 | Wind back and up, then fling forward, letting go at the top: throw, toss, hurl, fling, cast a spell. |
+| `thrust` | 3.0 | Raise the prop, then stab straight forward. |
+| `tremble_excited` | 3.1 | Pop up and quiver all over with excitement, mouth chattering: so excited!, can't wait, oh oh oh!, yes yes yes. |
+| `ufo_crash` | 11.5 | The UFO loses control: it wobbles harder and harder, spirals down and crashes, tilted (stopping well above the table): crash, shot down, spin out, out of fuel. **Needs the ufo.** |
+| `ufo_fly` | 13.6 | Holding the UFO, fly it in a wobbly figure-eight, rocking and spinning: fly, zoom, an alien ship, invade, cruise through space. **Needs the ufo.** |
+| `ufo_hover` | 8.0 | The UFO stops in mid-air and hovers, pulsing up and down and slowly turning: beam up, abduct, scan, hover, the aliens watch. **Needs the ufo.** |
+| `ufo_land` | 13.0 | The UFO comes down slowly, wobbling, lands on the table, sits a moment, then takes off again: land, arrive, touch down, visit Earth. **Table contact.** **Needs the ufo.** |
+| `wave` | 4.7 | Raise the head and wave it side to side, three times. |
 
 Lean-back rework (Nov 7, pose-only; same requested move times, stretched where the joint deltas grew): minimum COM x per arm before → after, cm (limit −0.7;
 mirrored both-arm gestures double the moment): celebrate −10.3 → −0.4 (both arms), roar −7.8 → 1.0, slash −6.6 →
@@ -181,15 +240,18 @@ each pair with its own minimum. Hand-to-hand contact (high five, handshake) turn
 held: keeping link3 15 cm apart needs the hands angled in, and then the props cross. So duets touch prop to prop
 (or prop to hand).
 
-| Duet | s | Closest contact | Others | Fastest close (inside 5 cm) |
-|---|---|---|---|---|
-| `cross_swords`: en garde, wind up, swing; the blades lock in an X, shove left and right, spring apart | 8.7 | prop×prop 1.8 cm | ≥ 20 cm | 4.3 cm/s |
-| `cheers`: raise, lift, swing in, clink the tips, glasses up high | 9.0 | prop×prop 1.5 cm | 16 cm | 4.4 cm/s |
-| `poke`: the left sneaks up and pokes the right's head with its prop; the right flinches, shakes its head | 8.8 | prop×right hand 1.6 cm | 16.2 cm | 4.0 cm/s |
-| `quick_draw`: face off, hands low, twitch, draw! The left fires, the right is hit and slumps | 7.7 | no touch | ≥ 20 cm | |
-| `tip_hats`: turn to each other, the left tips its hat, the right answers deeper | 5.6 | no touch | ≥ 20 cm | |
-| `copycat`: the right copies the left a beat late, gets caught, looks away innocent | 7.3 | no touch | ≥ 20 cm | |
-| `car_ride`: the left steers (wheel on j6), both lean into the turns and bounce | 6.8 | no touch | ≥ 20 cm | |
+| Duet | s | hands |
+|---|---|---|
+| `cheers`: Raise the glasses, lift, swing in and clink the tips together in the middle, then hold them up high. | 8.7 | sticks |
+| `copycat`: The right copies every move of the left a beat late; the left whips round and catches it; the right looks away, innocent. | 7.3 | sticks |
+| `cross_swords`: En garde, wind up and clash: the swords lock in an X in the middle, shove each other left and right, then spring apart. | 8.4 | sticks |
+| `elbow_nudge`: "Get it? Get it?": the left leans in beside the right and nudges it with the side of its head, three quick pokes, mouth flapping; the right stays deadpan; the left grins wide. | 7.1 | empty hands |
+| `heckle`: The left points at the right and laughs at it, head back, bouncing, mouth flapping; the right looks over, then slowly droops, head hanging. | 8.1 | empty hands |
+| `place_hat`: The left raises its prop like a hat and lays it gently on the right's head; the right ducks to take it, then straightens up proudly. | 8.8 | sticks |
+| `poke`: The left arm sneaks up and pokes the right one on the side of its head with its prop; the right flinches away and shakes its head. | 8.1 | sticks |
+| `quick_draw`: Western standoff: guns low at the hips, fingers twitch... DRAW! The left is faster: BANG, its gun kicks up; the right, hit mid-draw, jerks back, drops its gun and slumps; the left raises its smoking barrel. | 8.9 | sticks |
+| `straight_man`: The left does a silly bit, bouncing and wiggling with its mouth flapping; the right slowly turns to stare at it, deadpan; the left notices and freezes; the right turns back to the audience and the left droops. | 9.6 | empty hands |
+| `tip_hats`: Turn to each other; the left tips its hat, the right answers with a deeper tip. | 5.6 | sticks |
 
 "≥ 20 cm" is the distance cap of the check (15 cm + 5). `poke` closes the right gripper on its prop first (grip 0).
 
@@ -210,20 +272,30 @@ illustrative beat (the storm, the gate, "THIS big!"), even mid-scene; the stage 
 (audience or each_other) and back to it. Built in `make_duets.py` as joint deltas (`ens()`), mirrored unless both
 arms are given; none touch (all ≥ 20 cm). Previews: `robot/previews/ensemble_<name>.gif`.
 
-| Ensemble | s |
-|---|---|
-| `chomp`: one giant pair of crocodile jaws (left = upper, right = lower jaw), open wide and snap, three times | 5.6 |
-| `wings`: spread wide, flap three times, glide | 7.1 |
-| `this_big`: gather in, then arms thrown wide apart | 3.5 |
-| `shrug`: both heads pop up and tilt out | 2.3 |
-| `rocket`: crouch for the countdown, rumble, blast up high | 5.9 |
-| `waves`: the arms rise and fall in turn | 3.7 |
-| `storm`: both bend and whip the same way, like trees in the wind | 4.9 |
-| `gate_opening`: shut, then slowly creaking wide open | 4.8 |
-| `explosion`: huddle, the fuse fizzes, BOOM outward and up, debris drifts down | 6.7 |
-| `row_boat`: reach and pull, three strokes | 4.8 |
-| `once_upon_a_time`: heads low, then a slow grand sweep up and out | 4.0 |
-| `the_end`: arms wide, then a deep bow together | 4.0 |
+| Ensemble | s | hands |
+|---|---|---|
+| `car_ride`: Both hands on one big steering wheel: turn left, turn right, leaning into the turns, bounce over two bumps, then let go: we're here. | 8.6 | sticks |
+| `cauldron`: Two witches at one cauldron: closed grippers angle down into the pot like spoons; one stirs round and round while the other's head follows the spoon, they swap, then both cackle. | 10.4 | empty hands |
+| `chomp`: The two arms are one giant pair of jaws in the middle, the left hand the upper jaw and the right the lower: they open wide, fingers bared like teeth, and SNAP shut, three times, then shake the prey. | 9.3 | empty hands |
+| `clap`: Both arms are two hands clapping softly together in the middle, three times. | 8.2 | empty hands |
+| `drum_roll`: A drum roll on the table: two fists knock in turn, faster and faster, wind up together and BANG at once, then heads up: ta-da! | 9.0 | empty hands |
+| `explosion`: Both fists huddle into one bomb in the middle, the fuse fizzes and trembles, a held breath, then BOOM: both fling up and out, heads thrown back, hands bursting open, and the debris flutters down. | 8.6 | empty hands |
+| `fist_bump`: Fist bump: make fists, cock back, punch in until the knuckles meet in the middle, then EXPLODE: the fists spring open as the hands fly apart, fingers flickering. | 7.2 | empty hands |
+| `gate_opening`: A castle gate: the arms swing shut until the sticks meet in the middle, it rattles, then the doors creak open on their hinges, stop and start, and swing wide. | 9.9 | sticks |
+| `heart`: Both arms make a big heart: elbows up for the lobes, the hands meet at the tip, it beats. | 8.1 | empty hands |
+| `high_five`: High five: dip, hands rise and spring open, swing in and slap palm to palm in the middle, bounce back, then celebrate with heads up and wiggling, flapping hands. | 8.1 | empty hands |
+| `hug`: Arms open wide, then wrap around in a big hug and rock side to side. | 7.6 | empty hands |
+| `once_upon_a_time`: The narrator's storybook: the hands press together in the middle like a closed book, it opens to the audience, a beat to read it, then a slow, grand sweep up and out. | 8.1 | empty hands |
+| `pull_rope`: Two hands pull a heavy rope: reach, grab, heave back, three times. | 13.7 | empty hands |
+| `rocket`: Crouch for the countdown, rumble, then blast up high together: a rocket lifting off. | 5.9 | sticks |
+| `row_boat`: Both arms row a boat with the sticks as oars, off-sync: dip in, pull back, lift out and return with the wrist rolled flat, three strokes each. | 8.2 | sticks |
+| `rub_hands`: Two hands rubbed together, scheming: "Excellent... my plan is working." | 10.0 | empty hands |
+| `shrug`: "Who knows?": a little dip, then both pop up with the hands thrown open, palms up and out, heads tilted, an "eh" bob, and they drop: oh well. | 4.7 | sticks |
+| `storm`: Both arms bend and whip together like trees in a howling storm. | 4.9 | sticks |
+| `the_end`: Arms wide for "THE END!", then a deep bow together. | 4.0 | sticks |
+| `this_big`: Arms thrown wide apart: "it was THIS big!" | 3.5 | sticks |
+| `waves`: The two arms rise and fall in turn like rolling ocean waves. | 3.7 | sticks |
+| `wings`: Both arms are a great pair of wings: spread wide, flap three times, glide. | 7.1 | sticks |
 
 Lean-back rule of thumb for writing them: the arm's centre of mass moves about `24·j2 − 11·j3 − 1.7·p` cm (deltas
 in rad, p = head pitch) and must stay above −2 cm, so raising the elbow or the head needs j2 forward with it.
@@ -231,13 +303,7 @@ Hand-contact ensembles (`"props": false`: checked without props, refused while o
 `make_duets.py` bisects the gripper targets until the hands are a given gap apart (pointing in at az ~1.2 rad, the
 arms stay ≥ 17.8 cm apart); the final close is a creep at ≤ 4.4 cm/s (`TOUCH`), so a clap is a soft pat.
 
-| Ensemble | s | closest hands |
-|---|---|---|
-| `clap`: three soft claps in the middle | 8.2 | 1.2 cm |
-| `rub_hands`: hands together, the wrists roll against each other (scheming) | 10.0 | 2.4 cm |
-| `hug`: arms wide, wrap around, rock side to side | 7.5 | 1.5 cm |
-| `pull_rope`: fists together, reach and heave three times | 13.3 | 5.4 cm |
-| `heart`: elbows up, hands meet pointing down, it beats | 7.7 | 1.2 cm |
+(All hand-contact ensembles are in the ensemble table above, marked "empty hands".)
 
 A sliding rub (hands passing each other) failed the closing-speed rule (the gap between staggered hands changes
 fast), hence the wrist rolls.

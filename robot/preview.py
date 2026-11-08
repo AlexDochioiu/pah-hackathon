@@ -23,6 +23,8 @@ def render(sc, renderer, g, ok, why, stance="audience"):
     sides = show.SIDES if g.arms == "both" else ("left",)
     traj = {s: g.samples(s, stance=stance) for s in sides}
     n = len(next(iter(traj.values()))[0])
+    for s in show.SIDES:  # a toy gesture (car, ufo) shows its toy in the playing hand; else sticks in a _props stance
+        sc.show_prop(s, (s in sides and g.prop) if g.prop else show.has_props(stance))
     for i in list(range(0, n, int(show.HZ / FPS))) + [n - 1] * 5:  # hold the last pose for ~0.5 s
         for s in show.SIDES:
             if s in traj:
@@ -52,9 +54,6 @@ def main(names, stance="audience"):
     sc = show.Scene()
     sc.m.vis.global_.offwidth, sc.m.vis.global_.offheight = W, H
     renderer = mujoco.Renderer(sc.m, H, W)
-    if not show.has_props(stance):  # empty hands (the default): no prop sticks
-        for s in show.SIDES:
-            sc.m.geom_rgba[sc.prop_geom[s]] = 0
     out.mkdir(parents=True, exist_ok=True)
     for f in sorted(show.GESTURE_DIR.glob("*.json")):
         g = show.load(f)

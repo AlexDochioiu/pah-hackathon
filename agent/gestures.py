@@ -49,14 +49,46 @@ SYNONYMS = {
     "no": "shake_head", "point": "point_at_audience", "look": "look_at_other", "breathe": "idle_breathe",
     "idle": "idle_breathe", "curtsy": "bow",
     # story verbs that went untagged in a 12-story sample (Nov 7), mapped to the gesture that looks most like them
-    "spot": "look_at_other", "notice": "look_at_other", "stare": "look_at_other", "watch": "look_at_other",
-    "grab": "thrust", "snatch": "thrust", "catch": "thrust", "push": "thrust", "shove": "thrust", "leap": "thrust",
-    "pounce": "thrust", "throw": "slash", "toss": "slash", "hit": "slash", "punch": "slash", "smash": "slash",
-    "jump": "celebrate", "win": "celebrate", "eat": "gripper_clap", "chomp": "gripper_clap", "bite": "gripper_clap",
-    "munch": "gripper_clap", "laugh": "nod", "agree": "nod", "refuse": "shake_head", "shudder": "cower",
-    "startle": "cower", "flinch": "cower", "fall": "die_dramatically", "trip": "die_dramatically",
-    "chase": "gallop", "flee": "gallop", "race": "gallop", "prowl": "sneak", "patrol": "sneak", "grow": "roar",
-    "shout": "roar", "thank": "bow",
+    "stare": "look_at_other", "watch": "look_at_other", "hit": "slash", "chase": "gallop", "flee": "gallop",
+    "prowl": "sneak", "patrol": "sneak", "grow": "roar", "shout": "roar", "thank": "bow", "agree": "nod",
+    "refuse": "shake_head", "shudder": "cower", "fall": "die_dramatically", "trip": "die_dramatically",
+    # round 3 (Nov 7): table contact, stirring, Italian hands, face acting
+    "dead": "die_dramatically", "revive": "revive", "wake_up": "revive", "come_back": "revive", "recover": "revive",
+    "bang": "bang_table", "pound": "bang_table", "smash": "bang_table", "demand": "bang_table", "angry": "bang_table",
+    "stir": "stir_lazy", "brew": "stir_lazy", "cook": "stir_lazy", "mix": "stir_lazy", "whisk": "stir_frantic",
+    "hurry": "stir_frantic", "argue": "italian", "complain": "italian", "explain": "italian", "insist": "italian",
+    "what": "italian", "mamma_mia": "italian_exasperated", "exasperated": "italian_exasperated",
+    "give_up": "italian_exasperated", "perfect": "chef_kiss", "delicious": "chef_kiss", "chef": "chef_kiss",
+    "bah": "flick", "dismiss": "flick", "whatever": "flick", "shoot": "shoot", "fire": "shoot", "blast": "shoot",
+    "zap": "shoot", "search": "look_around", "spot": "double_take", "notice": "double_take",
+    "surprise": "double_take", "startle": "startle", "flinch": "startle", "gasp": "startle", "scare": "startle",
+    "leap": "pounce", "pounce": "pounce", "jump_out": "pounce", "duck": "duck", "take_cover": "duck",
+    "dodge": "dodge", "swerve": "dodge", "weave": "dodge", "stomp": "stomp", "stamp": "stomp", "land": "stomp",
+    "march": "stomp", "bite": "bite", "chomp": "bite", "snap": "bite", "eat": "eat", "munch": "eat", "chew": "eat",
+    "laugh": "laugh", "giggle": "laugh", "sigh": "sigh", "bored": "sigh", "snore": "snore", "sleep": "snore",
+    "yawn": "snore", "sneeze": "sneeze", "cough": "sneeze", "cry": "cry", "sob": "cry", "weep": "cry",
+    "beat_chest": "beat_chest", "show_off": "beat_chest", "hop": "hop", "jump": "hop", "skip": "hop",
+    "excited": "tremble_excited", "grab": "grab", "snatch": "grab", "catch": "grab", "steal": "grab",
+    "pull": "pull", "drag": "pull", "tug": "pull", "push": "push", "shove": "push", "ram": "push",
+    "lift": "lift_heavy", "heave": "lift_heavy", "carry": "lift_heavy", "throw": "throw", "toss": "throw",
+    "hurl": "throw", "punch": "slash", "win": "celebrate",
+    # duets and ensembles (resolve_duet)
+    "high_five": "high_five", "celebrate_together": "high_five", "team_up": "high_five", "deal": "fist_bump",
+    "partners": "fist_bump", "bro": "fist_bump", "cauldron": "cauldron", "witches": "cauldron",
+    "drum": "drum_roll", "drum_roll": "drum_roll", "hat": "place_hat", "crown": "place_hat",
+    # stand-up comedy (round 3b)
+    "joke": "ta_da", "punchline": "mic_drop", "mic_drop": "mic_drop", "nailed_it": "mic_drop",
+    "deadpan": "slow_turn", "awkward": "slow_turn", "slow_turn": "slow_turn", "roll_eyes": "eye_roll",
+    "eye_roll": "eye_roll", "ugh": "eye_roll", "ta_da": "ta_da", "tada": "ta_da", "voila": "ta_da",
+    "present": "ta_da", "reveal": "ta_da", "facepalm": "facepalm", "groan": "facepalm", "embarrassed": "facepalm",
+    "knee_slap": "knee_slap", "hilarious": "knee_slap", "crack_up": "laugh_hard", "lol": "laugh_hard",
+    "guffaw": "laugh_hard", "laugh_hard": "laugh_hard", "double_take": "double_take",
+    "nudge": "elbow_nudge", "get_it": "elbow_nudge", "straight_man": "straight_man", "straight_face": "straight_man",
+    "heckle": "heckle", "mock": "heckle", "tease": "heckle",
+    # toys (the stage refuses these unless that arm holds the toy: [props:left car] / [props:left ufo])
+    "drive": "drive", "race": "drive", "park": "drive", "honk": "drive", "vroom": "drive", "car": "drive",
+    "fly": "ufo_fly", "invade": "ufo_fly", "ufo": "ufo_fly", "hover": "ufo_hover", "beam_up": "ufo_hover",
+    "abduct": "ufo_hover", "alien": "ufo_hover", "touch_down": "ufo_land", "crash": "ufo_crash",
 }
 CONTINUE_TAG = "next"
 TALK_TAG = "talk"  # [talk:left] "..." -> POST /talk on, off at the closing quote
@@ -65,7 +97,8 @@ DUET_TAG = "duet"  # [duet:cross_swords] -> POST /duet
 ENSEMBLE_TAG = "ensemble"  # [ensemble:storm] -> POST /duet too: the stage's ensemble-kind duets
 DUET_MARGIN_S = 0.3  # the stage's blend into a gesture makes it a bit longer than its duration
 FACE_TAG = "face"  # [face:each_other] / [face:audience] -> POST /stance
-PROPS_TAG = "props"  # [props:left|right|both] -> POST /props on for that arm; [props:none] -> off for both
+PROPS_TAG = "props"  # [props:left|right|both] -> POST /props on for that arm ([props:left car]: a known toy, its
+# own gestures); [props:none] -> off for both
 FACINGS = {"each_other": "each_other", "other": "each_other", "eachother": "each_other", "together": "each_other",
            "audience": "audience", "front": "audience", "us": "audience", "out": "audience", "forward": "audience"}
 MAX_TAG_LEN = 48  # a "[" left open longer than this is prose, not a tag
@@ -220,6 +253,8 @@ class GestureBook:
 
     def resolve_duet(self, name: str) -> str | None:
         name = re.sub(r"[\s-]+", "_", name.strip().lower())
+        if name not in self.duets and SYNONYMS.get(name) in self.duets:
+            return SYNONYMS[name]
         close = difflib.get_close_matches(name, list(self.duets), n=1, cutoff=0.6)
         return name if name in self.duets else close[0] if close else None
 
@@ -330,10 +365,11 @@ class Stage:
             self.busy_until = now + wait + duration_s / speed
             self._pending = self.send("/duet", {"name": gesture, "speed": speed}, delay=wait)
             return
-        if arm == PROPS_TAG:  # gesture = the arm that takes a prop, or "none"
-            on = gesture in ARMS
+        if arm == PROPS_TAG:  # gesture = the arm that takes a prop ("left", or "left_car": a known toy), or "none"
+            who, _, kind = gesture.partition("_")
+            on = who in ARMS
             logger.info("props %s", gesture)
-            self.send("/props", {"arm": gesture if on else "both", "on": on})
+            self.send("/props", {"arm": who if on else "both", "on": on, **({"kind": kind} if on and kind else {})})
             return
         self.busy_until = max(self.busy_until, time.monotonic() + duration_s / speed)
         self.send("/play", {"arm": arm, "gesture": gesture, "speed": speed})
@@ -415,9 +451,9 @@ class GestureSink(io.TextOutput):
                 else:
                     logger.info("dropped %s", p.raw)
             elif p.arm == PROPS_TAG:
-                who = p.name.strip().lower()
-                if who in ARMS or who in ("none", "off", "no"):
-                    self._play(PROPS_TAG, who if who in ARMS else "none", 0.0)
+                who = p.name.strip().lower()  # "left", or "left_car" ([props:left car]): a toy the stage knows
+                if who.partition("_")[0] in ARMS or who in ("none", "off", "no"):
+                    self._play(PROPS_TAG, who if who.partition("_")[0] in ARMS else "none", 0.0)
                 else:
                     logger.info("dropped %s", p.raw)
             elif p.arm in (DUET_TAG, ENSEMBLE_TAG):

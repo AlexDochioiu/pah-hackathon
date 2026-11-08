@@ -42,6 +42,9 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
   ending may use `[ensemble:the_end]` instead of `[both:bow]`.
 - `[props:left|right|both]` / `[props:none]`: `POST /props` (routed through `Stage.play("props", who)`). Empty hands
   are the default; the prompt asks for a prop only when a scene needs one, and gives a holding arm no talk tags.
+  `[props:left car]` / `[props:left ufo]` send `"kind"`: that arm then plays only the toy's moves (drive, ufo_*).
+  Toy verbs (drive, race, park, fly, abduct, crash...) map there in SYNONYMS; the stage refuses them (409, logged)
+  if the arm doesn't hold that toy.
 - `[talk:left]` / `[talk:right]` (also `[left:talk]`) right before a character's quoted line: `POST /talk` on
   for that arm; the sink turns it off at the closing quote mark (`"` or `”`), at the next talk tag, or when the
   reply ends or is interrupted (flush). Talk tags are not moved by `tags_first`: they stay before their quote.
