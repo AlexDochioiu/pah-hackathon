@@ -29,7 +29,8 @@ how we drive the arms and how we calibrated them.
 ## Keeping the knowledge base current
 When you learn something another person or agent would need (a fact about the hardware, a decision, a gotcha,
 a calibration value), add it to the matching `kb/` page in the same commit as the code, and add a dated line to
-[kb/log.md](kb/log.md). Write facts, not narratives; link pages with relative markdown links.
+[kb/log.md](kb/log.md). Keep [kb/todo.md](kb/todo.md) current (status, done with commit) and
+[kb/system.md](kb/system.md) when a piece or connection changes. Write facts, not narratives; link pages with relative markdown links.
 
 ## Design system
 Every interface (website, social images, slides, overlays) is built from one shared design language: colour

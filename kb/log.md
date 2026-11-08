@@ -84,3 +84,4 @@
   nothing else near the table does. Dream-1 fine-tune recipe from our own scripted demos added to dream-1.md.
 - Round 3a review (Nov 7): clap, rub_hands, hug, pull_rope, heart all kept; deep facing stays ~67°. Lars fine-tune:
   1000 steps, queued only after the owner confirms Dream credits with the organisers.
+- kb/todo.md (all open work) and kb/system.md (how the pieces connect) added; AGENTS.md asks every agent to keep them current.

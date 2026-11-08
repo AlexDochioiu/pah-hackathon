@@ -5,6 +5,8 @@ folder). One topic per page; keep pages short and factual.
 
 | Page | What's in it |
 |---|---|
+| [todo.md](todo.md) | **Open work**: every workstream, its status, what it waits on. |
+| [system.md](system.md) | How the pieces connect: web page → agent → stage server → arms. |
 | [project.md](project.md) | The idea, the event, the deadline, who judges. |
 | [decisions.md](decisions.md) | What we decided and why. |
 | [station.md](station.md) | The hardware and software on the robot station, frames, joint limits. |
