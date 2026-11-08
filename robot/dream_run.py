@@ -276,6 +276,7 @@ def main():
 def run(a, stage, s, end):
     played, latency, reason, arm, pre, refused, held, lifted = [], [], None, None, None, False, False, False
     low = float("inf")  # raw: the lowest fingertip since the gripper closed
+    opened = False
     missed = None
     cmd = {side: s["arms"][side]["joints"] for side in ARMS}
     try:
@@ -323,7 +324,8 @@ def run(a, stage, s, end):
             if len(played) == 1:
                 say("Here it comes. Gently, please!")
             if a.raw:  # the stage's prop only notices a close inside one chunk: go by Dream-1's own gripper and height
-                if c["g"][-1] <= CLOSED_G:  # (Nov 8: it lifted Lars in the left arm and nothing noticed)
+                opened = opened or max(c["g"]) >= 0.6  # the arms rest with the gripper shut: a grab opens first
+                if opened and c["g"][-1] <= CLOSED_G:  # (Nov 8: it lifted Lars in the left arm and nothing noticed)
                     low = min(low, r.get("tip_mm", low))
                     if not held:
                         held = True
@@ -352,7 +354,7 @@ def run(a, stage, s, end):
             if now_held and grip is not None and grip < EMPTY_GRIP and not a.raw:  # a squeezed Lars reads 0.05
                 missed, reason = "empty_grip", f"the gripper closed on nothing ({grip:.2f} measured)"
                 break
-            if held and not now_held:
+            if held and not now_held and not a.raw:  # raw: the stage's prop isn't how we track it
                 missed, reason, held, lifted = "dropped", "the hold was lost before the lift", False, False
                 break
             if lifted:
