@@ -140,7 +140,7 @@ class Preview:
             self.replay = [c for c in (data if isinstance(data, list) else [data]) if c.get("event", "chunk") == "chunk"]
             return
         cmd = (f"cd {a.remote_dir} && exec nice -n 5 ~/dream-env/bin/python -u dream_preview.py --serve "
-               f"--task {shlex.quote(a.task)} --head {a.head}" + (" --fake" if a.fake else ""))
+               f"--task {shlex.quote(a.task)} --head {a.head} --config ~/dream-test.yaml" + (" --fake" if a.fake else ""))
         self.proc = subprocess.Popen(["ssh", "-o", "ControlPath=none", "-o", "BatchMode=yes", a.station, cmd],
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                      text=True, bufsize=1)
@@ -241,7 +241,7 @@ def main():
     ap.add_argument("--cli", action="store_true", help="hand the arms to `dreamcli robot run` for --pick-s (stage server "
                     "stopped meanwhile, restarted after): Dream-1 raw, none of our code in the loop")
     ap.add_argument("--remote-dir", default="~/dream-ghost")
-    ap.add_argument("--head", choices=["joint", "eef"], default="eef", help="eef: the head dreamcli's real picks used")
+    ap.add_argument("--head", choices=["joint", "eef"], default="joint", help="joint: what dreamcli --action-space joint runs (all of today's eef runs failed)")
     ap.add_argument("--arm", choices=["auto", *ARMS], default="auto")
     ap.add_argument("--chunks", type=int, default=30, help="Dream-1 calls at most (still ones included)")
     ap.add_argument("--pick-s", type=float, default=60.0, help="s for Dream-1's part (asking and playing), the way "
