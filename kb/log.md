@@ -82,3 +82,5 @@
   reworks of chomp/explosion/gate/once_upon/row_boat/shrug/car_ride/quick_draw, hat on the head, gun recoil.
 - Owner OK (Nov 7 evening): the Lars pick and its demo recording may run unattended (`lars.py --unattended`);
   nothing else near the table does. Dream-1 fine-tune recipe from our own scripted demos added to dream-1.md.
+- Round 3a review (Nov 7): clap, rub_hands, hug, pull_rope, heart all kept; deep facing stays ~67°. Lars fine-tune:
+  1000 steps, queued only after the owner confirms Dream credits with the organisers.
