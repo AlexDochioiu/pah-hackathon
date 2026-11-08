@@ -63,6 +63,7 @@ DUET_TAG = "duet"  # [duet:cross_swords] -> POST /duet
 ENSEMBLE_TAG = "ensemble"  # [ensemble:storm] -> POST /duet too: the stage's ensemble-kind duets
 DUET_MARGIN_S = 0.3  # the stage's blend into a gesture makes it a bit longer than its duration
 FACE_TAG = "face"  # [face:each_other] / [face:audience] -> POST /stance
+PROPS_TAG = "props"  # [props:left|right|both] -> POST /props on for that arm; [props:none] -> off for both
 FACINGS = {"each_other": "each_other", "other": "each_other", "eachother": "each_other", "together": "each_other",
            "audience": "audience", "front": "audience", "us": "audience", "out": "audience", "forward": "audience"}
 MAX_TAG_LEN = 48  # a "[" left open longer than this is prose, not a tag
@@ -326,6 +327,11 @@ class Stage:
             self.busy_until = now + wait + duration_s / speed
             self._pending = self.send("/duet", {"name": gesture, "speed": speed}, delay=wait)
             return
+        if arm == PROPS_TAG:  # gesture = the arm that takes a prop, or "none"
+            on = gesture in ARMS
+            logger.info("props %s", gesture)
+            self.send("/props", {"arm": gesture if on else "both", "on": on})
+            return
         self.busy_until = max(self.busy_until, time.monotonic() + duration_s / speed)
         self.send("/play", {"arm": arm, "gesture": gesture, "speed": speed})
 
@@ -402,6 +408,12 @@ class GestureSink(io.TextOutput):
             elif p.arm == FACE_TAG:
                 if (facing := FACINGS.get(p.name)) and self._on_face:
                     self._on_face(facing)
+                else:
+                    logger.info("dropped %s", p.raw)
+            elif p.arm == PROPS_TAG:
+                who = p.name.strip().lower()
+                if who in ARMS or who in ("none", "off", "no"):
+                    self._play(PROPS_TAG, who if who in ARMS else "none", 0.0)
                 else:
                     logger.info("dropped %s", p.raw)
             elif p.arm in (DUET_TAG, ENSEMBLE_TAG):

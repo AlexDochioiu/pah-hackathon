@@ -16,7 +16,7 @@ API (JSON in and out; "arm" is left | right | both, default both):
   POST /freeze {"arm"}                 hold the current pose at once, drop queues
   POST /idle {"arm"}                   go to stage and breathe; gestures return to idle afterwards
   POST /stage {"arm","speed"}          go to the stage pose and hold
-  GET  /duets                          [{"name","kind","duration_s","about","max_speed","closest_contact_cm"}]
+  GET  /duets                          [{"name","kind","props","duration_s","about","max_speed","closest_contact_cm"}]
                                        kind "duet": two characters together; "ensemble": both arms as ONE thing
                                        (wings, a storm, a castle gate). Both play through /duet, from either stance.
   POST /duet {"name","speed"}          a two-arm duet (the arms touch); needs both arms free, and while it plays
@@ -26,9 +26,14 @@ API (JSON in and out; "arm" is left | right | both, default both):
                                        of whatever it plays or idles, until "on": false, /freeze or 20 s
   POST /stance {"stance","speed"}      "audience" (default) or "each_other": both arms turn to the stance pose and
                                        every gesture, idle and /stage play relative to it until the next /stance
+  POST /props {"arm","on","speed"}     the arm holds a prop (or not). Empty hands are the default: the gripper is the
+                                       mouth and each_other turns deep (eye contact). While any arm holds a prop,
+                                       everything is checked with both props, each_other turns shallow (the arms turn
+                                       there now), /talk is refused on a holding arm, gestures keep its grip, and
+                                       duets with "props": false (hand contact) are refused
   POST /rest {"arm","speed"}           fold back to rest and hold (motors stay on)
   POST /grip {"arm","value"}           set the gripper 0 closed .. 1 open (close it on a prop)
-Every motion is checked before it starts (limits, table clearance with the prop, 15 cm from the other arm's committed
+Every motion is checked before it starts (limits, table clearance with any props, 15 cm from the other arm's committed
 motion); a refused request returns 409 with the reason and nothing moves.
 """
 import argparse, collections, json, signal, sys, threading, time
@@ -121,7 +126,8 @@ class Stage:
         self.talk_ticks = {s: 0 for s in SIDES}
         self.dq = {s: np.zeros(6) for s in SIDES}  # the mouth's head offsets, last tick
         self.duet_left = None  # a duet frozen half-way: {"name", "Q": {side: path}, "G": {side: grips}}
-        self.stance = "audience"
+        self.stance = "audience"  # the facing; _st() adds the props mode
+        self.props = {s: False for s in SIDES}  # does the arm hold a prop (POST /props)?
         self.lock = threading.RLock()
         q, g = arms.read()
         self.cmd_q = {s: np.asarray(q[s], float).copy() for s in SIDES}
@@ -158,15 +164,22 @@ class Stage:
         return Plan(name, np.vstack([q0[None], BQ, Q]), np.concatenate([[g0], BG, G]),
                     show.join(bsweep, base_sweep), gesture, loop, hold)
 
+    def _st(self):
+        """The stance in use: the facing, in the props mode ("each_other_props" while any arm holds a prop)."""
+        return show.with_props(self.stance, any(self.props.values()))
+
     def _gesture_plan(self, side, name, speed):
         g = self.lib.get(name)
         if g is None:
             raise StageError(f"unknown gesture {name!r}" + (f" (rejected: {self.rejected[name]})" if name in self.rejected else ""))
-        st = self.stance if name not in show.FOLD else "audience"  # stage/rest always fold via the audience pose
+        st = self._st() if name not in show.FOLD else show.with_props("audience", any(self.props.values()))  # folds
+        # always go via the audience pose
         if st not in g.stances:
             raise StageError(f"{name} is not available in the {st} stance: {self.ck.stance_rejected.get((name, st), '')}")
         speed = float(np.clip(speed, 0.1, g.max_speed))
         Q, G = g.samples(side, speed, stance=st)
+        if self.props[side]:
+            G = None  # holding a prop: keep the grip, never drop it
         return self._build(side, name, Q, G, g, speed, self.ck.swept[show.key(g.name, side, st)],
                            loop=g.loop, hold=g.hold), speed
 
@@ -239,6 +252,8 @@ class Stage:
                 raise StageError(f"unknown duet {name!r}" + (f" (rejected: {self.duets_rejected[name]})"
                                                               if name in self.duets_rejected else ""))
             self._guard()
+            if not du.props and any(self.props.values()):
+                raise StageError(f"duet {name} needs empty hands; POST /props off first")
             busy = [s for s in SIDES if not (self.plan[s].done or self.plan[s].loop) or self.queue[s]]
             if busy:
                 raise StageError(f"duet {name} needs both arms free; {busy[0]} is playing {self.plan[busy[0]].name}")
@@ -249,7 +264,7 @@ class Stage:
                 Q, G = smp[s]
                 G = np.full(len(Q), self.cmd_g[s]) if G is None else G
                 BQ, BG = show.blend(self.cmd_q[s], Q[0], speed, self.cmd_g[s], G[0])
-                OQ, OG = show.blend(Q[-1], show.stage_pose(s, self.stance), speed, G[-1], G[-1])
+                OQ, OG = show.blend(Q[-1], show.stage_pose(s, self._st()), speed, G[-1], G[-1])
                 parts[s] = [(np.vstack([self.cmd_q[s][None], BQ]), np.concatenate([[self.cmd_g[s]], BG])), (Q[1:], G[1:]),
                             (OQ, OG)]
             # The duet itself passed DuetChecker; the blends in and out are checked like any move, both arms at once.
@@ -286,6 +301,8 @@ class Stage:
             p = self.plan["left"]
             if on and p.duet and not p.done:
                 raise StageError(f"duet {p.duet} is playing: no talking during a duet")
+            if on and (held := [s for s in self.sides(arm) if self.props[s]]):
+                raise StageError(f"the {held[0]} arm holds a prop: its mouth is full (POST /props off first)")
             for s in self.sides(arm):
                 self.mouth[s].on = bool(on)
                 self.talk_ticks[s] = int(TALK_MAX_S * show.HZ) if on else 0
@@ -359,7 +376,7 @@ class Stage:
         with self.lock:
             self._guard()
             sides = self.sides(arm)
-            self._commit({s: self._pose_plan(s, "stage", show.stage_pose(s, self.stance), speed) for s in sides})
+            self._commit({s: self._pose_plan(s, "stage", show.stage_pose(s, self._st()), speed) for s in sides})
             for s in sides:
                 self.after[s] = "hold"; self.queue[s].clear()
             return {"ok": True}
@@ -368,9 +385,10 @@ class Stage:
         """Both arms turn to the stance pose; gestures, idle and /stage then play relative to it."""
         with self.lock:
             self._guard()
-            if stance not in show.STANCES:
-                raise StageError(f"stance must be one of {', '.join(show.STANCES)}, not {stance!r}")
-            plans = {s: self._pose_plan(s, "stance", show.stage_pose(s, stance), speed) for s in SIDES}
+            if stance not in show.FACINGS:
+                raise StageError(f"stance must be one of {', '.join(show.FACINGS)}, not {stance!r}")
+            st = show.with_props(stance, any(self.props.values()))
+            plans = {s: self._pose_plan(s, "stance", show.stage_pose(s, st), speed) for s in SIDES}
             for s, p in plans.items():
                 p.hold = self.after[s] != "idle"  # an idle arm resumes breathing in the new stance
             self._commit(plans)
@@ -378,6 +396,35 @@ class Stage:
             for s in SIDES:
                 self.queue[s].clear()
             return {"ok": True, "stance": stance}
+
+    def set_props(self, arm, on, speed=1.0):
+        """The arm holds a prop or not. If that changes the stance pose (each_other: deep <-> shallow), both arms turn
+        there first, checked with empty hands: the prop goes in after the call and has come out before it."""
+        with self.lock:
+            self._guard()
+            props = dict(self.props)
+            for s in self.sides(arm):
+                props[s] = bool(on)
+            st = show.with_props(self.stance, any(props.values()))
+            if np.any(show.STANCES[st] != show.STANCES[self._st()]):
+                self.ck.set_props(False)
+                try:
+                    plans = {s: self._pose_plan(s, "props", show.stage_pose(s, st), speed) for s in SIDES}
+                    for s, p in plans.items():
+                        p.hold = self.after[s] != "idle"
+                    self._commit(plans)
+                finally:
+                    self.ck.set_props(any(self.props.values()))
+                for s in SIDES:
+                    self.queue[s].clear()
+            self.props = props
+            self.ck.set_props(any(props.values()))
+            for s in SIDES:
+                if props[s]:
+                    self.mouth[s].on = False
+                # what each arm is committed to now counts its prop where it ends
+                self.plan[s].sweep = show.join(self.plan[s].sweep, self.ck.pose_sweep(s, self.plan[s].Q[-1]))
+            return {"ok": True, "props": props, "stance": st}
 
     def go_rest(self, arm=None, speed=1.0):
         with self.lock:
@@ -418,7 +465,7 @@ class Stage:
 
     def state(self):
         with self.lock:
-            out = {"backend": self.backend, "fault": self.fault, "rejected": self.rejected, "stance": self.stance,
+            out = {"backend": self.backend, "fault": self.fault, "rejected": self.rejected, "stance": self.stance, "props": self.props,
                    "duet": self.plan["left"].duet if not self.plan["left"].done else None,
                    "duet_frozen": self.duet_left["name"] if self.duet_left else None, "rejected_duets": self.duets_rejected,
                    "not_in_stance": {f"{n} ({st})": why for (n, st), why in self.ck.stance_rejected.items()},
@@ -591,7 +638,7 @@ def serve(st, port):
                      "stances": sorted(g.stances)}
                     for g in st.lib.values()])
             elif self.path == "/duets":
-                self._send(200, [{"name": d.name, "kind": d.kind, "duration_s": round(d.duration, 2), "about": d.about,
+                self._send(200, [{"name": d.name, "kind": d.kind, "props": d.props, "duration_s": round(d.duration, 2), "about": d.about,
                                   "max_speed": round(d.max_speed, 2), "closest_contact_cm": d.stats["closest_contact_cm"]}
                                  for d in st.duets.values()])
             elif self.path == "/state":
@@ -612,6 +659,7 @@ def serve(st, port):
                     "/duet": lambda: st.play_duet(b["name"], float(b.get("speed", 1.0))),
                     "/talk": lambda: st.talk(arm, bool(b.get("on", True))),
                     "/stance": lambda: st.set_stance(b["stance"], float(b.get("speed", 1.0))),
+                    "/props": lambda: st.set_props(arm, bool(b.get("on", True)), float(b.get("speed", 1.0))),
                     "/rest": lambda: st.go_rest(arm, float(b.get("speed", 1.0))),
                     "/grip": lambda: st.grip(arm, float(b["value"])),
                 }

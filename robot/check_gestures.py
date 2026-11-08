@@ -16,7 +16,16 @@ print(f"{len(ok)} gestures pass; {len(unsafe)} unsafe pairs")
 facing = {n for n, g in ok.items() if "each_other" in g.stances}
 assert {"idle_breathe", "wave", "bow", "slash", "thrust", "block", "roar", "nod", "shake_head"} <= facing, sorted(facing)
 assert not facing & set(show.FOLD)
-print(f"{len(facing)} gestures also play facing each other")
+sc = ck.scene
+for side in show.SIDES:
+    sc.set(side, show.stage_pose(side, "each_other"))
+sc.forward()
+eye = {side: sc.d.site_xpos[sc.site[side]].copy() for side in show.SIDES}
+gaze = sc.d.site_xmat[sc.site["left"]].reshape(3, 3)[:, 2]  # the wrist camera looks along the grasp axis
+yaw = np.degrees(np.arctan2(-gaze[1], gaze[0]))
+miss = np.degrees(np.arccos(gaze @ (eye["right"] - eye["left"]) / np.linalg.norm(eye["right"] - eye["left"])))
+assert yaw >= 60 and miss <= 30, (yaw, miss)  # empty hands: a deep turn, the eyes on the other's head
+print(f"{len(facing)} gestures also play facing each other (heads {yaw:.0f} deg in, eyes {miss:.0f} deg off the other's)")
 
 
 def fake(name, *keys):
@@ -120,6 +129,28 @@ assert st.cmd_q["left"][0] < 0 < st.cmd_q["right"][0]  # yawed toward each other
 assert call("/play", {"arm": "left", "gesture": "slash"})[0] == 200
 st.wait()
 assert np.allclose(st.cmd_q["left"], show.stage_pose("left", "each_other"))  # gestures return to the stance pose
+# Props: empty hands by default; holding one turns each_other shallow, blocks that arm's mouth, keeps its grip and
+# refuses hand-contact duets.
+assert call("/state")[1]["props"] == {"left": False, "right": False}
+assert call("/props", {"arm": "left", "on": True})[1]["stance"] == "each_other_props"
+st.wait()
+assert all(np.allclose(st.cmd_q[s], show.stage_pose(s, "each_other_props")) for s in show.SIDES)
+assert st.ck.scene.props == {"left": True, "right": True}  # everything is checked with both props now
+code, r = call("/talk", {"arm": "left"})
+assert code == 409 and "prop" in r["error"], r
+assert call("/talk", {"arm": "right"})[0] == 200 and call("/talk", {"arm": "right", "on": False})[0] == 200
+g0 = st.cmd_g["left"]
+assert call("/play", {"arm": "left", "gesture": "gripper_clap"})[0] == 200
+assert np.allclose(st.plan["left"].G, g0)  # holding a prop: the gesture keeps the grip
+st.wait()
+hands = [n for n, d in dok.items() if not d.props]
+code, r = call("/duet", {"name": hands[0]})
+assert code == 409 and "empty hands" in r["error"], r
+assert call("/props", {"arm": "left", "on": False})[1]["stance"] == "each_other"
+st.wait()
+assert all(np.allclose(st.cmd_q[s], show.stage_pose(s, "each_other")) for s in show.SIDES)
+assert st.ck.scene.props == {"left": False, "right": False}
+print("props ok: /props turns each_other shallow, blocks the mouth, keeps the grip, refuses hand duets; off again")
 if "look_at_other" in ok and "each_other" not in ok["look_at_other"].stances:
     code, r = call("/play", {"arm": "left", "gesture": "look_at_other"})
     assert code == 409 and "each_other" in r["error"], r

@@ -25,11 +25,16 @@ async def test_stage_client_against_fake_stage(capsys):
         await asyncio.sleep(0.3)
         state = json.load(urllib.request.urlopen(f"{url}/state"))
         assert state["playing"]["left"] == "slash"
+        stage.play("props", "left", 0.0)
+        await asyncio.sleep(0.2)
+        assert json.load(urllib.request.urlopen(f"{url}/state"))["props"] == {"left": True, "right": False}
+        stage.play("props", "none", 0.0)
         stage.face("each_other")
         stage.play("both", "bow", 2.5)  # sent after the face: must arrive after it
         await asyncio.sleep(0.3)
         state = json.load(urllib.request.urlopen(f"{url}/state"))
         assert state["stance"] == "each_other" and state["playing"]["right"] == "bow"
+        assert state["props"] == {"left": False, "right": False}
         stage.busy_until = 0.0  # as if the bow had finished
         stage.play("left", "nod", 0.2)
         stage.play("duet", "cheers", 9.7)  # waits for the nod (0.2 s + margin) before it is sent

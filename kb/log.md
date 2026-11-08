@@ -76,3 +76,7 @@
   land/stomp, snap jaws, beat chest, snore, sigh, hop.
 - Owner rule (Nov 7 evening): while the station is unattended, don't run anything on the real arms that comes close
   to the table (death collapse, fist bang, the Lars pick's grasp). Those wait for someone at the e-stop.
+- Step C (props explicit, deep facing): empty hands are the default; `each_other` turns the heads ~67° (mostly j5),
+  `/props` switches to the old shallow turn and checks with props; 5 hand-contact ensembles (clap, rub_hands, hug,
+  pull_rope, heart). Next batch: lower working height, limp death + revive, table bang, stirring, Italian hands,
+  reworks of chomp/explosion/gate/once_upon/row_boat/shrug/car_ride/quick_draw, hat on the head, gun recoil.

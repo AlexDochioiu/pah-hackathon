@@ -6,7 +6,7 @@ Targets: the right arm's are the mirror image of the left's about the midplane y
 Frame helpers: frame(point, up) = gripper pointing along `point`, its "up" (away from the fingers' underside) along
 `up`; the stage pose is frame((1, 0, 0.1), (0, 0, 1)).
 """
-import json, sys
+import functools, json, sys
 import mujoco, numpy as np
 import show, duets
 
@@ -230,7 +230,7 @@ class Seq:
     def home(self, T=1.0):
         return self.move(np.zeros(6), T=T)
 
-    def duet(self, name, about, contact, prop=None, kind="duet"):
+    def duet(self, name, about, contact, prop=None, kind="duet", props=True):
         rows = self.rows
         keys = []
         for t, ql, qr in rows:
@@ -249,6 +249,8 @@ class Seq:
         d = {"name": name, "kind": kind, "about": about, "contact": contact, "keys": out}
         if prop:
             d["prop"] = prop
+        if not props:
+            d["props"] = False  # empty hands: checked without the prop sticks, refused while one is held
         return d
 
 
@@ -547,9 +549,114 @@ def chomp():
     return ens("chomp", "The two arms are one giant pair of crocodile jaws: open wide and snap shut, three times.", s)
 
 
+# ---------------------------------------------------------------- hand-contact ensembles (empty hands only)
+# Without the 15 cm props the hands can meet in the middle with the arms (link2/link3) still >= 15 cm apart: the
+# grippers point in at az ~1.2 rad. meet() finds the targets where the hands are `gap` apart.
+
+_HANDB = ("gripper", "tip_left", "tip_right", "link4", "link5")
+_PARTS = {s: [(g, SC.m.body(SC.m.geom_bodyid[g]).name[len(duets.PRE[s]):] in _HANDB)
+              for g, _, _ in SC.geoms[s] if g != SC.prop_geom[s]] for s in SIDES}
+
+
+def hand_gap(qL, qR, grip=1.0):
+    """Closest hand-to-hand distance of the two arms at these joints (fingers at grip)."""
+    m, d, ft = SC.m, SC.d, np.zeros(6)
+    SC.set("left", qL, grip); SC.set("right", qR, grip); mujoco.mj_kinematics(m, d)
+    return min(mujoco.mj_geomDistance(m, d, a, b, 0.3, ft) for a, ha in _PARTS["left"] if ha
+               for b, hb in _PARTS["right"] if hb)
+
+
+@functools.lru_cache(maxsize=None)
+def meet(az, el, z, x=0.36, gap=0.012, up=(0, 0, 1), dx=0.0):
+    """Left and right gripper targets (mirrored; the left dx further forward, the right dx back) where the hands are
+    `gap` apart, pointing az in and el up."""
+    R = frame(aim(az, el), up)
+    lo, hi = 0.0, 0.25
+    for _ in range(14):
+        c = (lo + hi) / 2
+        pL = np.array([x + dx, MID_Y + c, z])
+        pR, RR = mirror_target(np.array([x - dx, MID_Y + c, z]), R)
+        qL, _, _ = ik("left", pL, R, show.stage_pose("left"))
+        qR, _, _ = ik("right", pR, RR, show.stage_pose("right"))
+        lo, hi = (c, hi) if hand_gap(qL, qR) < gap else (lo, c)
+    pL = np.array([x + dx, MID_Y + hi, z])
+    return (pL, R), mirror_target(np.array([x - dx, MID_Y + hi, z]), R)
+
+
+TOUCH = dict(zone=0.03, vc=0.022, vmax=0.3, acc=1.0, taper=0.06)  # per arm: the hands close at <= 4.4 cm/s
+
+
+def hands(name, about, s, mn=0.006):
+    return s.home(T=0.9).duet(name, about, [{"left": HAND, "right": HAND, "min": mn}], kind="ensemble", props=False)
+
+
+def clap():
+    s = Seq()
+    for k in range(3):
+        z = 0.46 + 0.03 * (k % 2)
+        s.move(*meet(1.2, 0.1, z, gap=0.055), T=0.8 if k == 0 else 0.3)          # hands apart
+        s.move(*meet(1.2, 0.1, z), approach=TOUCH, hold=0.1)                    # pat
+    s.move(*meet(1.2, 0.3, 0.5, gap=0.1), T=0.4, line=True)
+    return hands("clap", "Both arms are two hands clapping softly together in the middle, three times.", s)
+
+
+def rub_hands():
+    s = Seq()
+    s.move(*meet(1.25, 0.0, 0.44, gap=0.07), T=0.9)
+    s.move(*meet(1.25, 0.0, 0.44, gap=0.025), approach=TOUCH, hold=0.1)
+    dl = s.q["left"] - show.stage_pose("left")                               # where the hands met, as deltas
+    dr = show.mirror(s.q["right"] - show.stage_pose("right"), "right")
+    for k in range(5):                                                          # rub: the wrists roll against each other
+        a = 0.3 * (1 if k % 2 == 0 else -1)
+        s.move(dl + pose(j6=a, j5=0.04 * np.sign(a)), dr + pose(j6=-a, j5=-0.04 * np.sign(a)), T=0.3, mirror=False)
+    s.move(dl, dr, T=0.25, mirror=False, hold=0.1)
+    s.move(*meet(1.25, 0.2, 0.47, gap=0.08), T=0.4, line=True)
+    return hands("rub_hands", "Two hands rubbed together, scheming: \"Excellent... my plan is working.\"", s)
+
+
+def hug():
+    s = Seq()
+    s.move(pose(j1=0.55, j2=0.2, j3=0.35, p=0.2, j6=0.3), T=0.8, hold=0.3)    # arms wide open
+    s.move(*meet(0.95, -0.1, 0.42, x=0.42, gap=0.06), T=1.0)                  # wrap around
+    s.move(*meet(0.95, -0.1, 0.42, x=0.42, gap=0.015), approach=TOUCH, hold=0.3)
+    for dy in (0.025, -0.025, 0.0):                                            # rock side to side
+        (pl, rl), (pr, rr) = meet(0.95, -0.1, 0.42, x=0.42, gap=0.015)
+        s.move((pl + [0, dy, 0], rl), (pr + [0, dy, 0], rr), T=0.6, line=True, mirror=False)
+    s.move(*meet(0.95, 0.1, 0.45, x=0.42, gap=0.08), T=0.5, line=True)
+    return hands("hug", "Arms open wide, then wrap around in a big hug and rock side to side.", s)
+
+
+def pull_rope():
+    s = Seq()
+    far, near = dict(x=0.43, z=0.40, el=-0.25), dict(x=0.33, z=0.47, el=0.1)
+    s.grip("left", 0.0, 0.5).grip("right", 0.0, 0.5)                           # fists (closed fingers only widen the gap)
+    s.move(*meet(1.2, far["el"], far["z"], x=far["x"], gap=0.05), T=0.9)
+    s.move(*meet(1.2, far["el"], far["z"], x=far["x"], gap=0.02), approach=TOUCH)  # grab the rope
+    for _ in range(3):
+        s.move(*meet(1.2, near["el"], near["z"], x=near["x"], gap=0.02), T=0.7, line=True)   # heave!
+        s.move(*meet(1.2, far["el"], far["z"], x=far["x"], gap=0.02), T=0.6, line=True)     # reach for more
+    s.move(*meet(1.2, 0.1, 0.45, gap=0.08), T=0.5, line=True)
+    s.grip("left", 1.0, 0.5).grip("right", 1.0, 0.5)
+    return hands("pull_rope", "Two hands pull a heavy rope: reach, grab, heave back, three times.", s, mn=0.01)
+
+
+def heart():
+    s = Seq()
+    s.move(pose(j2=0.15, j3=0.4, p=0.1, j1=0.1), T=0.8)                        # elbows up: the two lobes
+    s.move(*meet(1.25, -0.45, 0.38, gap=0.05), T=0.8)
+    s.move(*meet(1.25, -0.45, 0.38, gap=0.012), approach=TOUCH, hold=0.3)      # the tip at the bottom
+    for _ in range(2):                                                          # it beats
+        (pl, rl), (pr, rr) = meet(1.25, -0.45, 0.38, gap=0.012)
+        s.move((pl + [0, 0, 0.02], rl), (pr + [0, 0, 0.02], rr), T=0.25, line=True, mirror=False)
+        s.move((pl, rl), (pr, rr), T=0.35, line=True, mirror=False, hold=0.1)
+    s.move(*meet(1.25, -0.2, 0.42, gap=0.08), T=0.5, line=True)
+    return hands("heart", "Both arms make a big heart: elbows up for the lobes, the hands meet at the tip, it beats.", s)
+
+
+HANDS = [clap, rub_hands, hug, pull_rope, heart]
 ENSEMBLES = [chomp, wings, this_big, shrug, rocket, waves, storm, gate_opening, explosion, row_boat, once_upon_a_time,
              the_end]
-LIBRARY = [cross_swords, cheers, poke, quick_draw, tip_hats, copycat, car_ride] + ENSEMBLES
+LIBRARY = [cross_swords, cheers, poke, quick_draw, tip_hats, copycat, car_ride] + ENSEMBLES + HANDS
 
 
 def main(names):

@@ -94,9 +94,12 @@ know:
 
 # Props (optional)
 
-Sometimes a prop makes a scene better (a foam sword, a toy, a hat). You may ask someone in the audience, in
-one short line, to hand the prop to the left or right arm, then carry on with the story. Never wait long
-for it, and never ask for anything sharp, heavy or fragile.
+The arms play with empty hands: the gripper is the mouth. Sometimes a prop makes a scene better (a foam sword,
+a toy, a hat). Then write `[props:left]` (or `[props:right]`, `[props:both]`) and, in one short line, ask someone
+in the audience to hand the prop to that arm, then carry on with the story. Never wait long for it, and never
+ask for anything sharp, heavy or fragile. An arm holding a prop has its mouth full: give that character's lines
+without a talk tag, and skip the ensembles where the hands touch (clap, hug...). When the prop is done with,
+ask for it back and write `[props:none]`; the arms then face each other more deeply again.
 
 # Interruptions
 

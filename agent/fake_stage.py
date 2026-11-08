@@ -3,7 +3,7 @@
     python3 fake_stage.py [--port 8770]
 
 Same API as the real stage server (robot/): GET /gestures, GET /state, POST /play {"arm","gesture","speed"},
-GET /duets, POST /duet {"name","speed"}, POST /talk {"arm","on"}, POST /freeze, /idle, /stage, /rest, /stance {"stance": "audience"|"each_other"}. Standard library only.
+GET /duets, POST /duet {"name","speed"}, POST /talk {"arm","on"}, POST /freeze, /idle, /stage, /rest, /stance {"stance": "audience"|"each_other"}, /props {"arm","on"}. Standard library only.
 """
 from __future__ import annotations
 
@@ -20,9 +20,10 @@ GESTURES = {
 DUETS = {"cross_swords": 8.7, "cheers": 9.0, "poke": 8.8, "quick_draw": 7.7, "tip_hats": 5.6, "copycat": 7.3,
          "car_ride": 6.8}
 ENSEMBLES = {"chomp": 5.6, "wings": 7.1, "this_big": 3.5, "shrug": 2.3, "rocket": 5.9, "waves": 3.7, "storm": 4.9,
-             "gate_opening": 4.8, "explosion": 6.7, "row_boat": 4.8, "once_upon_a_time": 4.0, "the_end": 4.0}
+             "gate_opening": 4.8, "explosion": 6.7, "row_boat": 4.8, "once_upon_a_time": 4.0, "the_end": 4.0,
+             "clap": 8.2, "rub_hands": 10.0, "hug": 7.5, "pull_rope": 13.3, "heart": 7.7}
 T0 = time.monotonic()
-state = {"mode": "rest", "stance": "audience", "arms": {"left": None, "right": None}}  # arm -> {"gesture", "until"} while playing
+state = {"mode": "rest", "stance": "audience", "props": {"left": False, "right": False}, "arms": {"left": None, "right": None}}  # arm -> {"gesture", "until"} while playing
 
 
 def log(msg: str) -> None:
@@ -51,7 +52,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/state":
             now = time.monotonic()
             arms = {a: (g["gesture"] if g and g["until"] > now else None) for a, g in state["arms"].items()}
-            self._reply(200, {"mode": state["mode"], "stance": state["stance"], "playing": arms})
+            self._reply(200, {"mode": state["mode"], "stance": state["stance"], "props": state["props"],
+                              "playing": arms})
         else:
             self._reply(404, {"error": "not found"})
 
@@ -92,6 +94,11 @@ class Handler(BaseHTTPRequestHandler):
             state["stance"] = body["stance"]
             log(f"STANCE facing {body['stance']}")
             return self._reply(200, {"ok": True, "stance": body["stance"]})
+        if self.path == "/props":
+            for a in (("left", "right") if body.get("arm") in (None, "both") else (body.get("arm"),)):
+                state["props"][a] = bool(body.get("on", True))
+            log(f"PROPS  {state['props']}")
+            return self._reply(200, {"ok": True, "props": state["props"]})
         if self.path in ("/freeze", "/idle", "/stage", "/rest"):
             state["mode"] = self.path[1:]
             state["arms"] = {"left": None, "right": None}

@@ -92,12 +92,14 @@ def test_sink_fires_and_strips():
 
     async def run():
         for c in ["Hi [face:each other] [left:wa", "ve] there [right:juggle] and [knight:bow] [face:sideways] ",
-                  "[duet:cross swords] [duet:tango] [ensemble:Storm] [face:audience] [both:cheer] yay [next]"]:
+                  "[duet:cross swords] [duet:tango] [ensemble:Storm] [props:left] [props:none] [props:hat] [face:audience] "
+                  "[both:cheer] yay [next]"]:
             await sink.capture_text(c)
         sink.flush()
         await asyncio.sleep(0)
     asyncio.run(run())
-    assert played == [("left", "wave"), ("duet", "cross_swords"), ("duet", "storm"), ("both", "celebrate")]
+    assert played == [("left", "wave"), ("duet", "cross_swords"), ("duet", "storm"), ("props", "left"),
+                      ("props", "none"), ("both", "celebrate")]
     assert continued == [1]
     assert faced == ["each_other", "audience"]
     assert "[" not in "".join(forwarded)

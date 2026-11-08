@@ -39,6 +39,8 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
   listed separately as `{{ENSEMBLES}}` (`Stage.fetch_duets("ensemble")`). Either tag plays any duet or ensemble.
   The prompt has the LLM drop into one at any big beat, even mid-scene, then go back to the two characters; the
   ending may use `[ensemble:the_end]` instead of `[both:bow]`.
+- `[props:left|right|both]` / `[props:none]`: `POST /props` (routed through `Stage.play("props", who)`). Empty hands
+  are the default; the prompt asks for a prop only when a scene needs one, and gives a holding arm no talk tags.
 - `[talk:left]` / `[talk:right]` (also `[left:talk]`) right before a character's quoted line: `POST /talk` on
   for that arm; the sink turns it off at the closing quote mark (`"` or `”`), at the next talk tag, or when the
   reply ends or is interrupted (flush). Talk tags are not moved by `tags_first`: they stay before their quote.

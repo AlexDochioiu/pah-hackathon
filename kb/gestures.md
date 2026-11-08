@@ -143,17 +143,26 @@ rates by it (`max_speed`). The overlay's head offsets are not in the swept volum
 the gripper < 1 cm, inside the 4 cm table and 15 cm arm margins. The mouth opens the gripper: **a held prop drops**.
 Preview: `preview.py --talk` → `robot/previews/talk.gif`.
 
-## Stances (facing each other)
+## Stances (facing each other) and the props mode
 Gestures are deltas from a stance pose. `audience` = the stage pose (both arms face the audience, the default).
-`each_other` = stage + `show.FACING_LEFT` = j1 −0.20, j5 +0.25 on the left arm (mirrored on the right: j1 +0.20,
-j5 −0.25): base and head yaw ~26° toward the other arm, so a slash, roar or wave aims at the other character
-(previews: `robot/previews/each_other/<name>.gif`). `load_library` checks every gesture in every stance (limits,
-table, lean-back, and 15 cm from the other arm at the stance pose, rest and idle); a gesture that fails a stance is
-refused only there. Today 16 of 17 play facing each other; `look_at_other` doesn't (its turn brings the prop 9.9 cm
-from the other arm, and they already look at each other). `stage`/`rest` always fold via the audience pose. In
-`each_other` 27 gesture pairs are refused when played on both arms at the same moment (409, as any clash): the
-props point at each other, so two big moves at once come too close. Larger yaws were tried: j1 −0.35 or j5 +0.55
-lose most gestures to the 15 cm gap. The agent uses `[face:each_other]` / `[face:audience]` tags
+Empty hands are the default (Nov 7 evening: the gripper is the mouth, so props are now explicit), and the plain
+stances are checked WITHOUT the prop sticks. `each_other` = stage + `show.FACING_LEFT` = j1 −0.12, j2 +0.04,
+j4 +0.04, j5 +1.05 on the left arm (mirrored on the right): the heads turn ~67° toward each other, the wrist cameras
+(the eyes, along the grasp axis) point 24° off the other's head toward the audience, a 3/4 stage cheat. Most of the
+turn is the head (j5), not the base (j1): turning the base brings link3 inside 15 cm. j2/j4 +0.04 lean it forward
+(the head yaw alone moves the COM back past the lean-back limit for celebrate/look_at_other). All 17 non-fold
+gestures play there (previews: `robot/previews/each_other/<name>.gif`, props hidden). j5 +1.25 (~77°, eyes ~14°
+off) would only lose look_at_other (its j5 passes the limit); kept at 1.05 to leave head room for look-around moves.
+
+`POST /props {"arm","on"}` says an arm holds a prop. While any arm does, the `_props` stance variants apply:
+everything is checked with both props, `each_other_props` is the old shallow turn (`FACING_PROPS_LEFT`: j1 −0.20,
+j5 +0.25, ~26°; the props would cross deeper), and the arms turn there at once (checked with empty hands: the prop
+goes in after the call). A holding arm refuses `/talk`, its gestures keep its grip (never drop the prop), and duets
+with `"props": false` (hand contact) are refused. `/props` off turns back deep. `load_library` checks every gesture
+in all four stance variants (limits, table, lean-back, and 15 cm from the other arm at the stance pose, rest and
+idle); a gesture failing one is refused only there (`look_at_other` in `each_other_props`). `stage`/`rest` fold via
+`audience` or `audience_props`. Both arms at once: 18 pairs are refused in `each_other` and 27 in
+`each_other_props` (409, as any clash). The agent uses `[face:...]` and `[props:left|right|both|none]` tags
 ([storyteller.md](storyteller.md)). Bring-up adds a turn to `each_other` and back at 30 %.
 
 ## Duets (`robot/duets.py`)
@@ -218,8 +227,20 @@ arms are given; none touch (all ≥ 20 cm). Previews: `robot/previews/ensemble_<
 
 Lean-back rule of thumb for writing them: the arm's centre of mass moves about `24·j2 − 11·j3 − 1.7·p` cm (deltas
 in rad, p = head pitch) and must stay above −2 cm, so raising the elbow or the head needs j2 forward with it.
-Not built yet (they need hand contact, which props block, or a no-prop mode): clap, rub hands, hug, pull a rope,
-heart shape.
+Hand-contact ensembles (`"props": false`: checked without props, refused while one is held). `meet()` in
+`make_duets.py` bisects the gripper targets until the hands are a given gap apart (pointing in at az ~1.2 rad, the
+arms stay ≥ 17.8 cm apart); the final close is a creep at ≤ 4.4 cm/s (`TOUCH`), so a clap is a soft pat.
+
+| Ensemble | s | closest hands |
+|---|---|---|
+| `clap`: three soft claps in the middle | 8.2 | 1.2 cm |
+| `rub_hands`: hands together, the wrists roll against each other (scheming) | 10.0 | 2.4 cm |
+| `hug`: arms wide, wrap around, rock side to side | 7.5 | 1.5 cm |
+| `pull_rope`: fists together, reach and heave three times | 13.3 | 5.4 cm |
+| `heart`: elbows up, hands meet pointing down, it beats | 7.7 | 1.2 cm |
+
+A sliding rub (hands passing each other) failed the closing-speed rule (the gap between staggered hands changes
+fast), hence the wrist rolls.
 
 ## Readability review of the solo gestures (Nov 7; suggestions, not applied)
 Goal: a viewer without sound names the action in a second. Big moves through j1–j3, not wrist flicks.

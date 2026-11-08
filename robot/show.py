@@ -44,8 +44,25 @@ STAGE_LEFT = np.array([0.0, 0.8, 1.2, -0.3, 0.0, 0.0])
 # Stances: the pose gestures play relative to. "audience" = STAGE_LEFT (both face the audience); "each_other" = base
 # and head yawed toward the other arm, so two characters can slash / wave / roar AT each other (left j1 < 0, j5 > 0;
 # the right arm mirrors). Every gesture is checked in each stance; one that fails a stance is refused only there.
-FACING_LEFT = np.array([-0.2, 0.0, 0.0, 0.0, 0.25, 0.0])  # delta from STAGE_LEFT
-STANCES = {"audience": STAGE_LEFT, "each_other": STAGE_LEFT + FACING_LEFT}
+# Props (Nov 7, evening): empty hands are the default (the gripper is the mouth), so the plain stances are checked
+# WITHOUT the prop sticks and "each_other" turns the heads deep enough for eye contact (the wrist cameras, the eyes,
+# point at each other's head). While an arm holds a prop (stage /props) the "_props" variants apply: checked with
+# both props, and a shallow facing turn, since the props would cross.
+FACING_LEFT = np.array([-0.12, 0.04, 0.0, 0.04, 1.05, 0.0])      # delta from STAGE_LEFT: head ~66 deg toward the other
+FACING_PROPS_LEFT = np.array([-0.2, 0.0, 0.0, 0.0, 0.25, 0.0])  # with props: ~25 deg
+PROPS = "_props"
+STANCES = {"audience": STAGE_LEFT, "each_other": STAGE_LEFT + FACING_LEFT,
+           "audience" + PROPS: STAGE_LEFT, "each_other" + PROPS: STAGE_LEFT + FACING_PROPS_LEFT}
+FACINGS = ("audience", "each_other")  # what /stance takes; the props mode picks the variant
+
+
+def with_props(stance, props):
+    """The stance variant for a props mode: ("each_other", True) -> "each_other_props"."""
+    return stance.removesuffix(PROPS) + (PROPS if props else "")
+
+
+def has_props(stance):
+    return stance.endswith(PROPS)
 
 try:
     import yaml
@@ -72,7 +89,8 @@ def key(name, side, stance="audience"):
 # ---------------------------------------------------------------- scene
 
 def scene_spec():
-    """MjSpec: both arms (prefix l_ / r_) with a prop stick in each gripper, a table, a light and an audience camera."""
+    """MjSpec: both arms (prefix l_ / r_) with a prop stick in each gripper (Scene.props says if it counts), a table,
+    a light and an audience camera."""
     from i2rt.robots.utils import ArmType, GripperType, combine_arm_and_gripper_xml
     xml = combine_arm_and_gripper_xml(ArmType.YAM, GripperType.from_string_name("linear_4310"))
     s = mujoco.MjSpec()
@@ -114,6 +132,8 @@ class Scene:
                      for side, p in (("left", "l_"), ("right", "r_"))}
         self.finger_max = float(m.jnt_range[m.joint("l_joint7").id][1])
         self.geoms, self.site = {}, {}
+        self.props = {s: False for s in SIDES}  # does the prop stick count (clouds, sweeps, clearance)?
+        self.prop_geom = {s: m.geom(p + "prop").id for s, p in (("left", "l_"), ("right", "r_"))}
         for side, p in (("left", "l_"), ("right", "r_")):
             self.site[side] = m.site(f"{p}grasp_site").id
             gs = []
@@ -142,6 +162,8 @@ class Scene:
         """(points (N,3), radii (N,)) of the side's moving parts for the current pose, shared frame."""
         pts, rad = [], []
         for g, v, r in self.geoms[side]:
+            if g == self.prop_geom[side] and not self.props[side]:
+                continue
             pts.append(self.d.geom_xpos[g] + v @ self.d.geom_xmat[g].reshape(3, 3).T)
             rad.append(np.full(len(v), r))
         return np.concatenate(pts), np.concatenate(rad)
@@ -328,11 +350,17 @@ class Checker:
         probs = motion_problems(Q) + self.lean_problems(side, Q, fold=fold)
         sw = self.scene.sweep(side, Q)
         if sw[2] < CLEAR:
-            probs.append(f"lowest point (prop included) is {sw[2]*100:.1f} cm above the table, needs {CLEAR*100:.0f} cm")
+            probs.append(f"lowest point{' (prop included)' if any(self.scene.props.values()) else ''} is {sw[2]*100:.1f} cm above the table, needs {CLEAR*100:.0f} cm")
         return probs, sw
 
+    def set_props(self, on):
+        """Whether both arms' prop sticks count in what follows (sweeps, clearance, gaps)."""
+        self.scene.props = {s: bool(on) for s in SIDES}
+
     def check(self, g, stance="audience"):
-        """Problems of a gesture on either arm at speed 1 (empty = ok). Sets g.max_speed and caches swept volumes."""
+        """Problems of a gesture on either arm at speed 1 (empty = ok), in the stance's props mode (it stays set).
+        Sets g.max_speed and caches swept volumes."""
+        self.set_props(has_props(stance))
         probs = []
         for side in SIDES:
             Q, G = g.samples(side, stance=stance)
@@ -383,20 +411,21 @@ def load_library(checker=None, folder=GESTURE_DIR, verbose=True):
         for b in ok:
             if gap(ck.swept[(a, "left")], ck.swept[(b, "right")]) < GAP:
                 unsafe.add((a, b))
-    # The same for the other stances (not the folds): a gesture failing there is only refused in that stance.
+    # The same for the other stances (folds only with props): a gesture failing there is only refused in that stance.
     ck.stance_rejected, ck.stance_unsafe = {}, {}
     for st in STANCES:
         if st == "audience":
             continue
         good = []
         for name, g in ok.items():
-            if name in FOLD:
+            if name in FOLD and st != "audience" + PROPS:
                 continue
             probs = ck.check(g, st)
             if probs:
                 ck.stance_rejected[(name, st)] = "; ".join(probs)
             else:
                 good.append(name)
+        ck.set_props(has_props(st))
         others = {side: [ck.pose_sweep(side, stage_pose(side, st)), ck.pose_sweep(side, HOME[side])] for side in SIDES}
         for side in SIDES:
             if "idle_breathe" in good:
@@ -412,6 +441,7 @@ def load_library(checker=None, folder=GESTURE_DIR, verbose=True):
             ok[name].stances.add(st)
         ck.stance_unsafe[st] = {(a, b) for a in good for b in good
                                 if gap(ck.swept[key(a, "left", st)], ck.swept[key(b, "right", st)]) < GAP}
+    ck.set_props(False)  # empty hands: the default
     if verbose:
         for n, why in bad.items():
             print(f"REJECTED {n}: {why}")

@@ -3,6 +3,7 @@
 A duet file (duets/<name>.json) holds synchronized keyframes for BOTH arms as absolute joints (solved by IK at build
 time in make_duets.py), played with the same monotone cubic at 50 Hz as gestures:
   {"name", "kind": "duet"|"ensemble", "about", "contact": [{"left": [parts], "right": [parts], "min": m}, ...],
+   "props": false (optional: played with empty hands, checked without the prop sticks; hand contact),
    "prop": {"t": s, "to": "right"} (optional: the left hands its prop to the right at t),
    "keys": [{"t": s, "left": [6 rad], "right": [6 rad], "gl": 0..1, "gr": 0..1 (grips optional)}, ...]}
 Every duet starts and ends with both arms at the stage pose. Parts: "prop" (the 15 cm stick, on whichever arm holds
@@ -51,6 +52,7 @@ class Duet:
             self.g[s] = (np.array([a for a, _ in gk]), np.array([[b] for _, b in gk])) if gk else None
         self.contact = [(tuple(c["left"]), tuple(c["right"]), float(c["min"])) for c in d.get("contact", [])]
         self.prop = d.get("prop")
+        self.props = bool(d.get("props", True))  # False: empty hands (the stage refuses it while a prop is held)
         assert all(self.q[s].shape[1] == 6 for s in SIDES) and np.all(np.diff(self.t) > 0) and self.t[0] == 0, \
             f"{self.name}: bad keys"
         assert all(set(a) | set(b) <= set(PARTS) for a, b, _ in self.contact), f"{self.name}: unknown contact part"
@@ -73,6 +75,8 @@ class Duet:
 
     def holds_prop(self, side, tq):
         """Which frames the side holds a prop (both do, except across a handover)."""
+        if not self.props:
+            return np.zeros(len(tq), bool)
         if not self.prop:
             return np.ones(len(tq), bool)
         after = np.asarray(tq) >= self.prop["t"]
@@ -139,12 +143,16 @@ class DuetChecker:
         """Problems (empty = ok). Sets duet.max_speed and duet.stats."""
         probs = []
         smp = duet.samples()
+        self.ck.set_props(duet.props)
         for s in SIDES:
             Q, G = smp[s]
             if np.abs(Q[0] - show.stage_pose(s)).max() > 1e-3 or np.abs(Q[-1] - show.stage_pose(s)).max() > 1e-3:
                 probs.append(f"{s}: must start and end at the stage pose")
             p, _ = self.ck.check_samples(s, Q)
             probs += [f"{s}: {x}" for x in p]
+        self.ck.set_props(False)
+        for s in SIDES:
+            Q, G = smp[s]
             if G is not None and (G.min() < -1e-6 or G.max() > 1 + 1e-6):
                 probs.append(f"{s}: gripper outside 0..1")
         tq, cd, od, op = self.frames(duet)

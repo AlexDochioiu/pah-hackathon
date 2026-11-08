@@ -1,7 +1,8 @@
-"""Renders every gesture to previews/<name>.gif from the audience side (both arms, table, props), for review.
+"""Renders every gesture to previews/<name>.gif from the audience side (both arms, table; props only in a _props stance), for review.
 
   preview.py [name ...]        default: every gesture in gestures/
   preview.py --stance each_other [name ...]    the same facing each other, to previews/each_other/<name>.gif
+  (each_other_props / audience_props: holding props)
   preview.py --talk                            previews/talk.gif: the talking mouth (POST /talk)
 Off-screen MuJoCo: on the station run with MUJOCO_GL=egl (or osmesa); on a Mac MUJOCO_GL=cgl. The left arm is on the
 RIGHT of the image (seen from the audience). Gestures meant for one arm play on the left arm, the right arm stands at
@@ -51,6 +52,9 @@ def main(names, stance="audience"):
     sc = show.Scene()
     sc.m.vis.global_.offwidth, sc.m.vis.global_.offheight = W, H
     renderer = mujoco.Renderer(sc.m, H, W)
+    if not show.has_props(stance):  # empty hands (the default): no prop sticks
+        for s in show.SIDES:
+            sc.m.geom_rgba[sc.prop_geom[s]] = 0
     out.mkdir(parents=True, exist_ok=True)
     for f in sorted(show.GESTURE_DIR.glob("*.json")):
         g = show.load(f)
