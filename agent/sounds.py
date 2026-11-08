@@ -1,0 +1,265 @@
+"""Sound effects and mood music, cued by tags in the narration, played into the room on LiveKit's
+BackgroundAudioPlayer track (the web page plays every agent audio track, so they come out of the laptop).
+
+The LLM writes `[sfx:explosion]` where a sound happens and `[music:spooky]` when the mood changes (`[music:none]`
+stops it). gestures.py's GestureSink fires them as the spoken words reach them, like the gestures, and
+`tags_first` leaves them where they were written (a laugh track belongs after its punchline, not before).
+
+- One-shots play at the library's level (`SFX_VOLUME`) and overlap freely.
+- Music loops forever and is ducked: `MUSIC_DUCKED` while Sparky or the listener speaks, `MUSIC_VOLUME` in the
+  gaps, gliding between the two. A new track crossfades with the old one.
+- The files in sounds/ are trimmed and loudness-normalised (sfx peak at -16 LUFS momentary, music at -20 LUFS
+  integrated); sounds/LICENSES.md says where each came from.
+"""
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import difflib
+import logging
+import os
+import re
+from collections.abc import AsyncIterator
+from pathlib import Path
+
+import numpy as np
+from livekit import rtc
+from livekit.agents import AgentSession
+from livekit.agents.utils.audio import audio_frames_from_file
+from livekit.agents.voice.background_audio import AudioConfig, BackgroundAudioPlayer, PlayHandle
+
+logger = logging.getLogger("storyteller.sounds")
+
+SOUNDS_DIR = Path(__file__).parent / "sounds"
+SFX_TAG, MUSIC_TAG = "sfx", "music"
+SOUND_TAGS = (SFX_TAG, MUSIC_TAG)
+MUSIC_OFF = ("none", "off", "stop", "no", "silence", "quiet", "nothing")
+
+SFX_VOLUME = float(os.getenv("SFX_VOLUME", "0.8"))
+MUSIC_VOLUME = float(os.getenv("MUSIC_VOLUME", "0.35"))  # nobody talking
+MUSIC_DUCKED = float(os.getenv("MUSIC_DUCKED", "0.15"))  # under speech: ~17 dB below the voice
+MUSIC_FADE_S = 1.5  # crossfade between tracks, fade-in of the first one
+DUCK_S, UNDUCK_S = 0.25, 1.2  # glide time down to MUSIC_DUCKED and back up
+
+# What each sound is, for the prompt. Files without a line here still play; they just get no description.
+ABOUT = {
+    "explosion": "a big boom", "crash": "something heavy smashes", "sword_clash": "two swords clang",
+    "laser": "a laser shot, pew", "gunshot": "one bang, a cowboy or pirate pistol", "punch": "a cartoon punch, thwack",
+    "magic": "a sparkly spell", "thunder": "a thunder clap", "roar": "a monster or dragon roar",
+    "door_creak": "a slow creaky door", "splash": "a big splash into water", "whoosh": "something flies past fast",
+    "boing": "a cartoon spring bounce", "car_horn": "beep beep", "car_engine": "a car starts and revs",
+    "spaceship": "a rocket or spaceship engine", "stomp": "a giant's heavy footsteps", "chomp": "one big bite",
+    "evil_laugh": "a villain's mwa-ha-ha", "drum_roll": "a drum roll before a reveal", "tada": "a tada fanfare",
+    "applause": "the audience claps", "cheer": "the crowd cheers",
+    "laugh_track": "a sitcom audience laughs", "laugh_big": "the audience roars with laughter",
+    "rimshot": "ba-dum-tss", "crickets": "crickets chirp: nobody laughed", "sad_trombone": "wah-wah-waaah, a flop",
+    "audience_ooh": "the audience goes ooooh", "audience_aww": "the audience goes awww",
+    "record_scratch": "a record scratch: wait, what?", "slide_whistle": "a cartoon slide whistle falling",
+}
+MUSIC_ABOUT = {
+    "adventure": "a cheerful journey or quest", "calm": "a gentle fairytale, a village, once upon a time",
+    "spooky": "a dark forest, ghosts, a mystery", "battle": "a fight, a chase, danger",
+    "sad": "a sad or tender moment", "victory": "the heroes win, a celebration", "space": "outer space, robots, the future",
+    "comedy": "a silly, quirky scene", "lounge": "a comedy club: the stand-up show",
+}
+SFX_SYNONYMS = {
+    "boom": "explosion", "kaboom": "explosion", "blast": "explosion", "bomb": "explosion", "smash": "crash",
+    "bang": "crash", "clang": "sword_clash", "sword": "sword_clash", "clash": "sword_clash", "pew": "laser",
+    "zap": "laser", "blaster": "laser", "shot": "gunshot", "gun": "gunshot", "pistol": "gunshot", "hit": "punch",
+    "thwack": "punch", "bonk": "punch", "spell": "magic", "sparkle": "magic", "wand": "magic", "lightning": "thunder",
+    "storm": "thunder", "growl": "roar", "door": "door_creak", "creak": "door_creak", "water": "splash",
+    "swoosh": "whoosh", "swish": "whoosh", "bounce": "boing", "spring": "boing", "jump": "boing", "horn": "car_horn",
+    "honk": "car_horn", "beep": "car_horn", "car": "car_engine", "engine": "car_engine", "rocket": "spaceship",
+    "ufo": "spaceship", "footsteps": "stomp", "steps": "stomp", "giant": "stomp", "bite": "chomp", "nom": "chomp",
+    "villain": "evil_laugh", "mwahaha": "evil_laugh", "drumroll": "drum_roll", "fanfare": "tada", "clap": "applause",
+    "claps": "applause", "clapping": "applause", "hooray": "cheer", "crowd": "cheer", "cheering": "cheer",
+    "laugh": "laugh_track", "laughs": "laugh_track", "laughter": "laugh_track", "sitcom": "laugh_track",
+    "roaring_laughter": "laugh_big", "big_laugh": "laugh_big", "badumtss": "rimshot", "ba_dum_tss": "rimshot",
+    "drum": "rimshot", "cricket": "crickets", "silence": "crickets", "trombone": "sad_trombone", "fail": "sad_trombone",
+    "wah_wah": "sad_trombone", "ooh": "audience_ooh", "oooh": "audience_ooh", "gasp": "audience_ooh",
+    "aww": "audience_aww", "awww": "audience_aww", "scratch": "record_scratch", "whistle": "slide_whistle",
+    "fall": "slide_whistle",
+}
+MUSIC_SYNONYMS = {
+    "quest": "adventure", "journey": "adventure", "happy": "adventure", "scary": "spooky", "creepy": "spooky",
+    "horror": "spooky", "mystery": "spooky", "ghost": "spooky", "fight": "battle", "action": "battle", "epic": "battle",
+    "chase": "battle", "danger": "battle", "fairytale": "calm", "fairy_tale": "calm", "gentle": "calm",
+    "peaceful": "calm", "lullaby": "calm", "village": "calm", "tender": "sad", "melancholy": "sad",
+    "win": "victory", "triumph": "victory", "celebration": "victory", "party": "victory", "scifi": "space",
+    "sci_fi": "space", "future": "space", "robots": "space", "funny": "comedy", "silly": "comedy", "quirky": "comedy",
+    "jazz": "lounge", "club": "lounge", "comedy_club": "lounge", "standup": "lounge", "stand_up": "lounge",
+}
+
+
+def _norm(name: str) -> str:
+    return re.sub(r"[\s-]+", "_", name.strip().lower())
+
+
+def _resolve(name: str, known: dict[str, Path], synonyms: dict[str, str]) -> str | None:
+    """Exact name, then a synonym, then a close spelling, then any word of it ("big_explosion" -> explosion)."""
+    name = _norm(name)
+    if name in known:
+        return name
+    if (syn := synonyms.get(name)) in known:
+        return syn
+    if close := difflib.get_close_matches(name, list(known), n=1, cutoff=0.7):
+        return close[0]
+    for word in name.split("_"):
+        if word in known:
+            return word
+        if (syn := synonyms.get(word)) in known:
+            return syn
+    return None
+
+
+class SoundBook:
+    """The sound library on disk: sounds/sfx/*.ogg one-shots and sounds/music/*.ogg loops, named by file."""
+
+    def __init__(self, sfx: dict[str, Path], music: dict[str, Path]) -> None:
+        self.sfx, self.music = dict(sfx), dict(music)
+
+    @classmethod
+    def load(cls, root: Path = SOUNDS_DIR) -> SoundBook:
+        def scan(sub: str) -> dict[str, Path]:
+            return {p.stem: p for p in sorted((root / sub).glob("*.ogg"))}
+        return cls(scan("sfx"), scan("music"))
+
+    def resolve_sfx(self, name: str) -> str | None:
+        return _resolve(name, self.sfx, SFX_SYNONYMS)
+
+    def resolve_music(self, name: str) -> str | None:
+        return _resolve(name, self.music, MUSIC_SYNONYMS)
+
+    def describe_sfx(self) -> str:
+        return "\n".join(f"- {n}: {ABOUT[n]}" if n in ABOUT else f"- {n}" for n in self.sfx) or "none today"
+
+    def describe_music(self) -> str:
+        return "\n".join(f"- {n}: {MUSIC_ABOUT[n]}" if n in MUSIC_ABOUT else f"- {n}" for n in self.music) or "none today"
+
+
+class _Track:
+    """One playing music track: its ducking gain, and a flag that ends it at once."""
+
+    def __init__(self, gain: float) -> None:
+        self.cut = False
+        self.gain = gain
+
+
+class Soundboard:
+    """Plays the tags: `cue("sfx", "explosion")`, `cue("music", "spooky")`, `cue("music", "none")`.
+
+    `player` is a started BackgroundAudioPlayer (or anything with its `play(AudioConfig, loop=) -> PlayHandle`);
+    `start()` makes and publishes one. Until then, cues are logged and dropped."""
+
+    def __init__(self, book: SoundBook, player: BackgroundAudioPlayer | None = None) -> None:
+        self.book = book
+        self.player = player
+        self.music_name: str | None = None
+        self._music: tuple[PlayHandle, _Track] | None = None
+        self._sfx: set[PlayHandle] = set()
+        self._ducked = {"agent": False, "user": False}
+
+    async def start(self, room: rtc.Room, session: AgentSession) -> None:
+        player = BackgroundAudioPlayer()
+        try:
+            await player.start(room=room)
+        except Exception as e:  # noqa: BLE001 - no sound is better than no show
+            logger.warning("background audio failed to start (%s): no sfx or music this session", e)
+            return
+        self.player = player
+        session.on("agent_state_changed", lambda ev: self.duck("agent", ev.new_state == "speaking"))
+        session.on("user_state_changed", lambda ev: self.duck("user", ev.new_state == "speaking"))
+
+    def duck(self, who: str, on: bool) -> None:
+        self._ducked[who] = on
+
+    def target(self) -> float:
+        return MUSIC_DUCKED if any(self._ducked.values()) else MUSIC_VOLUME
+
+    def cue(self, kind: str, name: str) -> None:
+        if kind == SFX_TAG:
+            self.sfx(name)
+        elif kind == MUSIC_TAG:
+            self.music(name)
+
+    def sfx(self, name: str) -> None:
+        resolved = self.book.resolve_sfx(name)
+        if resolved is None:
+            logger.info("dropped [sfx:%s]: unknown sound", name)
+            return
+        logger.info("sfx %s", resolved)
+        if self.player is None:
+            return
+        handle = self.player.play(AudioConfig(str(self.book.sfx[resolved]), volume=SFX_VOLUME))
+        self._sfx.add(handle)
+        asyncio.ensure_future(self._forget(handle))
+
+    async def _forget(self, handle: PlayHandle) -> None:
+        with contextlib.suppress(Exception):
+            await handle.wait_for_playout()
+        self._sfx.discard(handle)
+
+    def music(self, name: str) -> None:
+        if _norm(name) in MUSIC_OFF:
+            self.stop_music()
+            return
+        resolved = self.book.resolve_music(name)
+        if resolved is None:
+            logger.info("dropped [music:%s]: unknown music", name)
+            return
+        if resolved == self.music_name:
+            return  # already playing: keep it going rather than restarting it
+        logger.info("music %s", resolved)
+        self.stop_music(fade=True)  # fades out while the new one fades in: a crossfade
+        self.music_name = resolved
+        if self.player is not None:
+            track = _Track(self.target())
+            source = self._music_frames(self.book.music[resolved], track)
+            self._music = (self.player.play(AudioConfig(source, fade_in=MUSIC_FADE_S, fade_out=MUSIC_FADE_S)), track)
+
+    def stop_music(self, fade: bool = True) -> None:
+        if self.music_name:
+            logger.info("music off")
+        self.music_name = None
+        if self._music is not None:
+            handle, track = self._music
+            track.cut = not fade  # ends the stream at the next frame instead of after the fade-out
+            handle.stop()
+            self._music = None
+
+    def stop_all(self) -> None:
+        """STOP / end of the show: silence everything at once."""
+        self.stop_music(fade=False)
+        for handle in list(self._sfx):
+            handle.stop()
+        self._sfx.clear()
+
+    async def aclose(self) -> None:
+        self.stop_all()
+        if isinstance(self.player, BackgroundAudioPlayer):
+            await self.player.aclose()
+        self.player = None
+
+    async def _music_frames(self, path: Path, track: _Track) -> AsyncIterator[rtc.AudioFrame]:
+        """The track, looped until cut, with the ducking gain gliding toward target() sample by sample."""
+        while not track.cut:
+            frames = audio_frames_from_file(str(path))
+            try:
+                async for frame in frames:
+                    if track.cut:
+                        return
+                    yield self._duck_frame(frame, track)
+            finally:
+                await frames.aclose()
+
+    def _duck_frame(self, frame: rtc.AudioFrame, track: _Track) -> rtc.AudioFrame:
+        n, target = frame.samples_per_channel, self.target()
+        glide = DUCK_S if target < track.gain else UNDUCK_S
+        step = max(1e-3, MUSIC_VOLUME - MUSIC_DUCKED) / max(1.0, glide * frame.sample_rate)
+        ramp = track.gain + np.sign(target - track.gain) * step * np.arange(1, n + 1, dtype=np.float32)
+        ramp = np.minimum(ramp, target) if target >= track.gain else np.maximum(ramp, target)
+        track.gain = float(ramp[-1])
+        data = np.frombuffer(frame.data, dtype=np.int16).astype(np.float32)
+        data *= np.repeat(ramp, frame.num_channels) if frame.num_channels > 1 else ramp
+        return rtc.AudioFrame(data=np.clip(data, -32768, 32767).astype(np.int16).tobytes(),
+                              sample_rate=frame.sample_rate, num_channels=frame.num_channels, samples_per_channel=n)

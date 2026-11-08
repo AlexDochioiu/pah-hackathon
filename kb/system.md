@@ -25,7 +25,8 @@ Update this page when a piece is added or a connection changes. Details live on 
 4. Fired tags become HTTP calls to the stage server (`agent/gestures.py` `Stage`), through the ssh tunnel.
 5. The stage server (`robot/stage.py`) plays pre-built, pre-checked trajectories from `robot/gestures/` and
    `robot/duets/` on the arms. Anything that fails the checker is refused, not played.
-6. TTS audio (and soon sound effects and music) goes back through the room to the web page's speaker.
+6. TTS audio goes back through the room to the web page's speaker, and so do the sound effects and music
+   (`agent/sounds.py`, a second `background_audio` track in the same room).
 
 ## Where things are built
 | Piece | Built by | Checked by | Page |

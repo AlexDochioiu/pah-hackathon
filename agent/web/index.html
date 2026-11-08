@@ -206,6 +206,7 @@ document.addEventListener("click", () => { if (parked && serverUp && !room) { pa
 async function stopAll(e) {
   if (e) e.stopPropagation();
   release(true);
+  document.querySelectorAll("audio").forEach((el) => { el.muted = true; });  // voice, music and sfx: silent now
   parked = true; stopped = true;
   const r = room; room = null; agent = null;
   render();

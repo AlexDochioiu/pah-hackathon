@@ -8,8 +8,9 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 | File | What |
 |---|---|
 | `agent/storyteller.py` | Entrypoint (`uv run storyteller.py console\|dev`). Model choices and timings at the top. |
-| `agent/prompt.md` | The system prompt. `{{GESTURES}}` is replaced at startup with the stage's gesture list. |
+| `agent/prompt.md` | The system prompt. `{{GESTURES}}` is replaced at startup with the stage's gesture list, `{{SFX}}`/`{{MUSIC}}` with the sound library. |
 | `agent/gestures.py` | Tag parser, gesture-name mapping, stage HTTP client, the speech-synced gesture hook. |
+| `agent/sounds.py`, `agent/sounds/` | Sound effects and mood music: the library (CC0, `sounds/LICENSES.md`) and its player. |
 | `agent/director.py` | Freeze when the listener talks, idle when the stage is quiet, auto-continue to the next scene. |
 | `agent/app.py`, `agent/web/index.html` | Story Theatre: hold-to-talk web page plus the PTT worker it runs. |
 | `agent/fake_stage.py` | Stdlib stand-in for `robot/stage.py`, same API, prints what the arms would do. |
@@ -44,6 +45,11 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 - `[talk:left]` / `[talk:right]` (also `[left:talk]`) right before a character's quoted line: `POST /talk` on
   for that arm; the sink turns it off at the closing quote mark (`"` or `”`), at the next talk tag, or when the
   reply ends or is interrupted (flush). Talk tags are not moved by `tags_first`: they stay before their quote.
+- `[sfx:explosion]`: one sound effect from `agent/sounds/sfx/` (`{{SFX}}` in the prompt). `[music:spooky]`: start
+  or crossfade the looping background music from `agent/sounds/music/` (`{{MUSIC}}`); `[music:none]` stops it.
+  Sound tags are not moved by `tags_first`: they play where they were written (a laugh track after its punchline,
+  a boom before its "KA-BOOM!"). Names map like gestures (exact, synonym table, difflib 0.7, any word); unknown
+  ones are dropped and logged. See "Sound effects and music" below.
 - `[next]` at the end of a scene means "carry on". Once it has been spoken in full, the director waits
   `NEXT_SCENE_AFTER_S` (0.8 s) and asks for the next scene; the listener can jump in during that gap.
   No `[next]` means the agent waits for the listener (a question, or the end of the story).
@@ -68,6 +74,27 @@ stage server ([gestures.md](gestures.md)). Run instructions: [agent/README.md](.
 - Measured in the fake-session test: a tag on the second word fires ~0.5 s into playout; one near the end of 4 s
   of audio fires at ~4.0 s. Pacing is LiveKit's speaking-rate estimate, so expect a few hundred ms of slop.
 - Stage calls are fire-and-forget (2 s timeout, errors logged); a dead stage never stalls the voice.
+
+## Sound effects and music
+- Played by `sounds.Soundboard` on LiveKit's `BackgroundAudioPlayer`: its own `background_audio` track in the
+  room, which the web page plays like the voice (it attaches every audio track). `GestureSink` hands sound tags
+  to `Soundboard.cue` at the same moment it would fire a gesture there, so sounds are synced to playout the same
+  way and an interruption cancels the ones after the cut. The player starts after `ctx.connect()`; if it fails the
+  show runs without sound.
+- Library (Nov 7): 32 sfx and 9 music tracks, 6.3 MB, all CC0 (Kenney packs, Freesound CC0, OpenGameArt CC0;
+  per-file sources in `agent/sounds/LICENSES.md`). Mono 48 kHz Opus in Ogg; sfx normalised so their loudest
+  400 ms sit at -16 LUFS, music at -20 LUFS integrated, all limited at -2 dBFS. The file name is the tag name; a
+  new file is picked up automatically (add its description to `ABOUT`/`MUSIC_ABOUT` in `sounds.py`).
+- Volumes (env overrides): `SFX_VOLUME` 0.8; music `MUSIC_VOLUME` 0.35 when nobody talks, ducked to
+  `MUSIC_DUCKED` 0.15 while Sparky (`agent_state_changed` speaking) or the listener (`user_state_changed`) speaks.
+  The music source is our own looping frame generator that glides its gain (down in 0.25 s, up in 1.2 s); a new
+  `[music:x]` fades the old track out and the new one in over 1.5 s. Offline mix check: music about -34 dBFS RMS
+  between lines, -41 dBFS ducked, an explosion about -17 dBFS.
+- STOP: the page mutes every audio element at once, then `/stop` deletes the room; the session's shutdown callback
+  closes the player (cancels every sound and unpublishes the track).
+- Comedy mode (prompt "Comedy show"): the opening offers a story or a comedy show; the arms do stand-up (two
+  comedians, comedian and heckler, or a double act), `[music:lounge]`, and `[sfx:rimshot]` / `[sfx:laugh_track]`
+  after punchlines, with crickets or sad_trombone for a deliberate flop.
 
 ## Interruptions and idle
 - `user_state_changed` → `speaking`: `POST /freeze` at once (VAD start of speech, before STT), and any pending

@@ -21,6 +21,7 @@ from livekit.plugins import noise_cancellation
 
 from director import Director, PushToTalk
 from gestures import DEFAULT_GESTURES, GestureBook, GestureSync, Stage, strip_tags_for_tts, tags_first
+from sounds import SoundBook, Soundboard
 
 HERE = Path(__file__).parent
 load_dotenv(HERE / ".env")
@@ -43,9 +44,11 @@ AGENT_NAME = os.getenv("AGENT_NAME", "storyteller")
 logger = logging.getLogger("storyteller")
 
 
-def build_instructions(book: GestureBook) -> str:
+def build_instructions(book: GestureBook, sounds: SoundBook | None = None) -> str:
+    sounds = sounds or SoundBook.load()
     return ((HERE / "prompt.md").read_text().replace("{{GESTURES}}", book.describe())
-            .replace("{{DUETS}}", book.describe_duets()).replace("{{ENSEMBLES}}", book.describe_duets(ensembles=True)))
+            .replace("{{DUETS}}", book.describe_duets()).replace("{{ENSEMBLES}}", book.describe_duets(ensembles=True))
+            .replace("{{SFX}}", sounds.describe_sfx()).replace("{{MUSIC}}", sounds.describe_music()))
 
 
 class Storyteller(Agent):
@@ -86,16 +89,19 @@ async def entrypoint(ctx: JobContext) -> None:
         use_tts_aligned_transcript=False,
     )
     director = Director(session, stage, idle_after_s=IDLE_AFTER_S, continue_after_s=NEXT_SCENE_AFTER_S)
-    gestures = GestureSync(book, stage.play, director.request_continue, stage.face, stage.talk)
+    sound_book = SoundBook.load()
+    board = Soundboard(sound_book)  # sfx + music on their own room track; started once the room is connected
+    gestures = GestureSync(book, stage.play, director.request_continue, stage.face, stage.talk, on_sound=board.cue)
 
     async def shutdown() -> None:
+        await board.aclose()  # STOP or the end of the session: music and sfx go silent at once
         stage.send("/rest")
         await stage.aclose()
 
     ctx.add_shutdown_callback(shutdown)
 
     await session.start(
-        agent=Storyteller(instructions=build_instructions(book)),
+        agent=Storyteller(instructions=build_instructions(book, sound_book)),
         room=ctx.room,
         room_options=room_io.RoomOptions(audio_input=room_io.AudioInputOptions(noise_cancellation=_noise_cancellation)),
     )
@@ -103,12 +109,13 @@ async def entrypoint(ctx: JobContext) -> None:
     if PTT:
         session.input.set_audio_enabled(False)  # deaf until the button is held
     await ctx.connect()
+    await board.start(ctx.room, session)
     if PTT:
         PushToTalk(session, director).register(ctx.room.local_participant)
         logger.info("push-to-talk: listening only while the talk button is held")
 
     stage.face("audience")  # a new show starts facing the audience (and at the stage pose)
-    session.generate_reply(instructions="Greet the listener and ask what story they would like to hear.")
+    session.generate_reply(instructions="Greet the listener and ask: a story, or a comedy show?")
 
 
 if __name__ == "__main__":

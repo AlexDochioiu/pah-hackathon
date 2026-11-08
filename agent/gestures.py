@@ -28,6 +28,8 @@ from livekit.agents import tokenize
 from livekit.agents.voice import io
 from livekit.agents.voice.transcription import TranscriptSynchronizer
 
+from sounds import SOUND_TAGS  # [sfx:explosion], [music:spooky]: fired here, played by sounds.Soundboard
+
 logger = logging.getLogger("storyteller.gestures")
 
 ARMS = ("left", "right", "both")
@@ -170,10 +172,11 @@ async def tags_first(text: AsyncIterable[str]) -> AsyncIterable[str]:
         out = ""
         for piece in parser.feed(chunk):
             if isinstance(piece, Tag):
-                if talk_arm(piece) is None:
+                if talk_arm(piece) is None and piece.arm not in SOUND_TAGS:
                     (ctrl if piece.arm is None else tags).append(piece.raw)
                     continue
-                # a talk tag stays where it is (just before its quote); a sentence may end right before it
+                # a talk or sound tag stays where it is (a talk tag just before its quote, a laugh track right
+                # after its punchline); a sentence may end right before it
                 if buf[-1:].isspace() and buf.rstrip()[-1:] in _SENTENCE_END:
                     out += emit()
                 buf += piece.raw
@@ -369,10 +372,11 @@ class GestureSink(io.TextOutput):
         next_in_chain: io.TextOutput | None,
         on_face: Callable[[str], None] | None = None,
         on_talk: Callable[[str, bool], None] | None = None,
+        on_sound: Callable[[str, str], None] | None = None,
     ) -> None:
         super().__init__(label="GestureSink", next_in_chain=next_in_chain)
         self._book, self._play, self._on_continue, self._on_face = book, play, on_continue, on_face
-        self._on_talk = on_talk
+        self._on_talk, self._on_sound = on_talk, on_sound
         self._parser = TagParser()
         self._talker: str | None = None  # the arm whose mouth is talking
         self._quoted = False               # its quote has opened
@@ -421,6 +425,9 @@ class GestureSink(io.TextOutput):
                     self._play(DUET_TAG, name, self._book.duets[name])
                 else:
                     logger.info("dropped %s: unknown duet", p.raw)
+            elif p.arm in SOUND_TAGS:
+                if self._on_sound:
+                    self._on_sound(p.arm, p.name)
             elif p.arm not in ARMS:
                 logger.info("dropped %s: unknown arm", p.raw)
             elif (name := self._book.resolve(p.name)) is None:
@@ -450,14 +457,15 @@ class GestureSync:
 
     def __init__(self, book: GestureBook, play: Callable[[str, str, float], None],
                  on_continue: Callable[[], None], on_face: Callable[[str], None] | None = None,
-                 on_talk: Callable[[str, bool], None] | None = None) -> None:
+                 on_talk: Callable[[str, bool], None] | None = None,
+                 on_sound: Callable[[str, str], None] | None = None) -> None:
         self._book, self._play, self._on_continue, self._on_face = book, play, on_continue, on_face
-        self._on_talk = on_talk
+        self._on_talk, self._on_sound = on_talk, on_sound
         self.sync: TranscriptSynchronizer | None = None
 
     def install(self, output: io.AgentOutput) -> None:
         sink = GestureSink(self._book, self._play, self._on_continue, next_in_chain=output.transcription,
-                           on_face=self._on_face, on_talk=self._on_talk)
+                           on_face=self._on_face, on_talk=self._on_talk, on_sound=self._on_sound)
         if output.audio is None:  # text-only (console --text): nothing to sync to, fire as the text streams
             logger.warning("no audio output: gestures fire as the text arrives, not synced to speech")
             output.transcription = sink
