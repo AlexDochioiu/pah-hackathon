@@ -56,6 +56,8 @@ TRACK_LIMIT = 0.2   # rad: stop Dream's run before the stage's own TRACK_STOP (0
 PREFETCH_S = 1.5    # s before a chunk ends that the next one is asked for (a get_action takes ~1 s)
 STILL = 0.15        # rad: a chunk whose arm moves less (and whose gripper changes < 0.3) is Dream-1 idling, not a
                     # move: seen on real frames Nov 7 (jitter of 0.02-0.06 rad at rest): our own pick instead
+CLOSED_G = 0.35     # raw: Dream-1 commanding its gripper at or below this means it's holding (stage TRAJ_CLOSED)
+RISE_MM = 30.0      # raw: lifted once the fingertips end this far above their lowest since the gripper closed. ponytail: knob
 LIFT_MM = 80.0      # mm: the fingertips this high above the table at a chunk's end, holding Lars: he's picked up
 MAX_CHUNKS = 60
 ARMS = ("left", "right")
@@ -273,6 +275,7 @@ def main():
 
 def run(a, stage, s, end):
     played, latency, reason, arm, pre, refused, held, lifted = [], [], None, None, None, False, False, False
+    low = float("inf")  # raw: the lowest fingertip since the gripper closed
     missed = None
     cmd = {side: s["arms"][side]["joints"] for side in ARMS}
     try:
@@ -319,10 +322,20 @@ def run(a, stage, s, end):
             played.append(c)
             if len(played) == 1:
                 say("Here it comes. Gently, please!")
-            if not held and r["props"][arm]:
-                held = True
-                say("Got me!")
-            lifted = held and r.get("tip_end_mm", 0) >= LIFT_MM
+            if a.raw:  # the stage's prop only notices a close inside one chunk: go by Dream-1's own gripper and height
+                if c["g"][-1] <= CLOSED_G:  # (Nov 8: it lifted Lars in the left arm and nothing noticed)
+                    low = min(low, r.get("tip_mm", low))
+                    if not held:
+                        held = True
+                        say("Got me!")
+                else:
+                    held, low = False, float("inf")
+                lifted = held and r.get("tip_end_mm", 0) - low >= RISE_MM
+            else:
+                if not held and r["props"][arm]:
+                    held = True
+                    say("Got me!")
+                lifted = held and r.get("tip_end_mm", 0) >= LIFT_MM
             asked = [False]
             other = s["arms"]["left" if arm == "right" else "right"]["joints"]
             cmd = {arm: c["q"][-1], ("left" if arm == "right" else "right"): other}
@@ -336,7 +349,7 @@ def run(a, stage, s, end):
                 break
             st = stage.state()
             now_held, grip = bool(st["props"].get(arm)), st["arms"][arm].get("grip_measured")
-            if now_held and grip is not None and grip < EMPTY_GRIP:
+            if now_held and grip is not None and grip < EMPTY_GRIP and not a.raw:  # a squeezed Lars reads 0.05
                 missed, reason = "empty_grip", f"the gripper closed on nothing ({grip:.2f} measured)"
                 break
             if held and not now_held:
@@ -361,6 +374,17 @@ def run(a, stage, s, end):
     n_played = len(played)
     out(event="info", dream_reason=reason, played=len(played), held=held, lifted=lifted, missed=missed,
         latency_s=latency)
+    if lifted and not reason and a.raw:  # nothing else can put him down from where Dream-1 lifted him: back the way it came
+        say("Up I go! That was all Dream-1's own idea. Hello, back row! I can see all your laptops from up here.")
+        time.sleep(4)
+        say("Okay, down again. Gently. Gently! Frogs bruise, you know.")
+        for i, c in enumerate(reversed(played)):
+            back, r = play(stage, arm, f"dream_back{i + 1}", c["t"], c["q"][::-1], c["g"][::-1], a.speed, None, a.raw)
+            if back or wait_done(stage, arm, f"dream_back{i + 1}", time.monotonic() + r["duration_s"] + 5):
+                break
+        out(event="done", ok=True, held=False, arm=arm, dream_chunks=n_played, fallback=False, reason=None,
+            missed=None, latency_s=latency)
+        return
     if lifted and not reason:
         say("Up I go! That was all Dream-1's own idea.")
         out(event="done", ok=True, held=True, arm=arm, dream_chunks=n_played, fallback=False, reason=None,
@@ -381,7 +405,7 @@ def run(a, stage, s, end):
         back = None
         for i, c in enumerate(reversed(played)):
             back, r = play(stage, arm, f"dream_back{i + 1}", c["t"], c["q"][::-1], c["g"][::-1], a.speed,
-                           None)  # the way back only puts down, never takes
+                           None, a.raw)  # the way back only puts down, never takes
             out(event="info", back=i + 1, reply=r)
             if not back:
                 back = wait_done(stage, arm, f"dream_back{i + 1}", time.monotonic() + r["duration_s"] + 5)
