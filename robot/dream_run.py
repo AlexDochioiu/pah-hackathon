@@ -248,8 +248,14 @@ def main():
     a.chunks = max(1, min(a.chunks, MAX_CHUNKS))
     stage, t0 = Stage(a.stage), time.monotonic()
     end = t0 + a.pick_s
-    s = stage.state()
-    busy = [side for side in ARMS if s["arms"][side].get("playing")]
+    # idle_breathe loops between gestures and /trajectory takes over from it; wait out a gesture still playing.
+    while True:
+        s = stage.state()
+        busy = [side for side in ARMS if s["arms"][side].get("playing") not in (None, "idle_breathe")
+                or s["arms"][side].get("queue")]
+        if not busy or s.get("fault") or time.monotonic() - t0 > 10:
+            break
+        time.sleep(0.2)
     if s.get("fault") or busy or any(s["props"].values()):
         out(event="done", ok=False, held=False, dream_chunks=0, fallback=False,
             reason=f"stage not ready: fault {s.get('fault')}, busy {busy}, props {s['props']}")
