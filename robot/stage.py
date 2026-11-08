@@ -89,6 +89,66 @@ class StageError(Exception):
     pass
 
 
+# Nov 8: a 535 ms /trajectory check inside the stage process dropped both arms ("loss communication": i2rt's motor
+# threads starved). With --real the check runs in a worker process, forked before the arms open, with its own Checker.
+_CK = None  # the worker's Checker (set before the fork)
+
+
+def _lowest(ck, arm, Q):
+    """(fingertips, every other moving part): the lowest point above the arm's table over Q, m."""
+    sc, tip, body = ck.scene, np.inf, np.inf
+    for q in Q:
+        sc.set(arm, q); sc.forward()
+        for k, pts, r in sc.geoms[arm]:
+            z = float(np.min(sc.d.geom_xpos[k][2] + pts @ sc.d.geom_xmat[k].reshape(3, 3)[2] - r)) - show.TABLE_Z[arm]
+            if "_tip_" in mujoco.mj_id2name(sc.m, mujoco.mjtObj.mjOBJ_BODY, sc.m.geom_bodyid[k]):
+                tip = min(tip, z)
+            else:
+                body = min(body, z)
+    return tip, body
+
+
+def _traj_check(ck, ck_props, arm, name, tk, Qk, Gk, span, shape, vcap):
+    """Retime a /trajectory's keys under vcap, TRAJ_AMAX and TRAJ_GRIP_VMAX, then check it (see Stage.trajectory).
+    Returns (d, Q, G, probs, tip, body, sweep), or a str: why it can't be retimed."""
+    ck.set_props(ck_props)
+    for _ in range(8):  # pchip scales with time, but its 50 Hz samples only roughly: a few stretches
+        d = {"name": name, "side": arm, "near": show.TABLE_NEAR, "external": True,
+             "about": "an external trajectory (POST /trajectory)",
+             "keys": [{"t": float(a), "q": [float(x) for x in r], "g": float(b)} for a, r, b in zip(tk, Qk, Gk)]}
+        if span:
+            d["carry"] = {**shape, "from": float(tk[span[0]]), "to": float(tk[span[1]])}
+        gest = show.Gesture(d)
+        Q, G = gest.samples(arm)
+        v, a = show.peak_rates(Q)
+        gv = float(np.abs(np.diff(G)).max()) * show.HZ if len(G) > 1 else 0.0
+        k = max(v.max() / vcap, float(np.sqrt(a.max() / TRAJ_AMAX)), gv / TRAJ_GRIP_VMAX)
+        if k <= 1.0 + 1e-6:
+            break
+        tk = tk * k * 1.03
+    else:
+        return f"{arm} {name}: could not retime it under {vcap:.2f} rad/s"
+    if gest.duration > TRAJ_MAX_S:
+        return (f"{arm} {name}: {gest.duration:.0f} s once slowed to {vcap:.2f} rad/s "
+                f"(> {TRAJ_MAX_S:.0f} s): too much motion for one trajectory")
+    floor = show.TABLE_FLOOR
+    show.TABLE_FLOOR = TRAJ_TIP_FLOOR  # ponytail: module global swapped (the stage holds its lock; the worker is
+    try:                               # single-threaded); a floor argument on check_side if that ever changes
+        probs = [p for p in ck.check_side(gest) if "leans back" not in p]
+    finally:
+        show.TABLE_FLOOR = floor
+    tip, body = _lowest(ck, arm, Q)
+    if body < floor:  # the tips alone get TRAJ_TIP_FLOOR: anything else this low is refused
+        probs.append(f"{arm}: a part other than the fingertips is {body*1000:.0f} mm above the table "
+                     f"(needs {floor*1000:.0f})")
+    probs += ck.lean_problems(arm, Q, fold=True)  # as far back as rest or where it starts, like a fold
+    return d, Q, G, probs, tip, body, ck.swept.pop(show.key(name, arm), None)
+
+
+def _traj_check_worker(*args):
+    return _traj_check(_CK, *args)
+
+
 class KinArms:
     """Kinematic stand-in for dream_hackathon's Arms: the measured pose follows the command with a short lag."""
 
@@ -170,6 +230,13 @@ class Stage:
         self.stance = "audience"  # the facing; _st() adds the props mode
         self.props = {s: False for s in SIDES}  # what the arm holds: False, True (POST /props), a toy kind, or Lars
         self.lock = threading.RLock()
+        self.pool = None
+        if backend == "real":  # fork the /trajectory check worker now, before the arms open (no motor threads yet)
+            import concurrent.futures, multiprocessing
+            global _CK
+            _CK = self.ck
+            self.pool = concurrent.futures.ProcessPoolExecutor(1, mp_context=multiprocessing.get_context("fork"))
+            self.pool.submit(int).result()
         self.attach(arms)
         self.queue = {s: collections.deque() for s in SIDES}
         self.after = {s: "hold" for s in SIDES}
@@ -695,36 +762,17 @@ class Stage:
                 dt[-1 - m:-1] *= TRAJ_RAMP[:m][::-1]
             tk = np.r_[0.0, np.cumsum(dt)]
             asked = TRAJ_HOLD_S * 2 + t[-1]
-            for _ in range(8):  # pchip scales with time, but its 50 Hz samples only roughly: a few stretches
-                d = {"name": name, "side": arm, "near": show.TABLE_NEAR, "external": True,
-                     "about": "an external trajectory (POST /trajectory)",
-                     "keys": [{"t": float(a), "q": [float(x) for x in r], "g": float(b)} for a, r, b in zip(tk, Qk, Gk)]}
-                if span:
-                    d["carry"] = {**shape, "from": float(tk[span[0]]), "to": float(tk[span[1]])}
-                gest = show.Gesture(d)
-                Q, G = gest.samples(arm)
-                v, a = show.peak_rates(Q)
-                gv = float(np.abs(np.diff(G)).max()) * show.HZ if len(G) > 1 else 0.0
-                k = max(v.max() / vcap, float(np.sqrt(a.max() / TRAJ_AMAX)), gv / TRAJ_GRIP_VMAX)
-                if k <= 1.0 + 1e-6:
-                    break
-                tk = tk * k * 1.03
+            job = (self._ck_props(self.props), arm, name, tk, Qk, Gk, span, shape, vcap)
+            if self.pool:  # the real arms: off this process, so i2rt's motor threads keep the CPU (see _CK)
+                res = self.pool.submit(_traj_check_worker, *job).result()
             else:
-                raise StageError(f"{arm} {name}: could not retime it under {vcap:.2f} rad/s")
-            if gest.duration > TRAJ_MAX_S:
-                raise StageError(f"{arm} {name}: {gest.duration:.0f} s once slowed to {vcap:.2f} rad/s "
-                                 f"(> {TRAJ_MAX_S:.0f} s): too much motion for one trajectory")
-            floor = show.TABLE_FLOOR
-            show.TABLE_FLOOR = TRAJ_TIP_FLOOR  # ponytail: module global swapped under self.lock (every check runs under
-            try:                               # it); a floor argument on check_side if that ever changes
-                probs = [p for p in self.ck.check_side(gest) if "leans back" not in p]
-            finally:
-                show.TABLE_FLOOR = floor
-            tip, body = self._lowest(arm, Q)
-            if body < floor:  # the tips alone get TRAJ_TIP_FLOOR: anything else this low is refused
-                probs.append(f"{arm}: a part other than the fingertips is {body*1000:.0f} mm above the table "
-                             f"(needs {floor*1000:.0f})")
-            probs += self.ck.lean_problems(arm, Q, fold=True)  # as far back as rest or where it starts, like a fold
+                res = _traj_check(self.ck, *job)
+            if isinstance(res, str):
+                raise StageError(res)
+            d, Q, G, probs, tip, body, sweep = res
+            gest = show.Gesture(d)
+            v, _ = show.peak_rates(Q)
+            self.ck.swept[show.key(name, arm)] = sweep
             check_ms = (time.perf_counter() - started) * 1000
             print(f"{arm} {name}: lowest fingertip {tip*1000:.1f} mm, other parts {body*1000:.1f} mm above the table, "
                   f"checked in {check_ms:.0f} ms" + (" (refused)" if probs else ""), flush=True)
@@ -746,17 +794,7 @@ class Stage:
                     "check_ms": round(check_ms)}
 
     def _lowest(self, arm, Q):
-        """(fingertips, every other moving part): the lowest point above the arm's table over Q, m."""
-        sc, tip, body = self.ck.scene, np.inf, np.inf
-        for q in Q:
-            sc.set(arm, q); sc.forward()
-            for k, pts, r in sc.geoms[arm]:
-                z = float(np.min(sc.d.geom_xpos[k][2] + pts @ sc.d.geom_xmat[k].reshape(3, 3)[2] - r)) - show.TABLE_Z[arm]
-                if "_tip_" in mujoco.mj_id2name(sc.m, mujoco.mjtObj.mjOBJ_BODY, sc.m.geom_bodyid[k]):
-                    tip = min(tip, z)
-                else:
-                    body = min(body, z)
-        return tip, body
+        return _lowest(self.ck, arm, Q)
 
     def busy(self, sides=SIDES):
         with self.lock:
