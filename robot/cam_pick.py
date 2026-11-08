@@ -18,6 +18,8 @@ PEN_Z = 0.016     # ponytail: m below block_top_z the fingers close at (block to
 LIFT = 0.15       # m above block_top_z after the grasp
 RAD_S = 1.0       # joint speed of the plan; dream_run's --speed 0.5 halves it
 HZ, ROWS = 20.0, 48
+PRESENT_Z = 0.25  # m above block_top_z: the claw points at the audience (+x) there, the pen standing up in it
+ROLL = 0.6        # rad of wrist roll each way: the pen sways left and right like a wand (owner, Nov 8)
 
 
 def find_pen(img):
@@ -67,7 +69,8 @@ def main():
     plan, q = [("raise", q_up, 1.0, 0.0)], q_up
     for name, z, g, hold in [("above", top + pick.HOVER, 1.0, 0.0), ("down", top - PEN_Z, 1.0, 0.2),
                              ("grip", top - PEN_Z, 0.0, 0.5), ("lift", top + LIFT, 0.0, 0.0)]:
-        q = solve(ik, q, top_down(np.array([*xy, max(z, floor)]), close))
+        zs = [z] if name != "lift" else [z, top + 0.10, top + 0.06]  # the lift goes as high as the arm reaches there
+        q = next((r for zz in zs if (r := solve(ik, q, top_down(np.array([*xy, max(zz, floor)]), close))) is not None), None)
         if q is None:
             sys.exit(f"cannot reach '{name}' for the pen at px ({u:.0f},{v:.0f}): nothing planned")
         plan.append((name, q, g, hold))
@@ -76,16 +79,42 @@ def main():
         if min(ik.fk(prev + t * (qj - prev))[2, 3] for t in np.linspace(0, 1, 25)) < floor - 0.003:
             sys.exit(f"the path into '{name}' dips below the table: nothing planned")
         prev = qj
+    q_lift = q
+    present = None  # the claw horizontal toward the audience (tool z = +x), fingers closing sideways: the pen stands up
+    for dz in (0.0, -0.05, 0.05, -0.10):
+        for ysign in (1, -1):
+            T = np.eye(4)
+            T[:3, :3] = np.column_stack([np.cross([0, ysign, 0], [1, 0, 0]), [0, ysign, 0], [1, 0, 0]])
+            T[:3, 3] = [xy[0], xy[1], top + PRESENT_Z + dz]
+            qp = solve(ik, q_lift, T)
+            if qp is not None and (present is None or np.abs(qp - q_lift).sum() < np.abs(present - q_lift).sum()):
+                present = qp
+        if present is not None:
+            break
     other = "left" if side == "right" else "right"
     out, q0, g0 = [], now[side], 0.05
-    for name, qj, g, hold in plan:
+
+    def emit(name, qj, g, hold=0.0, event="chunk"):
+        nonlocal q0, g0
         Q, G = segment(q0, qj, g0, g, hold)
         for i in range(0, len(Q), ROWS):
             q, gg = Q[i:i + ROWS], G[i:i + ROWS]
-            out.append({"event": "chunk", "n": len(out) + 1, "latency_s": 0.0, "t": [round(r / HZ, 4) for r in range(len(q))],
+            out.append({"event": event, "n": len(out) + 1, "latency_s": 0.0, "t": [round(r / HZ, 4) for r in range(len(q))],
                         side: {"q": np.round(q, 5).tolist(), "g": np.round(gg, 4).tolist()},
                         other: {"q": [now[other].round(5).tolist()] * len(q), "g": [0.05] * len(q)}})
         q0, g0 = qj, g
+
+    for name, qj, g, hold in plan:
+        emit(name, qj, g, hold)
+    # "wave" events: dream_run plays them after the lift instead of its own wiggle, then the chunks backwards.
+    # Present, roll the wrist (j6) left, right, left, back, then down to the lift pose again.
+    if present is None:
+        print("no pose with the claw toward the audience: dream_run wiggles at the lift instead", file=sys.stderr)
+    else:
+        emit("present", present, 0.0, 0.3, "wave")
+        for r in (ROLL, -ROLL, ROLL, 0.0):
+            emit("roll", present + np.r_[0, 0, 0, 0, 0, r], 0.0, 0.0, "wave")
+        emit("lower", q_lift, 0.0, 0.0, "wave")
     print(f"pen at px ({u:.0f},{v:.0f}) -> {side} arm ({xy[0]:.3f},{xy[1]:.3f}); {len(out)} chunks, "
           f"{sum(len(c['t']) for c in out) / HZ:.1f} s", file=sys.stderr)
     json.dump(out, sys.stdout)

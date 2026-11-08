@@ -304,6 +304,19 @@ def wave(stage, arm, c, secs=2.6):
         wait_done(stage, arm, "dream_wave", time.monotonic() + r["duration_s"] + 5)
 
 
+def steps(stage, arm, name, t, q, g, a):
+    """Play one piece once the arm is free (Nov 8: the way back was refused while the wave still finished); a reason
+    if it was refused or stopped."""
+    t_free = time.monotonic() + 10
+    while time.monotonic() < t_free and str(stage.state()["arms"][arm].get("playing") or "").startswith("dream"):
+        time.sleep(0.1)
+    reason, r = play(stage, arm, name, t, q, g, a.speed, None, a.raw)
+    reason = reason or wait_done(stage, arm, name, time.monotonic() + r["duration_s"] + 5)
+    if reason:
+        out(event="info", piece=name, refused=str(reason)[:160])
+    return reason
+
+
 def cli(a, stage, s, end):
     """--cli (owner, Nov 8: raw dreamcli picks far better than our /trajectory path): stop the stage server (it folds
     the arms), run `dreamcli robot run` until --pick-s is up, Ctrl-C it (it homes the arms and switches them off),
@@ -452,11 +465,16 @@ def run(a, stage, s, end):
         latency_s=latency)
     if lifted and not reason and a.raw:  # nothing else can put him down from where Dream-1 lifted him: back the way it came
         say("Behold! The robot is now a wizard. I, sadly, am still a frog.")
-        wave(stage, arm, played[-1])  # 2-3 s of a wizard's flourish with the wand, then back the way it came
+        waves = [c for c in json.loads(pathlib.Path(a.replay).read_text()) if c.get("event") == "wave"] if a.cam else []
+        if waves:  # cam_pick's: the claw turns to the audience, the wrist rolls the pen left and right, back down
+            for i, c in enumerate(waves):
+                if steps(stage, arm, f"dream_wave{i + 1}", c["t"], c[arm]["q"], c[arm]["g"], a):
+                    break
+        else:
+            wave(stage, arm, played[-1])  # 2-3 s of a wizard's flourish with the wand, then back the way it came
         say("Thank you, Dream-1. Put it back gently.")
         for i, c in enumerate(reversed(played)):
-            back, r = play(stage, arm, f"dream_back{i + 1}", c["t"], c["q"][::-1], c["g"][::-1], a.speed, None, a.raw)
-            if back or wait_done(stage, arm, f"dream_back{i + 1}", time.monotonic() + r["duration_s"] + 5):
+            if steps(stage, arm, f"dream_back{i + 1}", c["t"], c["q"][::-1], c["g"][::-1], a):
                 break
         out(event="done", ok=True, held=False, arm=arm, dream_chunks=n_played, fallback=False, reason=None,
             missed=None, latency_s=latency)
