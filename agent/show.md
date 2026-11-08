@@ -77,7 +77,7 @@ Good evening, humans! I'm {HOST_NAME}. Down here. {LARS_POINT} Yes. The frog.
 I host the show, I tell the stories, and these two are my stage hands. [both:present]
 Stage hands. Because they're hands. That joke cost forty dollars in API credits. [right:tremble_excited] [left:eye_roll] [sfx:rimshot]
 {?LARS_PICK}{?!DREAM_PICK} A little higher, please. {LARS_PICK_UP} Higher. Higher! Thank you. Hello, back row! I can see all your laptops from up here. Okay, down again, I get dizzy. {LARS_PUT_DOWN} Gently. Gently! Frogs bruise, you know. A tiny bit to the left. Perfect.
-{?DREAM_PICK} Every host needs a magic wand. Mine is that green pen on the table. Close enough. Tonight, one of my stage hands lets Dream-1 drive: a robot brain from Dream Labs that has never seen this table. Dream-1, fetch me my wand. Live, no rehearsal. [dream:pick_lars]
+{?DREAM_PICK} Every host needs a magic wand. Mine is that green pen. Close enough. Tonight Dream-1, a robot brain from Dream Labs, drives one of my stage hands. It has never seen this table. Dream-1, fetch my wand! [dream:pick_lars]
 Please welcome... [sfx:tada] {SHOW_NAME}! [both:ta_da] [sfx:applause] [music:funny]
 
 ## Act 3: The founders
@@ -85,20 +85,20 @@ Please welcome... [sfx:tada] {SHOW_NAME}! [both:ta_da] [sfx:applause] [music:fun
 [face:audience]
 First, {FOUNDER_1}! Hasn't blinked since Friday. We checked: we have cameras. [right:double_take]
 {FOUNDER_2}! Keeps telling these two to act natural. They are two arms, bolted to a table, with no legal rights. [left:slow_turn]
-And {FOUNDER_3}! Calls them the kids. Kids working thirty hours unpaid: that's not parenting, that's a startup. [both:nod]
+And {FOUNDER_3}! Calls them the kids. They don't eat, don't sleep, and still ask for a raise. [both:nod]
 On day one, the table tipped over. With them on it. [both:cower] Nobody filed a report. [left:shake_head]
 Give it up for {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}! [ensemble:clap] [sfx:applause]
 
 ## Act 4: The pitch
 <!-- About thirty seconds: what it does. The "Built with" card is on the page for this act. -->
 [face:audience]
-Here's how it works. You say any story out loud, I make it up on the spot, and these two act it out, live.
+Here's how it works. You ask for any story out loud, I make it up on the spot, and these two act it out, live.
 A dragon? [left:roar] [sfx:roar]
 A knight? [right:slash] [sfx:sword_clash]
 Space wars? [right:shoot] [sfx:laser] [left:nod]
 Anyone can jump in, mid-story, and the story bends. Last night someone made the dragon vegan. [right:double_take]
-It ate a salad. Menacingly. Then it raised a seed round. [left:eat]
-It's all up on the screen: every move checked in simulation first, and a digital twin of both arms in Dimensional's simulator. [both:present]
+It ate a salad. [left:eat] Menacingly. Then it raised a seed round. [right:double_take]
+Behind the fun: every move is checked in simulation before the real arms make it. [both:present]
 
 ## Act 5: The demo (live)
 <!-- After this line the live story mode runs: a volunteer holds the button at the laptop and asks for a story. -->
@@ -111,7 +111,7 @@ Come up, hold the big yellow button, and tell me what happens. [right:tremble_ex
 [face:audience]
 One small note for the judges. [right:nod]
 These two worked thirty hours, unpaid. First prize would really help their union negotiations. [left:nod] [sfx:drum_roll]
-[music:victory] We were {SHOW_NAME}: {HOST_NAME}, the stage hands, and {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}!
+[music:victory] We are {SHOW_NAME}: {HOST_NAME}, these two, and {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}!
 Goodnight! [duet:tip_hats] [sfx:applause]
 
 ## Live context
