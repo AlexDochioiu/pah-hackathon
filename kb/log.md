@@ -152,3 +152,8 @@
   (two heads meeting mouth to mouth): renamed `kiss`, same trajectory, `sound` kiss at 3.3 s (its closest contact
   3.32 s); agent synonyms kiss/smooch/kissed/true love's kiss (the fist bump words deal/partners/bro dropped).
   `preview_duets.py --sound` renders a duet's sound mp4 (`previews/sound/kiss.mp4`).
+- Nov 7 ~20:10: dimos digital twin (`dimos/`, [dimos.md](dimos.md)): dimos's Dual OpenYAM stack in Viser :8095
+  mirrors the stage's `GET /state` at 20 Hz through a `StageConnection`. Its URDF is patched to our base
+  placement (calib.json) and sliding fingers; it matches `show.py` to 0.04 mm (arm) and 2.8 mm (fingertips) over
+  200 random poses. Pipeline latency p50 38 ms / p95 62 ms; real arms → twin ~0.1 s. A ghost endpoint (`POST :8796/ghost`)
+  replays a trajectory on dimos's preview robot. `--mcp` serves play/duet/freeze/rest skills (kin stage only).

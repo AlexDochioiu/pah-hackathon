@@ -23,6 +23,7 @@ how we drive the arms and how we calibrated them.
 | `kb/` | Knowledge base (plain markdown, opens as an Obsidian vault too). |
 | `robot/` | Scripts that run on the station: arm control, calibration, gestures, stage server. |
 | `agent/` | LiveKit voice agent: the storyteller that narrates and cues gestures. |
+| `dimos/` | dimos (Dimensional) digital twin on the laptop: live mirror of the arms, ghost, MCP skills. |
 | `site/` | Launch website. |
 | `social/` | Social media drafts. |
 

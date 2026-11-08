@@ -22,6 +22,13 @@ Status: 🔨 being built · 👀 waiting for owner review · ⏸ waiting for som
 | Lars pick from a fixed dock, saved as `pick_lars` / `place_lars` gestures, `[pick:lars]` tag | ✅ sim (the face-up bake picked for real) | Face-down dock (Lars held facing the audience) since Nov 7 evening, sim-checked at speeds 0.3, 0.5, 0.75 and 1.0 ([props.md](props.md)). Real runs start at speed 0.3, ramp 0.5 → 0.75 → 1.0 only after several clean picks |
 | Live prop pick anywhere on the table, 5 s total (detect < 50 ms, plan < 200 ms, move ~4.5 s) | 🔨 after dock | Colour/shape detector on the overhead camera; one grasp template per prop |
 
+## dimos twin (Creative track)
+| What | Status | Notes |
+|---|---|---|
+| Twin mirrors both arms live in dimos's Viser, model matched to `show.py` | 👀 | `dimos/run.sh --stage http://127.0.0.1:8770`; mirrored the real arms at rest (read-only); [dimos.md](dimos.md) |
+| Ghost input for Dream-1's move (`POST :8796/ghost`) | ✅ built | The Dream-1 agent calls it; JSON in [dimos.md](dimos.md#ghost) |
+| Gripper in the twin shows the commanded `grip`, not the measured one or `/talk` flaps | 🔨 open | Needs a measured or output gripper field in `stage.py` `/state` (station sync + restart) |
+
 ## Real-arm tests (need the stage server restarted on new code)
 | What | Status | Notes |
 |---|---|---|
@@ -42,6 +49,7 @@ Status: 🔨 being built · 👀 waiting for owner review · ⏸ waiting for som
 
 ## Done (recent)
 - fist_bump renamed `kiss` (the owner saw a kiss), sound on the contact; rub_hands and ufo_abduct under 8 s (Nov 7 ~20:30).
+- dimos twin: live mirror, model match (arm ≤ 0.04 mm), ghost endpoint, MCP skills (Nov 7 ~20:10).
 - Checker on the Round 3 calibration: right offset and per-arm table from `calib.json`; table moves re-solved;
   a finished stance move no longer blocks pick_lars (Nov 7 ~19:40).
 - Show mode: `/show` page, cued acts with pre-synthesized voices, Lars as host.
