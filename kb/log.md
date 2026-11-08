@@ -102,3 +102,4 @@
   deep/squeaky/old/child/witch/robot, cast with `[voice:left=NAME]`, default left deep, right squeaky). Runs synthesise
   in parallel: 0 s stall at 9 switches; mouths pinned to the audio (talk on within ±0.25 s). Host (Lars) voice candidates rendered for the owner.
   See storyteller.md.
+- Round 3b review (Nov 7): all kept except die_dramatically (rework: power-cut collapse), italian (rework: pump forward/back, more aggressive), chef_kiss and flick (unclear: one rework, else cut), shoot (rework, pair with sound), mic_drop (cut). Sounds: both laughs, rimshot/crickets/explosion kept; music level right; lounge loop to be a real (non-8-bit) track. Sound must land on the gesture's impact moment (owner: very important).
