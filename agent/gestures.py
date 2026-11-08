@@ -816,7 +816,7 @@ class Stage:
                     tries[0] -= 1
                     self.send("/trajectory", body, delay=0.5, on_reply=pointed)
                     return
-                if r is not None:
+                if r is not None and gesture != ESTOP_POINT:  # the point stays until act 7 (press) or 8 (face:audience)
                     self.send("/stage", {"arm": arm}, delay=float(r.get("duration_s") or 5.0) + 0.3)
                 logger.info("%s:%s %s", arm, gesture, "playing" if r is not None else "refused")
                 if on_start:

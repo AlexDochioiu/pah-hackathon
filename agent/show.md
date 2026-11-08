@@ -122,7 +122,7 @@ Well. That's the show. [music:victory] We are {SHOW_NAME}: {HOST_NAME}, my two s
 Goodnight! [duet:tip_hats] [sfx:applause]
 
 ## Act 8: The finale: no
-<!-- Press 8 if the room shouts no. -->
+<!-- Press 8 if the room shouts no ([face:audience] brings the pointing arm back). -->
 [face:audience]
 No? Wise. Very wise. The button lives, and so do you. For now. [left:nod]
 [music:victory] We are {SHOW_NAME}: {HOST_NAME}, my two stage hands, and {FOUNDER_1}, {FOUNDER_2} and {FOUNDER_3}!
