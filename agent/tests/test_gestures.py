@@ -160,3 +160,28 @@ def test_talk_tags_stay_put_and_mouth_follows_the_quote():
     asyncio.run(run())
     assert talks == [("left", True), ("left", False), ("left", True), ("left", False), ("right", True), ("right", False)]
     assert "[" not in "".join(forwarded)
+
+
+def test_guest_pick_and_place_tags():
+    played = []
+
+    class Collect:
+        async def capture_text(self, t):
+            pass
+
+        def flush(self):
+            pass
+
+        def on_attached(self):
+            pass
+
+    book = GestureBook({**DEFAULT_GESTURES, "pick_lars": 5.0, "place_lars": 5.2}, sides={"pick_lars": "right"})
+    assert "pick_lars" not in book.describe() and book.resolve("pick_lars") != "pick_lars"
+    sink = GestureSink(book, lambda a, g, d: played.append((a, g, d)), lambda: None, next_in_chain=Collect())
+
+    async def run():
+        await sink.capture_text("Here comes Lars [pick:Lars] hello [place:lars] [pick:bob] [right:wave]")
+        sink.flush()
+        await asyncio.sleep(0)
+    asyncio.run(run())
+    assert played == [("right", "pick_lars", 5.0), ("right", "place_lars", 5.2), ("right", "wave", 2.0)]

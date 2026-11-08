@@ -3,7 +3,9 @@ when the spoken words reach them.
 
 The LLM writes `[left:slash]`, `[right:cower]`, `[both:bow]` inline, plus `[next]` at the end of a scene
 it wants to carry on from, and `[face:each_other]` / `[face:audience]` to turn the two actors toward each other
-or back to the audience (the stage server's /stance; gestures then play facing that way), and `[duet:cheers]` for
+or back to the audience (the stage server's /stance; gestures then play facing that way), `[pick:lars]` /
+`[place:lars]` to have the right arm pick up a prop (Lars the frog doll) from its dock and put it back (/play pick_lars on the
+arm the stage lists for it), and `[duet:cheers]` for
 a two-arm duet (the stage server's /duet: both arms together, they touch). `[ensemble:storm]` makes both arms one
 thing, action or mood for a beat (also /duet; the stage blends in from either stance and back). `[talk:left]` right before a character's
 quoted line flaps that arm's gripper like a talking mouth (/talk) from the opening quote's line to its closing quote. Tags flow through the reply untouched except for two places:
@@ -99,6 +101,7 @@ DUET_MARGIN_S = 0.3  # the stage's blend into a gesture makes it a bit longer th
 FACE_TAG = "face"  # [face:each_other] / [face:audience] -> POST /stance
 PROPS_TAG = "props"  # [props:left|right|both] -> POST /props on for that arm ([props:left car]: a known toy, its
 # own gestures); [props:none] -> off for both
+PICK_TAG, PLACE_TAG = "pick", "place"  # [pick:lars] / [place:lars] -> POST /play pick_lars / place_lars (its arm)
 FACINGS = {"each_other": "each_other", "other": "each_other", "eachother": "each_other", "together": "each_other",
            "audience": "audience", "front": "audience", "us": "audience", "out": "audience", "forward": "audience"}
 MAX_TAG_LEN = 48  # a "[" left open longer than this is prose, not a tag
@@ -245,8 +248,12 @@ class GestureBook:
     """The gestures the stage knows, and mapping of whatever the LLM wrote onto them."""
 
     def __init__(self, gestures: dict[str, float], duets: dict[str, float] | None = None,
-                 ensembles: dict[str, float] | None = None, about: dict[str, str] | None = None) -> None:
-        self.durations = dict(gestures)
+                 ensembles: dict[str, float] | None = None, about: dict[str, str] | None = None,
+                 sides: dict[str, str] | None = None) -> None:
+        # pick_<x> / place_<x>: a guest actor's pick-up and put-back, only through their tags, on their own arm
+        self.guests = {n: d for n, d in gestures.items() if n.startswith((PICK_TAG + "_", PLACE_TAG + "_"))}
+        self.sides = {n: (sides or {}).get(n) or "right" for n in self.guests}
+        self.durations = {n: d for n, d in gestures.items() if n not in self.guests}
         self.ensembles = dict(ensembles or {})  # name -> seconds; both arms as one thing
         self.duets = {**(duets or {}), **self.ensembles}  # name -> seconds; either tag plays any of them
         self.about = dict(about or {})  # name -> what it looks like (from the stage server)
@@ -268,6 +275,11 @@ class GestureBook:
         if verbs:
             line += f" Use for: {', '.join(verbs)}."
         return line
+
+    def guest(self, verb: str, who: str) -> str | None:
+        """`[pick:lars]` -> "pick_lars" if the stage has it."""
+        name = f"{verb}_{re.sub(r'[\s-]+', '_', who.strip().lower())}"
+        return name if name in self.guests else None
 
     def describe_duets(self, ensembles: bool = False) -> str:
         return "\n".join(self._line(n, d) for n, d in self.duets.items()
@@ -305,6 +317,7 @@ class Stage:
     def __init__(self, url: str) -> None:
         self.url = url.rstrip("/")
         self.about: dict[str, str] = {}  # gesture/duet name -> description, filled by fetch_gestures/fetch_duets
+        self.sides: dict[str, str] = {}  # one-arm-only gesture (pick_lars...) -> its arm, filled by fetch_gestures
         self._http: aiohttp.ClientSession | None = None
         self._tasks: set[asyncio.Task] = set()
         self._pending: asyncio.Task | None = None  # a duet waiting for the arms to be free
@@ -323,6 +336,7 @@ class Stage:
                 data = await resp.json()
             gestures = {g["name"]: float(g.get("duration_s") or 1.5) for g in data if g.get("name")}
             self.about.update({g["name"]: str(g.get("about") or "") for g in data if g.get("name")})
+            self.sides.update({g["name"]: g["side"] for g in data if g.get("name") and g.get("side")})
             return gestures or None
         except Exception as e:  # noqa: BLE001 - any failure means "use the defaults"
             logger.warning("stage server at %s unreachable (%s); using the default gesture list", self.url, e)
@@ -458,6 +472,11 @@ class GestureSink(io.TextOutput):
                     self._play(PROPS_TAG, who if who.partition("_")[0] in ARMS else "none", 0.0)
                 else:
                     logger.info("dropped %s", p.raw)
+            elif p.arm in (PICK_TAG, PLACE_TAG):
+                if name := self._book.guest(p.arm, p.name):
+                    self._play(self._book.sides[name], name, self._book.guests[name])
+                else:
+                    logger.info("dropped %s: no such guest on the stage", p.raw)
             elif p.arm in (DUET_TAG, ENSEMBLE_TAG):
                 if name := self._book.resolve_duet(p.name):
                     self._play(DUET_TAG, name, self._book.duets[name])

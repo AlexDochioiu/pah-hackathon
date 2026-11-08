@@ -104,3 +104,7 @@
   See storyteller.md.
 - Round 3b review (Nov 7): all kept except die_dramatically (rework: power-cut collapse), italian (rework: pump forward/back, more aggressive), chef_kiss and flick (unclear: one rework, else cut), shoot (rework, pair with sound), mic_drop (cut). Sounds: both laughs, rimshot/crickets/explosion kept; music level right; lounge loop to be a real (non-8-bit) track. Sound must land on the gesture's impact moment (owner: very important).
 - Voices review (Nov 7): Lars's host/narrator voice is "frog" (532f7f4a…); scene works; all six character voices kept.
+- Lars dock pick (Nov 7): `lars.py --bake` writes `pick_lars` (5.0 s at speed 1) and `place_lars` (5.2 s), played
+  through the stage server on the right arm, facing the audience; `[pick:lars]` / `[place:lars]` agent tags.
+  Sim-checked on the stage server at speeds 0.3, 0.5, 0.75 and 1.0; baked at 0.3 for the first real runs
+  ([props.md](props.md)).

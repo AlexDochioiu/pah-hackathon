@@ -33,6 +33,13 @@ API (JSON in and out; "arm" is left | right | both, default both):
                                        there now), /talk is refused on a holding arm, gestures keep its grip, and
                                        duets with "props": false (hand contact) are refused
   POST /rest {"arm","speed"}           fold back to rest and hold (motors stay on)
+  Pick/place gestures (lars.py --bake: pick_lars / place_lars) play through /play on their own arm only, facing the
+                                       audience. pick_lars picks Lars up from his dock: the arm then holds him (props
+                                       mode, checked with his shape) and plays any gesture with him, while /props, /grip,
+                                       /talk and duets leave that arm alone until place_lars puts him back. Nothing else
+                                       starts on that arm while either plays; /freeze stops it on its path and the next
+                                       request finishes it at half speed first (409). With --dock-check, pick_lars first
+                                       looks at the overhead camera and refuses (409) unless Lars lies at his dock
   POST /grip {"arm","value"}           set the gripper 0 closed .. 1 open (close it on a prop)
 Every motion is checked before it starts (limits, table clearance with any props, 15 cm from the other arm's committed
 motion); a refused request returns 409 with the reason and nothing moves.
@@ -116,10 +123,12 @@ class Plan:
 
 
 class Stage:
-    def __init__(self, arms, backend="kin", gesture_dir=show.GESTURE_DIR, warp=1.0, track_stop=TRACK_STOP):
+    def __init__(self, arms, backend="kin", gesture_dir=show.GESTURE_DIR, warp=1.0, track_stop=TRACK_STOP, dock_check=None):
         self.arms, self.backend, self.warp, self.track_stop = arms, backend, warp, track_stop
+        self.dock_check = dock_check  # callable(gesture) raising StageError when the prop is not at its dock
         self.ck = show.Checker()
         self.lib, self.rejected, self.unsafe = show.load_library(self.ck, gesture_dir)
+        self.carried = {g.carry["name"] for g in self.lib.values() if g.carry}  # props picked up by a gesture (Lars)
         if "idle_breathe" not in self.lib:
             raise SystemExit("idle_breathe is missing or rejected: the stage server needs it")
         self.duets, self.duets_rejected = duets.load_duets(duets.DuetChecker(self.ck), verbose=False)
@@ -127,8 +136,9 @@ class Stage:
         self.talk_ticks = {s: 0 for s in SIDES}
         self.dq = {s: np.zeros(6) for s in SIDES}  # the mouth's head offsets, last tick
         self.duet_left = None  # a duet frozen half-way: {"name", "Q": {side: path}, "G": {side: grips}}
+        self.table_left = {s: None for s in SIDES}  # a pick/place frozen half-way: {"gesture", "Q", "G"} still to go
         self.stance = "audience"  # the facing; _st() adds the props mode
-        self.props = {s: False for s in SIDES}  # does the arm hold a prop (POST /props)?
+        self.props = {s: False for s in SIDES}  # what the arm holds: False, True (POST /props), a toy kind, or Lars
         self.lock = threading.RLock()
         q, g = arms.read()
         self.cmd_q = {s: np.asarray(q[s], float).copy() for s in SIDES}
@@ -179,6 +189,20 @@ class Stage:
         g = self.lib.get(name)
         if g is None:
             raise StageError(f"unknown gesture {name!r}" + (f" (rejected: {self.rejected[name]})" if name in self.rejected else ""))
+        if g.side:  # a pick/place: its own arm, its own hand, the same absolute path in every stance
+            if side != g.side:
+                raise StageError(f"{name} is for the {g.side} arm only")
+            want = g.carry["name"] if g.carry and g.carry["from"] <= 0 else False
+            if self.props[side] != want:
+                raise StageError(f"{name} needs the {side} arm " + (f"holding {want}" if want else "with empty hands") +
+                                 f", it holds {self.props[side] or 'nothing'}" + (" (POST /props off first)" if self.props[side]
+                                                                                  and self.props[side] not in self.carried else ""))
+            if self._st() not in g.stances:
+                raise StageError(f"{name} is not available in the {self._st()} stance "
+                                 f"({self.ck.stance_rejected.get((name, self._st()), '')}): face the audience first")
+            speed = float(np.clip(speed, 0.1, g.max_speed))
+            Q, G = g.samples(side, speed)
+            return self._build(side, name, Q, G, g, speed, self.ck.swept[show.key(g.name, side)], hold=g.hold), speed
         st = self._st() if name not in show.FOLD else show.with_props("audience", any(self.props.values()))  # folds
         # always go via the audience pose
         if st not in g.stances:
@@ -186,14 +210,15 @@ class Stage:
         held = self.props[side]
         if g.prop and held != g.prop:
             raise StageError(f"{name} needs the {g.prop} in the {side} hand (POST /props with kind {g.prop!r})")
-        if held not in (False, True) and not g.prop and name not in show.FOLD:
+        if held not in (False, True) and held not in self.carried and not g.prop and name not in show.FOLD:
             raise StageError(f"the {side} arm holds the {held}: only its own gestures play (or POST /props off)")
         speed = float(np.clip(speed, 0.1, g.max_speed))
         Q, G = g.samples(side, speed, stance=st)
         if self.props[side]:
             G = None  # holding a prop: keep the grip, never drop it
-        return self._build(side, name, Q, G, g, speed, self.ck.swept[show.key(g.name, side, st)],
-                           loop=g.loop, hold=g.hold), speed
+        # holding Lars: the library's sweeps were made with a stick, so check it all again with him
+        base = None if held in self.carried else self.ck.swept[show.key(g.name, side, st)]
+        return self._build(side, name, Q, G, g, speed, base, loop=g.loop, hold=g.hold), speed
 
     def _pose_plan(self, side, name, q, speed):
         q = np.asarray(q, float)
@@ -211,7 +236,12 @@ class Stage:
             return Plan("rest", np.vstack([p1.Q, BQ]), np.concatenate([p1.G, BG]), show.join(p1.sweep, sw), hold=True)
 
     def _commit(self, plans):
-        """Start {side: Plan} at once if each clears the other arm's motion (new or committed) by GAP."""
+        """Start {side: Plan} at once if each clears the other arm's motion (new or committed) by GAP. A pick/place
+        runs to its end: nothing else starts on its arm meanwhile (/freeze still stops it)."""
+        for side in plans:
+            cur = self.plan[side]
+            if cur.gesture is not None and cur.gesture.side and not cur.done:
+                raise StageError(f"the {side} arm is busy with {cur.name} at the table ({(len(cur.Q) - 1 - cur.i) / show.HZ:.1f} s left)")
         for side, p in plans.items():
             other = SIDES[1 - SIDES.index(side)]
             osweep = plans[other].sweep if other in plans else self.plan[other].sweep
@@ -223,6 +253,13 @@ class Stage:
         for side, p in plans.items():
             self.plan[side] = p
             self.last_error[side] = None
+            g = p.gesture
+            if g is not None and g.carry:  # pick: holds it from now on; place: empty-handed afterwards
+                held = g.carry["from"] > 0  # a pick starts empty-handed and ends holding it
+                self.props[side] = g.carry["name"] if held else False
+                self.ck.set_props(self._ck_props(self.props))
+                self.mouth[side].on = False
+                print(f"{side} arm {'takes' if held else 'puts down'} {g.carry['name']} ({g.name})", flush=True)
         self.fault = None
 
     # ---------------------------------------------------------------- API
@@ -244,6 +281,30 @@ class Stage:
             name = self.duet_left["name"]
             self._finish_duet()
             raise StageError(f"duet {name} was frozen half-way: finishing it at half speed first; try again after it")
+        names = self._finish_table()
+        if names:  # stopped at the table, nothing else would pass the checks from there (nor match the props state)
+            raise StageError(f"{', '.join(names)} was frozen half-way: finishing it at half speed first; try again after it")
+
+    def _finish_table(self, rate=0.5):
+        """Finish the pick/place frozen half-way on its own (checked) path, eased in, at `rate` of its speed; not
+        while the other arm is in the way. Returns the gesture names started."""
+        started = []
+        for s in SIDES:
+            left = self.table_left[s]
+            if not left:
+                continue
+            g, o = left["gesture"], SIDES[1 - SIDES.index(s)]
+            sweep = self.ck.swept[show.key(g.name, s)]
+            if show.gap(sweep, self.plan[o].sweep) < show.GAP:
+                continue
+            self.table_left[s] = None
+            n = len(left["Q"])
+            r = rate * np.minimum(1.0, np.arange(1, 4 * n) / (0.3 * show.HZ))
+            u = np.concatenate([[0.0], np.cumsum(r)])
+            u = np.append(u[u < n - 1], n - 1)
+            self.plan[s] = Plan(g.name, along(left["Q"], u), np.interp(u, np.arange(n), left["G"]), sweep, g, hold=g.hold)
+            started.append(g.name)
+        return started
 
     def _finish_duet(self, rate=0.5):
         left, self.duet_left = self.duet_left, None
@@ -267,7 +328,8 @@ class Stage:
             if not du.props and any(self.props.values()):
                 raise StageError(f"duet {name} needs empty hands; POST /props off first")
             if any(v not in (False, True) for v in self.props.values()):
-                raise StageError(f"duet {name}: a toy is in hand; POST /props off first")
+                raise StageError(f"duet {name}: a toy is in hand; " + ("put it back first" if set(self.props.values()) & self.carried
+                                                                      else "POST /props off first"))
             busy = [s for s in SIDES if not (self.plan[s].done or self.plan[s].loop) or self.queue[s]]
             if busy:
                 raise StageError(f"duet {name} needs both arms free; {busy[0]} is playing {self.plan[busy[0]].name}")
@@ -323,6 +385,12 @@ class Stage:
             return {"ok": True}
 
     def play(self, arm, gesture, speed=1.0, mode="now"):
+        g = self.lib.get(gesture)
+        if self.dock_check and g is not None and g.carry and g.carry["from"] > 0:  # a pick: is it there?
+            try:
+                self.dock_check(g)
+            except StageError as e:
+                print(f"refused {gesture}: {e}", flush=True); raise
         with self.lock:
             self._guard()
             sides = self.sides(arm)
@@ -368,6 +436,15 @@ class Stage:
                 self.queue[s].clear()
                 self.after[s] = "hold"
                 p = self.plan[s]
+                if p.gesture is not None and p.gesture.side and not p.done:  # brake on its own path, finish it later
+                    k = np.arange(1, int(FREEZE_S * show.HZ) + 1)
+                    u = np.minimum(p.i + np.cumsum(1 - k / (len(k) + 1)), len(p.Q) - 1)
+                    Q, j = along(p.Q, u), int(np.ceil(u[-1]))
+                    G = np.interp(u, np.arange(len(p.G)), p.G)
+                    self.table_left[s] = {"gesture": p.gesture, "Q": np.vstack([Q[-1:], p.Q[j:]]), "G": np.r_[G[-1], p.G[j:]]}
+                    self.plan[s] = Plan("freeze", np.vstack([self.cmd_q[s][None], Q]), np.r_[self.cmd_g[s], G],
+                                        self.ck.pose_sweep(s, Q[-1]), hold=True)
+                    continue
                 v = (p.Q[p.i] - p.Q[max(p.i - 1, 0)]) * show.HZ if not p.done else np.zeros(6)
                 t = np.arange(1, int(FREEZE_S * show.HZ) + 1) / show.HZ
                 Q = np.clip(self.cmd_q[s] + np.outer(t - t * t / (2 * FREEZE_S), v), show.SAFE_LO, show.SAFE_HI)
@@ -428,7 +505,10 @@ class Stage:
         with self.lock:
             self._guard()
             props = dict(self.props)
-            for s in self.sides(arm):
+            sides = [s for s in self.sides(arm) if self.props[s] not in self.carried]
+            if not sides:
+                raise StageError(f"the {arm} arm holds {self.props[arm]}: put it back with its place gesture first")
+            for s in sides:
                 props[s] = (True if kind in (None, "stick") else kind) if on else False
             st = show.with_props(self.stance, any(props.values()))
             if np.any(show.STANCES[st] != show.STANCES[self._st()]):
@@ -467,6 +547,8 @@ class Stage:
             plans = {}
             for s in self.sides(arm):
                 p = self.plan[s]
+                if self.props[s] in self.carried:
+                    raise StageError(f"the {s} arm holds {self.props[s]}: opening would drop it (use its place gesture)")
                 if not p.done and not p.loop:
                     raise StageError(f"{s} arm is busy with {p.name}; grip after it")
                 BQ, BG = show.blend(self.cmd_q[s], self.cmd_q[s], 1.0, self.cmd_g[s], v)
@@ -477,7 +559,8 @@ class Stage:
 
     def busy(self, sides=SIDES):
         with self.lock:
-            return any(not self.plan[s].done or self.queue[s] for s in sides) or bool(self.duet_left)
+            return (any(not self.plan[s].done or self.queue[s] or self.table_left[s] for s in sides)
+                    or bool(self.duet_left))
 
     def wait(self, sides=SIDES, timeout=120):
         t0 = time.monotonic()
@@ -492,7 +575,8 @@ class Stage:
         with self.lock:
             out = {"backend": self.backend, "fault": self.fault, "rejected": self.rejected, "stance": self.stance, "props": self.props,
                    "duet": self.plan["left"].duet if not self.plan["left"].done else None,
-                   "duet_frozen": self.duet_left["name"] if self.duet_left else None, "rejected_duets": self.duets_rejected,
+                   "duet_frozen": self.duet_left["name"] if self.duet_left else None,
+                   "table_frozen": {s: t["gesture"].name for s, t in self.table_left.items() if t}, "rejected_duets": self.duets_rejected,
                    "not_in_stance": {f"{n} ({st})": why for (n, st), why in self.ck.stance_rejected.items()},
                    "unsafe_pairs": sorted([list(p) for p in self.unsafe]), "arms": {}}
             for s in SIDES:
@@ -585,9 +669,21 @@ def shutdown(st, close, lock):
             with st.lock:                                             # may be touching, so no straight homing
                 if st.duet_left:
                     st._finish_duet()
-                if not st.plan["left"].duet or st.plan["left"].done:
+                st._finish_table()  # a pick/place frozen at the table ends on its own path too
+                if ((not st.plan["left"].duet or st.plan["left"].done) and not any(st.table_left.values())
+                        and not any(st.plan[s].gesture is not None and st.plan[s].gesture.side and not st.plan[s].done
+                                    for s in SIDES)):
                     break
             time.sleep(0.05)
+        for s in SIDES:  # a carried prop goes back to its dock first (its place gesture), if that is still possible
+            if st.props[s] in st.carried:
+                name = next((n for n, g in st.lib.items() if g.side == s and g.carry and g.carry["from"] <= 0
+                             and g.carry["name"] == st.props[s]), None)
+                try:
+                    if name:
+                        st.play(s, name, 0.5); st.wait([s], timeout=60)
+                except StageError as e:
+                    print(f"could not put {st.props[s]} back ({e})", flush=True)
         try:
             st.go_rest(speed=0.5)
         except StageError as e:  # ponytail: last resort, the same straight slow homing as home.py
@@ -632,7 +728,7 @@ def bringup(st, track_max):
     step("home (settle at rest)", lambda: st.go_rest(speed=0.3))
     step("stage (30 %)", lambda: st.go_stage(speed=0.3))
     for name, g in st.lib.items():
-        if name in ("stage", "rest"):
+        if name in ("stage", "rest") or g.side:  # pick/place need the prop at its dock: not here
             continue
         for s in SIDES:
             step(f"{s:5s} {name}", lambda: st.play(s, name, 0.5), [s], g.duration / 0.5 + 1 if g.loop else None)
@@ -662,7 +758,7 @@ def serve(st, port):
                 self._send(200, [
                     {"name": g.name, "duration_s": round(g.duration, 2), "arms": g.arms, "about": g.about,
                      "hold": g.hold, "loop": g.loop, "max_speed": round(g.max_speed, 2), "uses_gripper": g.gt is not None,
-                     "stances": sorted(g.stances)}
+                     "stances": sorted(g.stances), "side": g.side, "carry": g.carry["name"] if g.carry else None}
                     for g in st.lib.values()])
             elif self.path == "/duets":
                 self._send(200, [{"name": d.name, "kind": d.kind, "props": d.props, "duration_s": round(d.duration, 2), "about": d.about,
@@ -712,6 +808,8 @@ def main(argv=None):
     ap.add_argument("--bringup", action="store_true", help="test every gesture once, then exit")
     ap.add_argument("--track-max", type=float, default=0.2, help="bring-up stops above this tracking error (rad)")
     ap.add_argument("--warp", type=float, default=1.0, help="kinematic sim only: run N x faster than real time")
+    ap.add_argument("--dock-check", action="store_true",
+                    help="pick gestures first check the overhead camera that the prop lies at its dock (adds ~1.5 s)")
     args = ap.parse_args(argv)
     if args.real and args.sim:
         sys.exit("--real or --sim, not both")
@@ -721,7 +819,15 @@ def main(argv=None):
         args.warp = 1.0
     print(f"backend: {backend}", flush=True)
     try:
-        st = Stage(a, backend, warp=args.warp)
+        dock_check = None
+        if args.dock_check:
+            import lars
+
+            def dock_check(g):
+                why = lars.dock_problem(g.d.get("dock"))
+                if why:
+                    raise StageError(f"{g.name}: {why}")
+        st = Stage(a, backend, warp=args.warp, dock_check=dock_check)
         q, _ = a.read()
         far = {s: round(float(np.max(np.abs(q[s] - show.HOME[s]))), 3) for s in SIDES}
         if args.real and max(far.values()) > REST_TOL:

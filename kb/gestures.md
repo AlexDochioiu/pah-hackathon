@@ -46,6 +46,10 @@ sim on the station), then run on the real arms (results at the end).
 - `hold`: stay at the end pose instead of returning to idle (`die_dramatically`, `stage`, `rest`).
   `loop`: repeat (`idle_breathe`). `arms`: the intended use, `both` = mirrored on both arms.
 - `recorded`: set by `record.py`; `make_gestures.py` keeps such files when it regenerates.
+- Pick/place gestures (`pick_lars`, `place_lars`, made by `lars.py --bake`): `side` = keys are absolute joints for
+  that arm only (same in every facing); `near` = the near-table rule instead of `CLEAR`; `carry: {"name", "from",
+  "to", "capsule", "r"}` = the carried prop as a capsule in the grasp-site frame, held between those times.
+  See [props.md](props.md).
 
 ## Safety checker (`show.Checker`, `show.load_library`)
 Every gesture is checked on **both** arms at load (the server and bring-up refuse to start without `idle_breathe`):

@@ -153,6 +153,7 @@ Two toys have their own moves: a toy car (`[props:left car]`: drive) and a flyin
 ufo_fly, ufo_hover, ufo_land, ufo_crash). While an arm holds one, it plays only those moves (no duets or
 ensembles), so hand it back with `[props:none]` once that scene is over.
 
+{{GUESTS}}
 # Interruptions
 
 The listener can interrupt you at any moment to change the story ("make the dragon friendly!", "now it's in

@@ -20,7 +20,7 @@ OUT = show.DIR / "previews"
 
 def render(sc, renderer, g, ok, why, stance="audience"):
     frames = []
-    sides = show.SIDES if g.arms == "both" else ("left",)
+    sides = (g.side,) if g.side else show.SIDES if g.arms == "both" else ("left",)
     traj = {s: g.samples(s, stance=stance) for s in sides}
     n = len(next(iter(traj.values()))[0])
     for s in show.SIDES:  # a toy gesture (car, ufo) shows its toy in the playing hand; else sticks in a _props stance

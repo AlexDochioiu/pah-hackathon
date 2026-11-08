@@ -54,7 +54,20 @@ def build_instructions(book: GestureBook, sounds: SoundBook | None = None) -> st
     return ((HERE / "prompt.md").read_text().replace("{{GESTURES}}", book.describe())
             .replace("{{DUETS}}", book.describe_duets()).replace("{{ENSEMBLES}}", book.describe_duets(ensembles=True))
             .replace("{{SFX}}", sounds.describe_sfx()).replace("{{MUSIC}}", sounds.describe_music())
-            .replace("{{VOICES}}", describe_palette()))
+            .replace("{{VOICES}}", describe_palette())
+            .replace("{{GUESTS}}", GUEST_LARS.format(secs=f"{book.guests['pick_lars']:.0f}")
+                     if book.guest("pick", "lars") and book.guest("place", "lars") else ""))
+
+
+GUEST_LARS = """# Lars the frog doll
+
+Lars, a small green plush frog doll, waits on a dock at the edge of the stage. The right arm can pick Lars up
+mid-story with `[pick:lars]` (about {secs} s; give that arm no other tag until Lars is up) and then acts with Lars in
+its hand: its gestures carry Lars, and its mouth is full, so no talk tag for that arm. Before the story ends, the right
+arm must put Lars back with `[place:lars]`, in its own sentence, with no other tag for that arm in it or the next
+sentence. Both need the arms facing the audience: write `[face:audience]` in the sentence before, if they were facing
+each other. At most one pick-up of Lars per story.
+"""
 
 
 class Storyteller(Agent):
@@ -104,7 +117,7 @@ server = AgentServer(num_idle_processes=1) if PTT else AgentServer()  # PTT: a w
 async def entrypoint(ctx: JobContext) -> None:
     stage = Stage(STAGE_URL)
     book = GestureBook(await stage.fetch_gestures() or DEFAULT_GESTURES, await stage.fetch_duets(),
-                       await stage.fetch_duets("ensemble"), stage.about)
+                       await stage.fetch_duets("ensemble"), stage.about, stage.sides)
     logger.info("gestures: %s; duets: %s", ", ".join(book.names), book.describe_duets())
 
     session = AgentSession(

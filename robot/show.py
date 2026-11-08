@@ -54,6 +54,11 @@ VOX = 0.01                                     # swept-volume voxel; the gap che
 LEAN_BACK_CHECK = True  # switch: False turns the rule off everywhere (checker, stage server, arm.py)
 COM_BACK_MARGIN = 0.02  # ponytail: calibration knob, m the COM may go behind the reference pose's COM (first guess)
 FOLD = ("stage", "rest")
+# Pick/place gestures (Nov 7: lars.py --bake's pick_lars / place_lars): one arm's absolute joints ("side") that go down
+# to the table to pick up or put down a carried prop ("carry"). Instead of CLEAR they get this rule: wherever any part
+# (the prop included) is within the gesture's "near" (>= TABLE_NEAR) of the table, every joint moves at most TABLE_VMAX
+# and the arm's own parts stay TABLE_FLOOR above it (the carried prop may touch: it is what gets set down).
+TABLE_NEAR, TABLE_VMAX, TABLE_FLOOR = 0.05, 0.3, 0.003
 
 # Stage pose (Nov 7 evening, lowered): the gripper ~0.37 m up and 4 cm further forward than lift.py's raised pose
 # (LEAN_REF_LEFT, ~0.48 m up), head level, facing the audience, so the action plays closer to the tabletop.
@@ -342,13 +347,27 @@ class Gesture:
         self.max_speed = None  # set by check()
         self.table = d.get("table")  # {"min": m, "impact": m/s, "prop": bool}: the hand may touch the table (TABLE_PARTS)
         self.prop = d.get("prop")  # a PROP_SHAPES kind the gesture needs in the hand ("car", "ufo"), else None
+        # pick/place (lars.py --bake): "side" = the one arm that plays it, keys are its ABSOLUTE joints (the same in every
+        # stance); "near" = m, the TABLE_* rule; "carry" = {"name", "from": s, "to": s, "capsule": [6, site frame], "r"}:
+        # it holds that prop from..to (a pick when "from" > 0, a place when "from" is 0). The prop joins PROP_SHAPES and,
+        # once picked, plays any gesture (checked with it), unlike the toys.
+        self.side, self.near, self.carry = d.get("side"), d.get("near"), d.get("carry")
+        assert self.side in (None, *SIDES) and (self.near is None or self.side) and not (self.side and (self.table or self.prop)), \
+            f"{self.name}: bad side/near"
+        if self.carry:
+            c = np.asarray(self.carry["capsule"], float)
+            PROP_SHAPES[self.carry["name"]] = ([tuple(c[:3] + f * (c[3:] - c[:3])) for f in np.linspace(0, 1, 12)],
+                                               float(self.carry["r"]))
         self.stances = {"audience"}  # stances it passed the checker in (load_library)
 
     def samples(self, side, speed=1.0, hz=HZ, stance="audience"):
         """(joints (N,6), grips (N,) or None) at hz for the given speed, absolute for that side."""
         n = max(2, int(round(self.duration / speed * hz)) + 1)
         tq = np.linspace(0, self.duration, n)
-        Q = stage_pose(side, stance) + mirror(pchip(self.t, self.dq, tq), side)
+        if self.side:  # absolute for self.side; the other arm gets the mirror image (previews only, never played)
+            Q = pchip(self.t, self.dq, tq) * (1 if side == self.side else MIRROR)
+        else:
+            Q = stage_pose(side, stance) + mirror(pchip(self.t, self.dq, tq), side)
         G = None if self.gt is None else pchip(self.gt, self.gv, tq)[:, 0]
         return Q, G
 
@@ -439,9 +458,58 @@ class Checker:
         or {side: one of those}."""
         self.scene.props = dict(on) if isinstance(on, dict) else {s: on or False for s in SIDES}
 
+    def check_side(self, g):
+        """A one-arm absolute gesture (g.side), at speed 1, with its own hand: empty, then its carried prop from..to.
+        With g.near, the TABLE_* rule instead of CLEAR. Caches the swept volume under key(name, side)."""
+        side, sc = g.side, self.scene
+        Q, G = g.samples(side)
+        t = np.linspace(0, g.duration, len(Q))
+        c = g.carry
+        inside = (t >= c["from"] - 1e-9) & (t <= c["to"] + 1e-9) if c else np.zeros(len(Q), bool)
+        probs = motion_problems(Q) + self.lean_problems(side, Q)
+        if G is not None and (G.min() < -1e-6 or G.max() > 1 + 1e-6):
+            probs.append("gripper outside 0..1")
+        near = max(TABLE_NEAR, float(g.near)) if g.near else None
+        v = np.abs(np.diff(Q, axis=0)).max(1) * HZ
+        v = np.maximum(np.r_[0, v], np.r_[v, 0])  # a sample's speed: into or out of it
+        before, sweeps = dict(sc.props), []
+        try:
+            for held in (False, True):
+                idx = np.nonzero(inside == held)[0]
+                if not len(idx):
+                    continue
+                sc.props[side] = c["name"] if held else False
+                sweeps.append(sc.sweep(side, Q[idx]))
+                for i in idx:
+                    sc.set(side, Q[i]); sc.forward()
+                    arm_low = min(float(np.min(sc.d.geom_xpos[k][2] + pts @ sc.d.geom_xmat[k].reshape(3, 3)[2] - r))
+                                  for k, pts, r in sc.geoms[side]) - TABLE_Z
+                    pp, pr = sc.prop_cloud(side)
+                    low = min(arm_low, float(np.min(pp[:, 2] - pr)) - TABLE_Z if len(pp) else np.inf)
+                    if near is None or low >= near:
+                        if low < CLEAR:
+                            probs.append(f"at {t[i]:.2f} s the lowest point is {low*100:.1f} cm above the table, needs {CLEAR*100:.0f} cm")
+                            break
+                    elif v[i] > TABLE_VMAX + 1e-6:
+                        probs.append(f"at {t[i]:.2f} s: {v[i]:.2f} rad/s within {near*100:.0f} cm of the table (max {TABLE_VMAX})")
+                        break
+                    elif arm_low < TABLE_FLOOR:
+                        probs.append(f"at {t[i]:.2f} s the arm is {arm_low*1000:.0f} mm above the table (needs {TABLE_FLOOR*1000:.0f})")
+                        break
+        finally:
+            sc.props = before
+        sw = join(*sweeps)
+        self.swept[key(g.name, side)] = sw
+        v1, a1 = peak_rates(Q)
+        g.max_speed = float(min(1.0 if g.near else 1.5, VMAX / max(v1.max(), 1e-6), np.sqrt(np.min(AMAX / np.maximum(a1, 1e-6)))))
+        g.stances = set(STANCES)
+        return [f"{side}: {x}" for x in probs]
+
     def check(self, g, stance="audience"):
         """Problems of a gesture on either arm at speed 1 (empty = ok), in the stance's props mode (it stays set).
         Sets g.max_speed and caches swept volumes."""
+        if g.side:
+            return self.check_side(g)
         self.set_props(g.prop or has_props(stance))
         probs = []
         for side in SIDES:
@@ -483,8 +551,11 @@ def load_library(checker=None, folder=GESTURE_DIR, verbose=True):
     for side in SIDES:
         if ("idle_breathe", side) in ck.swept:
             others[side].append(ck.swept[("idle_breathe", side)])
+    pairs = (("left", "right"), ("right", "left"))
     for name in list(ok):
-        for side, other in (("left", "right"), ("right", "left")):
+        for side, other in pairs:
+            if ok[name].side not in (None, side):
+                continue
             d = min(gap(ck.swept[(name, side)], o) for o in others[other])
             if d < GAP:
                 bad[name] = f"on the {side} arm comes {d*100:.1f} cm from the resting/idle {other} arm (< {GAP*100:.0f} cm)"
@@ -493,7 +564,8 @@ def load_library(checker=None, folder=GESTURE_DIR, verbose=True):
     unsafe = set()
     for a in ok:
         for b in ok:
-            if gap(ck.swept[(a, "left")], ck.swept[(b, "right")]) < GAP:
+            if (ok[a].side != "right" and ok[b].side != "left"
+                    and gap(ck.swept[(a, "left")], ck.swept[(b, "right")]) < GAP):
                 unsafe.add((a, b))
     # The same for the other stances (folds only with props): a gesture failing there is only refused in that stance.
     ck.stance_rejected, ck.stance_unsafe = {}, {}
@@ -504,6 +576,8 @@ def load_library(checker=None, folder=GESTURE_DIR, verbose=True):
         for name, g in ok.items():
             if name in FOLD and st != "audience" + PROPS:
                 continue
+            if g.side:  # the same absolute path in every stance: only the other arm's poses differ (below)
+                good.append(name); continue
             probs = ck.check(g, st)
             if probs:
                 ck.stance_rejected[(name, st)] = "; ".join(probs)
@@ -515,15 +589,18 @@ def load_library(checker=None, folder=GESTURE_DIR, verbose=True):
             if "idle_breathe" in good:
                 others[side].append(ck.swept[key("idle_breathe", side, st)])
         for name in list(good):
-            for side, other in (("left", "right"), ("right", "left")):
-                d = min(gap(ck.swept[key(name, side, st)], o) for o in others[other])
+            for side, other in pairs:
+                if ok[name].side not in (None, side):
+                    continue
+                d = min(gap(ck.swept[key(name, side, "audience" if ok[name].side else st)], o) for o in others[other])
                 if d < GAP:
                     ck.stance_rejected[(name, st)] = (f"on the {side} arm comes {d*100:.1f} cm from the {st} or idle "
                                                       f"{other} arm (< {GAP*100:.0f} cm)")
                     good.remove(name); break
         for name in good:
             ok[name].stances.add(st)
-        ck.stance_unsafe[st] = {(a, b) for a in good for b in good
+        plain = [n for n in good if not ok[n].side]
+        ck.stance_unsafe[st] = {(a, b) for a in plain for b in plain
                                 if gap(ck.swept[key(a, "left", st)], ck.swept[key(b, "right", st)]) < GAP}
     ck.set_props(False)  # empty hands: the default
     if verbose:

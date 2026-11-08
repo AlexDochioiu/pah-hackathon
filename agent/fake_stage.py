@@ -21,7 +21,8 @@ GESTURES = {
     "point_at_audience": 2.8, "pounce": 3.5, "pull": 3.2, "push": 3.4, "revive": 5.5, "roar": 3.6, "shake_head":
     2.9, "shoot": 5.0, "sigh": 4.4, "slash": 3.9, "slow_turn": 6.0, "sneak": 4.6, "sneeze": 3.5, "snore": 6.2,
     "startle": 3.0, "stir_frantic": 8.2, "stir_lazy": 10.5, "stomp": 4.6, "ta_da": 4.1, "throw": 2.9, "thrust": 3.0,
-    "tremble_excited": 3.1, "ufo_crash": 11.5, "ufo_fly": 13.6, "ufo_hover": 8.0, "ufo_land": 13.0, "wave": 4.7
+    "tremble_excited": 3.1, "ufo_crash": 11.5, "ufo_fly": 13.6, "ufo_hover": 8.0, "ufo_land": 13.0, "wave": 4.7,
+    "pick_lars": 5.0, "place_lars": 5.2,  # the right arm only (the real stage lists "side")
 }
 DUETS = {"cheers": 8.7, "copycat": 7.3, "cross_swords": 8.4, "elbow_nudge": 7.1, "heckle": 8.1, "place_hat": 8.8,
          "poke": 8.1, "quick_draw": 8.9, "straight_man": 9.6, "tip_hats": 5.6}
@@ -52,7 +53,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/gestures":
             arms = ["left", "right", "both"]
-            self._reply(200, [{"name": n, "duration_s": d, "arms": arms} for n, d in GESTURES.items()])
+            self._reply(200, [{"name": n, "duration_s": d, "arms": arms, "side": "right" if n.endswith("_lars") else None}
+                              for n, d in GESTURES.items()])
         elif self.path == "/duets":
             self._reply(200, [{"name": n, "kind": "duet", "duration_s": d} for n, d in DUETS.items()]
                         + [{"name": n, "kind": "ensemble", "duration_s": d} for n, d in ENSEMBLES.items()])

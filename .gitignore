@@ -3,3 +3,4 @@ snaps/
 *.npz
 __pycache__/
 .env
+lars_runs/

@@ -425,6 +425,8 @@ class Arms:
         if name not in library:
             raise ArmError(f"no gesture {name!r}; try one of {', '.join(sorted(library))}")
         gesture = library[name]
+        if gesture.side:  # pick/place at the table: absolute, one arm, prop bookkeeping: the stage server only
+            raise ArmError(f"gesture {name!r} goes down to the table: play it through the stage server")
         speed = min(speed, gesture.max_speed)
         sides = self._sides(side)
         if gesture.arms == "one" and len(sides) == 2:

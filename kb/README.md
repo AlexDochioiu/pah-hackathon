@@ -14,6 +14,7 @@ folder). One topic per page; keep pages short and factual.
 | [calibration.md](calibration.md) | Overhead camera ↔ arm calibration: procedure, results, how to redo it. |
 | [dream-1.md](dream-1.md) | What we tried with Dream Labs' Dream-1 model and why we stopped. |
 | [gestures.md](gestures.md) | The gesture library and stage server the storyteller drives. |
+| [props.md](props.md) | Lars the frog (the host's body): detection, the dock, the baked `pick_lars` / `place_lars` gestures. |
 | [storyteller.md](storyteller.md) | The LiveKit voice agent. |
 | [site.md](site.md) | The launch site: three design candidates, preview, deploy, swapping in the demo video. |
 | [log.md](log.md) | Dated progress log. |
