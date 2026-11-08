@@ -126,3 +126,4 @@
   slowed. Mime set: 11 solos (invisible_wall, trapped_in_box, climb_ladder, against_the_wind, lean_on_nothing,
   juggle, smell_flower, taste_sour, knock, tightrope, elevator) and duets mirror, invisible_ball, hand_through_wall.
   Sim latency: POST to first commanded sample 12 ms median.
+- 2026-11-07 18:45: overhead camera re-aimed by the owner and recalibrated (5 blocks, residual ≤ 3.7 mm); the baked Lars dock maps to px (331, 88) ([calibration.md](calibration.md)).

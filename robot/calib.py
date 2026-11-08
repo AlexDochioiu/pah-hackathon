@@ -1,7 +1,7 @@
 """Fit overhead pixel -> arm frame from the teach.py touches; writes ~/dial/calib.json for pick.py.
 
 ponytail: one-off for the Nov 7 calibration; the block<->touch pairs below were matched by hand from the
-teach_*.jpg snapshots and teach_round*.npz logs. Redo the touches and edit PAIRS if the cameras or arms move.
+snaps/overhead_cal3.jpg snapshot and teach_cal3_round*.npz logs. Redo the touches and edit PAIRS if the cameras or arms move.
 """
 import json, pathlib
 import cv2, numpy as np
@@ -9,14 +9,14 @@ import cv2, numpy as np
 DIR = pathlib.Path.home() / "dial"
 
 # (snapshot, approx pixel, {arm: touch xyz in that arm's frame})
+# Round 3 (Nov 7 evening, after the camera was moved): 5 blocks, both arms touched each. Matched to blocks by the
+# best rigid fit (image v flipped). Older rounds: git history.
 PAIRS = [
-    ("teach_overhead.jpg", (249, 148), {"left": (0.3525, -0.059, 0.006)}),                                # orange
-    ("teach_overhead.jpg", (289, 157), {"left": (0.341, -0.151, 0.012), "right": (0.369, 0.451, 0.020)}),  # yellow
-    ("teach_overhead.jpg", (341, 151), {"left": (0.3665, -0.256, 0.018), "right": (0.370, 0.345, 0.025)}),  # cactus
-    ("teach_overhead.jpg", (396, 156), {"left": (0.372, -0.375, 0.019), "right": (0.370, 0.228, 0.020)}),  # pink
-    ("teach_overhead2.jpg", (443, 185), {"left": (0.316, -0.467, 0.014), "right": (0.309, 0.135, 0.011)}),  # green, knocked
-    ("teach2_overhead.jpg", (282, 210), {"left": (0.2215, -0.159, 0.008)}),                               # yellow moved
-    ("teach2_overhead.jpg", (398, 96), {"right": (0.516, 0.223, 0.048)}),                                 # pink moved
+    ("snaps/overhead_cal3.jpg", (189, 151), {'left': (0.3045, -0.0613, 0.0219), 'right': (0.3123, 0.545, 0.0341)}),  # yellow
+    ("snaps/overhead_cal3.jpg", (427, 152), {'left': (0.3021, -0.5152, 0.0309), 'right': (0.2902, 0.089, 0.0218)}),  # orange right
+    ("snaps/overhead_cal3.jpg", (264, 99), {'left': (0.4133, -0.2005, 0.037), 'right': (0.415, 0.397, 0.0424)}),  # orange left
+    ("snaps/overhead_cal3.jpg", (312, 198), {'left': (0.2142, -0.3003, 0.0151), 'right': (0.2025, 0.3148, 0.0162)}),  # green
+    ("snaps/overhead_cal3.jpg", (361, 42), {'left': (0.5553, -0.3907, 0.0671), 'right': (0.5412, 0.1952, 0.0606)}),  # red
 ]
 
 

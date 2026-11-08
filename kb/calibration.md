@@ -21,5 +21,16 @@ gestures don't need it.
 - The right arm can't reach the leftmost blocks (far −y side); each arm covers its own half plus the middle.
 - `pick.py --from 340,148 --to 300,190 --dry` landed within 7 mm of the hand-touched position.
 
+## Round 3 (Nov 7, ~18:40, after the overhead camera was moved and re-aimed)
+- The 11:30 calibration went stale when the camera moved: pixel → table was off by ~16 cm near the Lars dock.
+  The baked Lars pick doesn't use the camera and kept working; only camera-based checks and picks were wrong.
+- 5 blocks, both arms touched each (`teach_cal3_round*.npz`, `snaps/overhead_cal3.jpg`). Homography residuals
+  0.2–3.7 mm. Right offset (−0.0056, 0.6018), the same as before within 1 cm: the arms haven't moved.
+- Matching touches to blocks: fit a rigid 2D shape (rotation, scale, shift) for every assignment and keep the best
+  (37 mm vs 114 mm next). **Flip the image v axis first**: pixels are left-handed, so without the flip no
+  assignment fits. A 4-point homography always fits exactly, so it can't pick the assignment.
+- teach.py only counts a touch held still for > 1.5 s; quick taps are lost. Ask for 3 s holds on every block.
+- The old file is kept on the station as `~/dial/calib_before_cal3.json`.
+
 ## Redo it when
 The cameras or the arms move, or picks start missing by more than ~1 cm. Pixel coordinates refer to 640×360 frames.
