@@ -760,6 +760,8 @@ class Stage:
             after = (False if g is not None else held) if held else (carry if span else False)
             shape = next((x.carry for x in self.lib.values() if prop and x.carry and x.carry["name"] == prop), None)
             hold = 0.02 if raw else TRAJ_HOLD_S  # raw: Dream-1's own timing, no pause around it (owner, Nov 8)
+            if raw:  # its first key can be far from where the arm is (Nov 8: 25 rad/s, tracking fault): get there at <= 1.5 rad/s
+                t = t - t[0] + max(1.0 / show.HZ, float(np.abs(q[0] - q0).max()) / 1.5)
             tk = np.r_[0.0, hold, hold + t + (1.0 / show.HZ if t[0] <= 0 else 0.0)]
             tk = np.r_[tk, tk[-1] + hold]
             if not raw:  # raw: no slow-down either
