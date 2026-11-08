@@ -24,9 +24,13 @@ try:
             log[s].append([time.time() - t0, *iks[s].fk(js[s])[:3, 3]])
             jlog[s].append([*js[s], gs[s]])
         time.sleep(0.05)
+except KeyboardInterrupt:  # Ctrl-C / kill -INT ends it early and still saves (Nov 8: it lost a whole round)
+    pass
 finally:
-    a.close()
-    lock.close()
+    try:
+        a.close()
+    finally:
+        lock.close()
 
 out = {}
 for s, rows in log.items():
