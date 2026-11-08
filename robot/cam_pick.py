@@ -115,10 +115,16 @@ def handover(iks, a_side, b_side, present, now, top):
         print("handover: no pose to back off", file=sys.stderr)
         return None
     b_above, b_at, b_up, p_above, p_down = qs
+    for dz in (0.10, 0.08):  # lift as high as it reaches above the catch (owner, Nov 8: higher, then clear away)
+        if (q := solve(ik_b, b_at, td(G + [0, 0, dz], c), iters=1500)) is not None:
+            b_up = q
+            break
     steps = [(a_side, "a_turn", q_turn, 0.0, 0.3), (b_side, "b_above", b_above, 1.0, 0.0), (b_side, "b_at", b_at, 1.0, 0.2),
-             (b_side, "b_grip", b_at, 0.0, 0.5), (a_side, "a_open", q_turn, 1.0, 0.3), (a_side, "a_back", q_back, 1.0, 0.0),
-             (a_side, "a_home", now[a_side], 0.05, 0.0), (b_side, "b_up", b_up, 0.0, 0.0),
-             (b_side, "b_to_table", p_above, 0.0, 0.0), (b_side, "b_down", p_down, 0.0, 0.2),
+             (b_side, "b_grip", b_at, 0.0, 0.5), (a_side, "a_open", q_turn, 1.0, 0.3),
+             # Nov 8: a's swing home hit b. Now a only slides back off the pen, b lifts and clears to its own side,
+             # and only then a goes home
+             (a_side, "a_back", q_back, 1.0, 0.0), (b_side, "b_up", b_up, 0.0, 0.0),
+             (b_side, "b_to_table", p_above, 0.0, 0.0), (a_side, "a_home", now[a_side], 0.05, 0.0), (b_side, "b_down", p_down, 0.0, 0.2),
              (b_side, "b_open", p_down, 1.0, 0.3), (b_side, "b_lift", p_above, 1.0, 0.0), (b_side, "b_home", now[b_side], 0.05, 0.0)]
 
     def pts(side, q):
