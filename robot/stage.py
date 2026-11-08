@@ -140,17 +140,22 @@ class Stage:
         self.stance = "audience"  # the facing; _st() adds the props mode
         self.props = {s: False for s in SIDES}  # what the arm holds: False, True (POST /props), a toy kind, or Lars
         self.lock = threading.RLock()
-        q, g = arms.read()
-        self.cmd_q = {s: np.asarray(q[s], float).copy() for s in SIDES}
-        self.cmd_g = {s: float(g[s]) for s in SIDES}
-        self.meas = {s: self.cmd_q[s].copy() for s in SIDES}
-        self.plan = {s: self._hold_plan(s, "start") for s in SIDES}
+        self.attach(arms)
         self.queue = {s: collections.deque() for s in SIDES}
         self.after = {s: "hold" for s in SIDES}
         self.last_error = {s: None for s in SIDES}
         self.stop = threading.Event()
         self.fault = None
         self.thread = threading.Thread(target=self._loop, daemon=True)
+
+    def attach(self, arms):
+        """Drive these arms from their current pose (main() checks the library first, then opens the real arms)."""
+        self.arms = arms
+        q, g = arms.read()
+        self.cmd_q = {s: np.asarray(q[s], float).copy() for s in SIDES}
+        self.cmd_g = {s: float(g[s]) for s in SIDES}
+        self.meas = {s: self.cmd_q[s].copy() for s in SIDES}
+        self.plan = {s: self._hold_plan(s, "start") for s in SIDES}
 
     # ---------------------------------------------------------------- planning (call with self.lock held)
 
@@ -826,9 +831,15 @@ def main(argv=None):
     if args.real and args.sim:
         sys.exit("--real or --sim, not both")
 
-    a, lock, backend = open_backend(args.real, args.backend)
-    if backend != "kin":
+    if args.real:
         args.warp = 1.0
+        # The library check takes ~30 s of CPU. With the real arms already open it starves i2rt's motor thread,
+        # motors miss replies and drop out ("loss communication", a different motor each start). Check first.
+        a, lock, backend = KinArms(), None, "real"
+    else:
+        a, lock, backend = open_backend(False, args.backend)
+        if backend != "kin":
+            args.warp = 1.0
     print(f"backend: {backend}", flush=True)
     try:
         dock_check = None
@@ -840,6 +851,10 @@ def main(argv=None):
                 if why:
                     raise StageError(f"{g.name}: {why}")
         st = Stage(a, backend, warp=args.warp, dock_check=dock_check)
+        if args.real:
+            print("library checked; opening the arms", flush=True)
+            a, lock, _ = open_backend(True, args.backend)
+            st.attach(a)
         time.sleep(1.0)  # a motor that doesn't answer drops its chain within ~0.5 s of start
         if dead_motors(a):
             raise SystemExit(f"{'+'.join(dead_motors(a))} arm motors not answering: check the e-stop, power and cables")

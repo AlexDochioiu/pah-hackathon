@@ -117,3 +117,4 @@
 - 2026-11-07 18:00: show mode: `/show` runs the presentation as clicker-cued acts from `agent/show.md` through the
   LLM's own pipeline (gestures, sounds, voices), voices pre-synthesized so act 1 cuts in ~0.3 s after the cue. The
   host is now Lars the frog (`HOST_NAME`), the show is "Stage Hands". See [show.md](show.md).
+- 2026-11-07 18:10: real cause of the motor dropouts: the library check ran with the arms open and starved the motor thread. `stage.py --real` checks first, then opens the arms; it came up clean.

@@ -60,6 +60,9 @@ against the lean-back rule before it starts. Joints 4–6 run at a low gain (kp=
   running"): i2rt's control thread exits but `read()` keeps returning the last pose, so a script looks healthy while
   the arm ignores it. `stage.py` checks `dead_motors()` at start and every tick and stops. Usual cause: e-stop
   pressed or arm power off; release it, do the power reset, reset the CAN links (above).
+- **Heavy CPU work with the real arms open drops motors.** The stage server's ~30 s library check, run after
+  `open_arms`, starved i2rt's motor thread: a different motor "lost communication" on each start. `stage.py --real`
+  now checks the library first and opens the arms after. Do the same in any script: compute first, then open.
 
 ## Harmless noise
 - "DM Error in control loop: file descriptor -1" and "motor failed with info" at shutdown: an i2rt race when
