@@ -2,7 +2,7 @@
 
 Every sound effect is CC0 1.0 (public domain dedication, https://creativecommons.org/publicdomain/zero/1.0/): free to use, change and redistribute, no attribution required; we credit the authors anyway. So is every music track. Each file was trimmed, made mono 48 kHz, loudness-normalised (sfx: loudest 400 ms at -16 LUFS; music:
 -20 LUFS integrated, limited at -2 dBFS) and encoded as Opus in Ogg. Each licence was checked on its source page
-on 2026-11-07 or 2026-11-08.
+on 2026-11-07.
 
 ## Sound effects (`sfx/<group>/`)
 

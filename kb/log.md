@@ -109,7 +109,7 @@
   Sim-checked on the stage server at speeds 0.3, 0.5, 0.75 and 1.0; baked at 0.3 for the first real runs
   ([props.md](props.md)).
 - 2026-11-07 17:55: stage server started with both arms' motors not answering ("loss communication") and served anyway; added `dead_motors()` check at start and per tick ([arm-control.md](arm-control.md)).
-- Storyteller sound library, bigger (Nov 8): 76 CC0 sfx in 7 groups (weapons, impacts, movement, creatures,
+- 2026-11-07 18:00: storyteller sound library, bigger: 76 CC0 sfx in 7 groups (weapons, impacts, movement, creatures,
   magic, world, crowd; `agent/sounds/sfx/<group>/`) and 37 CC0 music tracks in 18 moods, two or more per mood
   taking turns (`agent/sounds/music/<mood>/`), 26 MB. New moods: mystery, chase, epic, romantic, fairytale,
   underwater, medieval, pirate, western; lounge is now real jazz/bossa instead of the 8-bit loop. Adds `kiss`,

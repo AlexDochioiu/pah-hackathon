@@ -135,7 +135,7 @@ quote, the span its mouth flaps for) by that character's own voice. A quote with
   to `Soundboard.cue` at the same moment it would fire a gesture there, so sounds are synced to playout the same
   way and an interruption cancels the ones after the cut. The player starts after `ctx.connect()`; if it fails the
   show runs without sound.
-- Library (Nov 8): 76 sfx in 7 groups (`sfx/<group>/<name>.ogg`: weapons, impacts, movement, creatures, magic,
+- Library (Nov 7): 76 sfx in 7 groups (`sfx/<group>/<name>.ogg`: weapons, impacts, movement, creatures, magic,
   world, crowd) and 37 music tracks in 18 moods (`music/<mood>/*.ogg`, two or more per mood), 26 MB, all
   open-licensed (sfx CC0 from Kenney packs and Freesound; music CC0 from OpenGameArt and Freesound; per-file sources, authors and
   licences in `agent/sounds/LICENSES.md`). Mono 48 kHz Opus in Ogg; sfx normalised so their loudest 400 ms sit at
