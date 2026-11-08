@@ -21,6 +21,7 @@ HZ, ROWS = 20.0, 48
 PRESENT_Z = 0.25  # m above block_top_z: the claw points at the audience (+x) there, the pen standing up in it
 GRIP_AT = 0.3     # where along the pen (from the end nearer the arm) the first hand grips
 HAND_Z = 0.08     # m above block_top_z for the handover: top-down reach ends ~0.15 m up near the middle (Nov 8)
+CATCH_DROP = 0.03  # m the second hand closes below the level pen's height: the wand sags (owner, Nov 8: it missed)
 HAND_UP = 0.06    # m along the pen from the first hand's grip to where the second hand grips (fingers ~2 cm wide)
 ROLL = 0.6        # rad of wrist roll each way: the pen sways left and right like a wand (owner, Nov 8)
 
@@ -42,6 +43,15 @@ def find_pen(img):
     if best is None:
         sys.exit("no green pen in the overhead camera")
     return best[1:]
+
+
+def td(pnt, y):
+    """pick.top_down without its finger-direction flip: callers try both directions (one can need too much wrist roll)."""
+    y = np.asarray(y, float) / np.linalg.norm(y)
+    T = np.eye(4)
+    T[:3, :3] = np.column_stack([np.cross(y, [0, 0, -1.0]), y, [0, 0, -1.0]])
+    T[:3, 3] = pnt
+    return T
 
 
 def segment(q0, q1, g0, g1, hold=0.0):
@@ -93,7 +103,7 @@ def handover(iks, a_side, b_side, present, now, top):
                 T[:3, 3] = pnt
                 return T
             c = c / np.linalg.norm(c)
-            for T in (td(G + [0, 0, 0.05], c), td(G, c), td(G + [0, 0, 0.05], c),
+            for T in (td(G + [0, 0, 0.05], c), td(G - [0, 0, CATCH_DROP], c), td(G + [0, 0, 0.05], c),
                       top_down(np.array([0.30, 0.0, top_b + pick.HOVER]), flat),
                       top_down(np.array([0.30, 0.0, top_b - PEN_Z + 0.008]), flat)):
                 q = next((r for s0 in (q, np.zeros(6), q_up_b) if (r := solve(ik_b, s0, T, iters=1500)) is not None), None)
@@ -169,16 +179,22 @@ def main():
     ik = iks[side]
     home = yaml.safe_load((pathlib.Path.home() / ".dreamlabs/station.yaml").read_text())
     q_up = np.asarray(home["follower_l" if side == "left" else "follower_r"]["home"]) + np.array([0, 0.8, 1.2, 0, 0, 0])
-    plan, q = [("raise", q_up, 1.0, 0.0)], q_up
-    for name, z, g, hold in [("above", top + pick.HOVER, 1.0, 0.0), ("down", top - PEN_Z, 1.0, 0.2),
-                             ("grip", top - PEN_Z, 0.0, 0.5), ("lift", top + LIFT, 0.0, 0.0)]:
-        # a far pen is at the edge of the reach (Nov 8: 'above' failed at px 297,118, solved at 297,117): lower hovers
-        zs = {"lift": [z, top + 0.10, top + 0.06], "above": [z, top + 0.07, top + 0.05]}.get(name, [z])
-        q = next((r for zz in zs for seed in (q, q_up)
-                  if (r := solve(ik, seed, top_down(np.array([*xy, max(zz, floor)]), close), iters=1500)) is not None), None)
-        if q is None:
-            sys.exit(f"cannot reach '{name}' for the pen at px ({u:.0f},{v:.0f}): nothing planned")
-        plan.append((name, q, g, hold))
+    for c_try in (close, -close):  # Nov 8: a wand pointing at the other arm needed the other finger direction
+        plan, q = [("raise", q_up, 1.0, 0.0)], q_up
+        for name, z, g, hold in [("above", top + pick.HOVER, 1.0, 0.0), ("down", top - PEN_Z, 1.0, 0.2),
+                                 ("grip", top - PEN_Z, 0.0, 0.5), ("lift", top + LIFT, 0.0, 0.0)]:
+            # a far pen is at the edge of the reach (Nov 8: 'above' failed at px 297,118, solved at 297,117): lower hovers
+            zs = {"lift": [z, top + 0.10, top + 0.06], "above": [z, top + 0.07, top + 0.05]}.get(name, [z])
+            q = next((r for zz in zs for seed in (q, q_up)
+                      if (r := solve(ik, seed, td(np.array([*xy, max(zz, floor)]), c_try), iters=1500)) is not None), None)
+            if q is None:
+                break
+            plan.append((name, q, g, hold))
+        if q is not None:
+            close = c_try
+            break
+    if q is None:
+        sys.exit(f"cannot reach '{name}' for the pen at px ({u:.0f},{v:.0f}): nothing planned")
     prev = now[side]
     for name, qj, _, _ in plan[1:]:  # the joint-space path stays above the floor (the raise starts from anywhere)
         if min(ik.fk(prev + t * (qj - prev))[2, 3] for t in np.linspace(0, 1, 25)) < floor - 0.003:
@@ -187,7 +203,7 @@ def main():
     q_lift = q
     present = None  # the claw horizontal toward the audience (tool z = +x), fingers closing sideways: the pen stands up
     # tool x is the pen's axis; at present it is -ysign * z: pick ysign so the long end is up
-    up_sign = -1 if float(top_down(np.array([*xy, top]), close)[:2, 0] @ along) > 0 else 1
+    up_sign = -1 if float(td(np.array([*xy, top]), close)[:2, 0] @ along) > 0 else 1
     mid_y = -OFFSET[1] / 2 + shift[side][1]  # halfway between the two bases, in this arm's frame: the handover spot
     # where: the handover spot, above the pen, else in front of the arm's own base (Nov 8: a far-left pen had no pose)
     for px, py, dz in [(0.30, mid_y, 0.0), (0.30, mid_y, -0.05), (0.25, mid_y, 0.0), (xy[0], xy[1], 0.0), (0.30, 0.0, 0.0),
