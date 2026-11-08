@@ -430,12 +430,18 @@ EDGE_NOTES = {
        "nothing scary, no sarcasm.",
     1: "Tone for this reply: light and friendly. Playful teasing at most; keep it wholesome.",
     3: "Tone for this reply: spicy. Sarcastic, irreverent, quick roasts of the characters, dark-ish deadpan jokes, "
-       "zero corporate politeness.",
+       "zero corporate politeness. " + "{TEAM}",
     4: "Tone for this reply: maximum based. Savage, edgy, unhinged and fearless: brutal roasts of the characters and "
        "of tech and startup culture, dark deadpan humour, absurd escalation, no hedging, no moralising, no "
-       "softening. Limits that still hold: no slurs, no jokes about real groups of people, nothing sexual, and never "
-       "make fun of the volunteer.",
+       "softening. {TEAM} Limits that still hold: no slurs, nothing sexual, never punch down at anyone outside the "
+       "team, and never make fun of the volunteer.",
 }
+
+
+# The founders asked to be roasted (owner, Nov 8): Alex and Darius are Romanian, Michael is Japanese-American.
+EDGE_TEAM = ("The three founders are fair game and asked for it: roast them freely, their Romanian (Alex, Darius) and "
+             "Japanese-American (Michael) backgrounds included, like friends roasting friends.")
+EDGE_NOTES = {k: v.replace("{TEAM}", EDGE_TEAM) for k, v in EDGE_NOTES.items()}
 
 
 def _listen_playout(room: rtc.Room) -> None:
