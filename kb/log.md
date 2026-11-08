@@ -186,3 +186,7 @@
   (its grasps: 2.3 and −0.2 mm in our model; owner's call); joints ≤ 0.05 rad past a stop are clamped. `dream_run.py`
   now skips idle chunks, asks until the stage holds Lars and a chunk lifts him 40 mm, and leaves him held (eef
   head, the real run's task text, `--pick-s` 60).
+- Nov 7 night: submission written: root `README.md` rewritten (what it is, demo, mermaid architecture with the Dream-1 path,
+  how to run, safety model, built with, licences) and [submission.md](submission.md) (form text at 150 and 400 words,
+  how Dream-1 is used, challenges incl. the motor "loss communication" dropouts on Dream-1's long reaches, the
+  5-minute run sheet with roles and fallbacks, a what-ran-where table). Library: 75 solo gestures, 35 duets/ensembles.
