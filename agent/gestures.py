@@ -126,7 +126,7 @@ PROPS_TAG = "props"  # [props:left|right|both] -> POST /props on for that arm ([
 # own gestures); [props:none] -> off for both
 PICK_TAG, PLACE_TAG = "pick", "place"  # [pick:lars] / [place:lars] -> POST /play pick_lars / place_lars (its arm)
 DREAM_TAG = "dream"  # [dream:pick_lars] -> robot/dream_run.py: Dream-1 picks Lars through our checker, else pick_lars
-DREAM_TASKS = {"pick_lars": "pick up the green wand and hold it up"}  # Nov 8: the wand, not Lars (owner)
+DREAM_TASKS = {"pick_lars": "grab the green pen by its base, lift it up and hold it"}  # Nov 8: the wand, not Lars (owner)
 #  # Dream-1 task text (the real picks, Nov 7); other names: "pick_x" -> "pick x"
 DREAM_BUSY_S = 90.0  # no fills meanwhile (the preview opens in ~15 s, then up to --pick-s 60 s)
 # DREAM_ARGS (env): more dream_run.py options, e.g. "--replay robot/lars/dream_pick.json" for a rehearsal, no Dream call
