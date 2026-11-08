@@ -464,6 +464,9 @@ def run(a, stage, s, end):
             if reacted:
                 played = []  # the reaction ends at the stage pose: no way back needed
     went_back = bool(played)
+    t_busy = time.monotonic() + 20  # a stopped chunk may still be playing out: the way back waits for it (Nov 8: refused)
+    while played and arm and time.monotonic() < t_busy and str(stage.state()["arms"][arm].get("playing") or "").startswith("dream"):
+        time.sleep(0.3)
     if played:
         say("That's where we stop Dream-1's idea. Back the way we came.")
         back = None
