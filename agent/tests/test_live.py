@@ -18,6 +18,7 @@ class Session(Recorder):
     def __init__(self):
         super().__init__()
         self.handlers = {}
+        self.current_speech = None
 
     def on(self, name, fn):
         self.handlers.setdefault(name, []).append(fn)
@@ -68,20 +69,62 @@ def test_interruption_options_reach_livekit():
     assert resolved["min_duration"] == 0.6 and resolved["backchannel_boundary"] == (1.0, 1.0)  # the rest: LiveKit's
 
 
+class Speech:
+    """A SpeechHandle: done callbacks, and whether it ended interrupted."""
+
+    def __init__(self):
+        self.callbacks, self.interrupted = [], False
+
+    def add_done_callback(self, fn):
+        self.callbacks.append(fn)
+
+    def finish(self, interrupted=False):
+        self.interrupted = interrupted
+        for fn in self.callbacks:
+            fn(self)
+
+
+def start_speaking(session):
+    speech = session.current_speech = Speech()
+    session.emit("speech_created", speech_handle=speech)
+    session.emit("agent_state_changed", old_state="thinking", new_state="speaking")
+    return speech
+
+
 async def test_noise_alone_does_not_freeze_the_arms():
     session, stage, director, hushed = live_setup()
-    session.emit("agent_state_changed", old_state="listening", new_state="speaking")
+    start_speaking(session)
     session.emit("user_state_changed", old_state="listening", new_state="speaking")  # VAD heard something
     session.emit("user_state_changed", old_state="speaking", new_state="listening")
     assert stage.sent == [] and hushed == []  # the voice never stopped for it: the arms keep acting
 
 
-async def test_a_cut_in_freezes_and_hushes_like_a_press():
+async def test_a_paused_voice_keeps_the_arms_acting_until_it_resumes():
     session, stage, director, hushed = live_setup()
-    session.emit("agent_state_changed", old_state="thinking", new_state="speaking")
+    speech = start_speaking(session)
+    director.continue_pending = True  # the scene's [next] was already heard
+    session.emit("user_state_changed", old_state="listening", new_state="speaking")
+    session.emit("agent_state_changed", old_state="speaking", new_state="listening")  # LiveKit paused the voice
+    session.emit("user_state_changed", old_state="speaking", new_state="listening")  # only noise: no words
+    await asyncio.sleep(0.15)
+    assert stage.sent == [] and hushed == []  # no freeze, no idle, no next scene while paused
+    assert "reply" not in session.calls and director.continue_pending
+    session.emit("agent_state_changed", old_state="listening", new_state="speaking")  # false interruption: resumed
+    assert not director.holding
+    speech.finish()
+    session.emit("agent_state_changed", old_state="speaking", new_state="listening")
+    await asyncio.sleep(0.15)
+    assert stage.sent == [] and hushed == [] and "reply" in session.calls  # the story carries on to its next scene
+
+
+async def test_a_real_cut_in_freezes_and_hushes_like_a_press():
+    session, stage, director, hushed = live_setup()
+    speech = start_speaking(session)
     director.continue_pending = True
     session.emit("user_state_changed", old_state="listening", new_state="speaking")
-    session.emit("agent_state_changed", old_state="speaking", new_state="listening")  # LiveKit paused or cut the voice
+    session.emit("agent_state_changed", old_state="speaking", new_state="listening")  # paused first
+    assert stage.sent == []
+    speech.finish(interrupted=True)  # the listener's words came: LiveKit cancels the paused speech
     assert stage.sent == ["/freeze"] and hushed == [1] and not director.continue_pending
     await asyncio.sleep(0.15)
     assert stage.sent == ["/freeze"]  # no idling while the listener talks
@@ -90,10 +133,21 @@ async def test_a_cut_in_freezes_and_hushes_like_a_press():
     assert stage.sent == ["/freeze", "/idle"]
 
 
-async def test_the_end_of_a_line_is_not_a_cut_in():
+async def test_a_cut_in_without_a_pause_freezes_too():  # LIVE_RESUME=0: LiveKit cancels at once
     session, stage, director, hushed = live_setup()
-    session.emit("agent_state_changed", old_state="thinking", new_state="speaking")
+    speech = start_speaking(session)
+    session.emit("user_state_changed", old_state="listening", new_state="speaking")
+    speech.finish(interrupted=True)
+    assert stage.sent == ["/freeze"] and hushed == [1]
+
+
+async def test_the_end_of_a_line_or_an_unplayed_reply_is_not_a_cut_in():
+    session, stage, director, hushed = live_setup()
+    start_speaking(session).finish()
     session.emit("agent_state_changed", old_state="speaking", new_state="listening")
+    unplayed = Speech()
+    session.emit("speech_created", speech_handle=unplayed)  # a reply discarded before it was heard
+    unplayed.finish(interrupted=True)
     assert "/freeze" not in stage.sent and hushed == []
 
 
@@ -173,3 +227,69 @@ async def test_stop_sfx_keeps_the_music():
     music, sfx = board.player.handles
     board.stop_sfx()
     assert sfx.stopped and not music.stopped and board.music_name
+
+
+# --- end to end through a real AgentSession (LiveKit's fakes): pause, resume, cut ---------------------------------
+
+async def run_live(actions, monkeypatch):
+    from lkfakes.fake_session import create_session, run_session
+    from storyteller import Storyteller
+    from gestures import strip_tags_for_tts
+    from test_session import FakeStage
+
+    monkeypatch.setenv("LIVE_INTERRUPT_MODE", "vad")  # adaptive needs LiveKit Cloud
+    monkeypatch.setenv("LIVE_MIN_INTERRUPT_WORDS", "0")  # so a wordless noise can pause the voice
+    session = create_session(actions, can_pause_audio=True, turn_handling={"interruption": interruption_options()},
+                             extra_kwargs={"tts_text_transforms": [strip_tags_for_tts],
+                                           "use_tts_aligned_transcript": False})
+    session.tts.update_options(fake_audio_duration=4.0)
+    stage, hushed, states = FakeStage(), [], []
+    director = Director(session, stage, idle_after_s=0.3, continue_after_s=0.3)
+    sync = GestureSync(GestureBook(DEFAULT_GESTURES), stage.play, director.request_continue)
+    session.on("agent_state_changed", lambda ev: states.append((time.time(), ev.new_state)))
+    session.on("agent_false_interruption", lambda ev: states.append((time.time(), f"false_interruption:{ev.resumed}")))
+    original_start = session.start
+
+    async def start(agent, **kw):  # as storyteller.py: the hook after start(), then the live stage direction
+        await original_start(agent, **kw)
+        sync.install(session.output)
+        LiveTurns(session, director, lambda: hushed.append(time.time()))
+    session.start = start
+    t0 = await run_session(session, Storyteller(instructions="test"), drain_delay=8)
+    return t0, stage, hushed, states
+
+
+async def test_live_false_interruption_resumes_with_the_arms_in_sync(monkeypatch):
+    from lkfakes.fake_session import FakeActions
+    from test_session import STORY
+    actions = FakeActions()
+    actions.add_user_speech(0.5, 1.5, "tell me a story")
+    actions.add_llm(STORY)
+    actions.add_user_speech(3.2, 4.2, "")  # a noise mid-story: the voice pauses, no words come, it resumes
+    t0, stage, hushed, states = await run_live(actions, monkeypatch)
+    print([(round(t - t0, 2), s) for t, s in states], [(round(t - t0, 2), k, w) for t, k, w in stage.events])
+
+    assert any(s == "false_interruption:True" for _, s in states)  # LiveKit did pause and resume the voice
+    kinds = [(k, w) for _, k, w in stage.events]
+    assert ("freeze", "") not in kinds and hushed == []  # the arms were never stopped
+    roar = [t for t, k, w in stage.events if w == "right:roar"]
+    resumed = [t for t, s in states if s == "speaking"][1]
+    assert roar and roar[0] > resumed  # the tag after the pause fired with the resumed voice, not before
+
+
+async def test_live_real_interruption_freezes_once_the_speech_is_cut(monkeypatch):
+    from lkfakes.fake_session import FakeActions
+    from test_session import STORY
+    actions = FakeActions()
+    actions.add_user_speech(0.5, 1.5, "tell me a story")
+    actions.add_llm(STORY)
+    actions.add_user_speech(3.2, 4.2, "make the dragon friendly")  # real words: the turn commits, the speech is cut
+    actions.add_llm("Oh, a friendly dragon then!")
+    t0, stage, hushed, states = await run_live(actions, monkeypatch)
+    print([(round(t - t0, 2), s) for t, s in states], [(round(t - t0, 2), k, w) for t, k, w in stage.events])
+
+    kinds = [(k, w) for _, k, w in stage.events]
+    assert ("play", "left:wave") in kinds and ("play", "right:roar") not in kinds
+    freezes = [t - t0 for t, k, _ in stage.events if k == "freeze"]
+    assert len(freezes) == 1 and len(hushed) == 1
+    assert freezes[0] > 3.2 + 0.6  # not at the first noise: once the interruption was real

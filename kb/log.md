@@ -157,3 +157,6 @@
   placement (calib.json) and sliding fingers; it matches `show.py` to 0.04 mm (arm) and 2.8 mm (fingertips) over
   200 random poses. Pipeline latency p50 38 ms / p95 62 ms; real arms → twin ~0.1 s. A ghost endpoint (`POST :8796/ghost`)
   replays a trajectory on dimos's preview robot. `--mcp` serves play/duet/freeze/rest skills (kin stage only).
+- Nov 7 ~20:30: live chat freezes the arms only when an interruption is real (the heard speech ends interrupted),
+  not when LiveKit merely pauses the voice: after a false interruption the voice resumes with the arms still acting
+  and its tags in sync (the owner's "always motion" rule). A turn between scenes no longer freezes idling arms.

@@ -229,9 +229,13 @@ kept in the browser (`localStorage.storyMode`).
 - Agent (`agent/live.py`, `live.is_live`): audio input on, `inference.TurnDetector()`, silero VAD (LiveKit's
   default `inference.VAD`, built into livekit-agents 1.8: no plugin needed), noise cancellation as before, and the
   interruption knobs below. `live.LiveTurns` replaces the director's freeze-on-any-VAD-speech
-  (`Director.freeze_on_speech = False`): the arms freeze, the pending next scene drops and the sound effects stop
-  (`hush`) when the voice actually stops for the listener (agent state speaking → listening while the user speaks),
-  the same as a push-to-talk press. A final transcript between scenes also drops the pending next scene.
+  (`Director.freeze_on_speech = False`). The arms freeze, the pending next scene drops and the sound effects stop
+  (`hush`) only once the interruption is real: the speech handle the listener was hearing ends `interrupted`
+  (`speech_created` → done callback), the same as a push-to-talk press. While LiveKit only pauses the voice (agent
+  state speaking → listening while the user speaks), nothing freezes: the current gesture plays on, and the stage
+  holds (`Director.holding`: no idle, no next scene) until the voice resumes or is cut. On a resume the tags carry
+  on with the voice. A final transcript between scenes drops the pending next scene without freezing the idling
+  arms (`Director.drop_next_scene`).
 - Knobs (agent/.env, read per session):
 
   | Env | Default | LiveKit's | What |
@@ -241,8 +245,10 @@ kept in the browser (`localStorage.storyMode`).
   | `LIVE_MIN_INTERRUPT_WORDS` | 2 | 0 | transcribed words needed too; a one-word "stop" doesn't cut in (0 = off) |
   | `LIVE_RESUME` | 1 | 1 | a cut-in that turns out to be noise: the voice resumes where it paused |
   | `LIVE_FALSE_INTERRUPT_S` | 2.0 | 2.0 | silence after a cut-in with no words before it counts as noise |
-- A false interruption (noise that paused the voice) still froze the arms and stopped the sfx; the voice resumes
-  and the next tags fire, but the frozen gesture doesn't finish.
+- Tested end to end on LiveKit's fakes (`tests/test_live.py`): a wordless noise mid-story pauses the voice
+  (3.8 s), it resumes (6.7 s) with no freeze and no idle in between, and the next tag fires after the resume; real
+  words pause it, then freeze the arms once when the turn commits and the speech is cut (~0.6 s later).
+  With `LIVE_MIN_INTERRUPT_WORDS` ≥ 1 a wordless noise doesn't even pause the voice.
 - Checked Nov 7 (fake stage `--backend kin`, headless Chrome with a looping recorded sentence as the mic): the
   toggle, the meter, the turn detector (sentence heard, reply), and an interruption every loop mid-reply ("live:
   the listener cut in" in the worker log). Not checkable headless: echo from a real speaker, a noisy room, how the

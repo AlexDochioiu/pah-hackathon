@@ -39,6 +39,11 @@ class Director:
         """A show cue (show.py): the arms freeze and a pending next scene is dropped, as when the listener talks."""
         self._listener_cut_in()
 
+    def drop_next_scene(self) -> None:
+        """Live chat: the listener said something between scenes; their reply comes next, not the next scene."""
+        self.continue_pending = False
+        self._reschedule()
+
     def release(self) -> None:
         self.holding = False
         self._reschedule()

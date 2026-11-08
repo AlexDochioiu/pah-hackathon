@@ -43,23 +43,48 @@ def interruption_options() -> InterruptionOptions:
 
 
 class LiveTurns:
-    """Stage direction for live chat. The arms freeze and the sound effects stop when the listener actually cuts
-    in (LiveKit stops or pauses the voice for them), as a push-to-talk press does, not on every noise the VAD
-    hears. A turn heard between scenes drops the pending next scene, as a press does."""
+    """Stage direction for live chat. The arms freeze and the sound effects stop only once an interruption is
+    real: the speech the listener was hearing ends interrupted, as after a push-to-talk press. While LiveKit only
+    pauses the voice (it may turn out to be noise and resume), the arms keep acting and the stage neither idles nor
+    moves on; on a resume the voice and its tags carry on together. A turn heard between scenes drops the pending
+    next scene (without freezing the idling arms)."""
 
     def __init__(self, session: Any, director: Any, hush: Callable[[], None]) -> None:
-        self._director, self._hush = director, hush
+        self._session, self._director, self._hush = session, director, hush
+        self._heard: Any = None  # the speech the listener has started hearing (playing or paused)
+        self._paused = False
         director.freeze_on_speech = False
+        session.on("speech_created", lambda ev: ev.speech_handle.add_done_callback(self._on_speech_done))
         session.on("agent_state_changed", self._on_agent_state)
         session.on("user_input_transcribed", self._on_transcript)
 
     def _on_agent_state(self, ev: Any) -> None:
         # the Director's handlers ran first (registered earlier), so its user_state is current
-        if ev.old_state == "speaking" and ev.new_state == "listening" and self._director.user_state == "speaking":
+        if ev.new_state == "speaking":
+            self._heard = self._session.current_speech
+            self._unpause()  # a false interruption resumed (or a new reply)
+        elif ev.old_state == "speaking" and self._director.user_state == "speaking" and not self._paused:
+            # LiveKit paused the voice for the listener: hold the stage as it is (no idle, no next scene), no freeze
+            logger.info("live: voice paused for the listener")
+            self._paused = True
+            self._director.holding = True
+
+    def _unpause(self) -> None:
+        if self._paused:
+            self._paused = False
+            self._director.release()
+
+    def _on_speech_done(self, handle: Any) -> None:
+        if handle is not self._heard:
+            return  # never played (a discarded preemptive reply...): the arms have nothing of it to stop
+        self._heard = None
+        if handle.interrupted:
             logger.info("live: the listener cut in")
             self._director.cut()
             self._hush()
+        self._unpause()
 
     def _on_transcript(self, ev: Any) -> None:
-        if ev.is_final and ev.transcript.strip() and self._director.agent_state != "speaking":
-            self._director.cut()
+        # no freeze here: between scenes the arms are idling, and they should keep moving
+        if ev.is_final and ev.transcript.strip() and self._director.agent_state != "speaking" and not self._paused:
+            self._director.drop_next_scene()
