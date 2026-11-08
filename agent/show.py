@@ -517,7 +517,8 @@ class ShowRunner:
         quips = [q.strip() for q in self.script.config.get("DREAM_OOPS", "").split("|") if q.strip()]
         if self.on_sound and msg.get("sfx"):
             self.on_sound(SFX_TAG, str(msg["sfx"]))
-        self._dream_say(random.choice(quips) if quips else str(msg.get("text", "")))
+        # the quip, then what went wrong as a joke (owner, Nov 8: a pick never tried must be acknowledged)
+        self._dream_say(" ".join(x for x in ((random.choice(quips) if quips else ""), str(msg.get("text", ""))) if x))
 
     def _finish(self, act: Act, gen: int) -> None:
         if gen != self._gen:

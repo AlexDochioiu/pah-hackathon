@@ -66,7 +66,8 @@ EMPTY_GRIP = 0.07   # measured gripper (0 closed .. 1 open) below this while "ho
 REACTION = "facepalm"   # the arm's "ah, damn it" after a miss: an existing gesture (head into the hand, shaking)
 OOPS_SFX = "sad_trombone"   # agent/sounds/sfx/crowd, CC0
 OOPS_LINES = {"empty_grip": "It grabbed thin air. Very magical.", "dropped": "And it dropped my wand. Typical.",
-              "not_lifted": "Close. The wand stays put. It's shy.", "timeout": "Dream-1 ran out of time. Brave try."}
+              "not_lifted": "Close. The wand stays put. It's shy.", "timeout": "Dream-1 ran out of time. Brave try.",
+              "no_plan": "Dream-1 took one look at the table and called in sick. Honestly? Relatable."}
 PATTER = ["Every move you see is Dream-1's own idea, worked out from the cameras, right now.",
           "It's looking for the green pen. Green, like me. Easy mistake.",
           "Robots move slowly when they're thinking. So do I, before coffee.",
@@ -275,6 +276,7 @@ def main():
             break
         time.sleep(0.2)
     if s.get("fault") or busy or any(s["props"].values()):
+        out(event="oops", kind="no_plan", reaction=REACTION, sfx=OOPS_SFX, text=OOPS_LINES["no_plan"])  # owner: say it
         out(event="done", ok=False, held=False, dream_chunks=0, fallback=False,
             reason=f"stage not ready: fault {s.get('fault')}, busy {busy}, props {s['props']}")
         return
@@ -464,6 +466,8 @@ def run(a, stage, s, end):
     finally:
         if pre:
             pre.close()  # the cameras free again before anything else moves
+    if missed is None and reason and ("cam_pick" in reason or "stage not ready" in reason):  # never even tried (owner: joke)
+        missed = "no_plan"
     if missed is None and reason and reason.startswith("no pick"):  # Dream-1's own time or chunks ran out
         missed = "not_lifted" if held else "timeout"
     n_played = len(played)
