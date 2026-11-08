@@ -69,8 +69,10 @@ def main():
     plan, q = [("raise", q_up, 1.0, 0.0)], q_up
     for name, z, g, hold in [("above", top + pick.HOVER, 1.0, 0.0), ("down", top - PEN_Z, 1.0, 0.2),
                              ("grip", top - PEN_Z, 0.0, 0.5), ("lift", top + LIFT, 0.0, 0.0)]:
-        zs = [z] if name != "lift" else [z, top + 0.10, top + 0.06]  # the lift goes as high as the arm reaches there
-        q = next((r for zz in zs if (r := solve(ik, q, top_down(np.array([*xy, max(zz, floor)]), close))) is not None), None)
+        # a far pen is at the edge of the reach (Nov 8: 'above' failed at px 297,118, solved at 297,117): lower hovers
+        zs = {"lift": [z, top + 0.10, top + 0.06], "above": [z, top + 0.07, top + 0.05]}.get(name, [z])
+        q = next((r for zz in zs for seed in (q, q_up)
+                  if (r := solve(ik, seed, top_down(np.array([*xy, max(zz, floor)]), close), iters=1500)) is not None), None)
         if q is None:
             sys.exit(f"cannot reach '{name}' for the pen at px ({u:.0f},{v:.0f}): nothing planned")
         plan.append((name, q, g, hold))
