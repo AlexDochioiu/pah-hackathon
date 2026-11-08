@@ -41,7 +41,7 @@ LARS_PUT_DOWN = place:lars | right:nod
 # over LARS_PICK). About 90 s: its own lines and the patter fill it, so act 2 runs well over budget.
 # A miss: the arm facepalms, a sad trombone, one DREAM_OOPS quip, then our own pick_lars. Needs someone at the e-stop.
 DREAM_PICK = off
-DREAM_ARGS = --raw --no-fallback --speed 0.5 --exec 16 --pick-s 90 --patter 8   # raw: Dream-1 unchecked, its own timing at half speed (like dreamcli's ~/dream-test.yaml); the arms stay ours
+DREAM_ARGS = --no-fallback --speed 0.5 --pick-s 90 --patter 8   # the 11:39 setup that picked the pen: checked, whole chunks retimed slow (raw/--exec 16 never grabbed)
 DREAM_OOPS = Ah, frog-nabbit. | Nobody saw that. | That was a practice grab.
 # The "Built with" card: the /show page shows it during act BUILT_WITH_ACT. One line per tool,
 # "tool: how we use it". Add a sponsor's tool as the next BUILT_n. List only what the code really uses.

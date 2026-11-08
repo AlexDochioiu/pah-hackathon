@@ -273,11 +273,6 @@ def main():
             reason=f"stage not ready: fault {s.get('fault')}, busy {busy}, props {s['props']}")
         return
     say("Dream-1 is looking for it now, with three cameras.")
-    # dreamcli starts Dream-1 from home, the folded rest; from a show pose it froze, gripper never moving (Nov 8)
-    code, r = stage.call("/rest", {"speed": 1.0})
-    out(event="info", rest=code, reply=r)
-    time.sleep(min(8.0, float(r.get("duration_s", 4.0)) if code == 200 else 0.0) + 0.5)
-    s = stage.state()
     stop = threading.Event()
     if a.patter > 0:
         threading.Thread(target=patter, args=(a.patter, stop), daemon=True).start()
