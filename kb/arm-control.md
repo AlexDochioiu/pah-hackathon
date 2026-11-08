@@ -42,7 +42,8 @@ against the lean-back rule before it starts. Joints 4–6 run at a low gain (kp=
   any CAN access, so `arms.open_arms(station, energize=True, sim=True)` is safe to run while others use the arms.
 
 ## Safety
-- A human stands at the e-stop for every real-arm run. Tell them before each run starts.
+- A human stands at the e-stop for every real-arm run. Tell them before each run starts. The one exception is
+  `robot/lars.py --unattended` ([AGENTS.md](../AGENTS.md)).
 - Don't run anything on the arms while someone else is using the station.
 - Never move the arms' mass behind the bases: the table tips (seen Nov 7). `show.Checker` enforces it (each arm's
   centre of mass stays ≥ stage − 2 cm in x; [gestures.md](gestures.md#safety-checker-showchecker-showload_library)).

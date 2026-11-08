@@ -7,6 +7,10 @@ how we drive the arms and how we calibrated them.
 ## Rules that keep people and hardware safe
 - **Never move the real arms unless a human has confirmed someone is standing at the e-stop.** Plan and check
   every motion in simulation first (see [kb/arm-control.md](kb/arm-control.md)).
+  - One exception, approved by the owner on Nov 7 evening: `robot/lars.py` (the Lars doll pick, place-back and
+    its demo recording for the Dream-1 fine-tune) may run with nobody at the e-stop, behind its `--unattended`
+    flag. It keeps its 0.3 rad/s cap near the table, its pre-move snapshots and its fold-to-rest on tracking error,
+    a miss or a drop. Nothing else that comes close to the table (death collapse, fist bang) runs unattended.
 - Only one program may drive the arms at a time (the station lock). Don't kill another team member's program
   without asking.
 - Never commit secrets: the station login, `DREAM_API_KEY`, LiveKit keys. They live in `.env` files (gitignored)

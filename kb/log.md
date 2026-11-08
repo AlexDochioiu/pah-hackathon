@@ -80,3 +80,5 @@
   `/props` switches to the old shallow turn and checks with props; 5 hand-contact ensembles (clap, rub_hands, hug,
   pull_rope, heart). Next batch: lower working height, limp death + revive, table bang, stirring, Italian hands,
   reworks of chomp/explosion/gate/once_upon/row_boat/shrug/car_ride/quick_draw, hat on the head, gun recoil.
+- Owner OK (Nov 7 evening): the Lars pick and its demo recording may run unattended (`lars.py --unattended`);
+  nothing else near the table does. Dream-1 fine-tune recipe from our own scripted demos added to dream-1.md.
