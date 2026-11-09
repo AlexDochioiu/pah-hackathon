@@ -38,6 +38,9 @@ lifted without that stop: a miss. A lift is RISE_MM. A miss, a refusal or a Drea
 all end in the oops line (kinds as below, plus refused), the way back and the facepalm. No handover plan: the same
 arm rolls it and puts it back the way Dream-1 came (checked).
 
+--cam-fallback (Plan B): after a miss, refusal or error whose way back finished, the joke and the facepalm, then the
+--cam run itself (cam_fallback). If Plan B misses too: its own oops line, way back and facepalm, then done.
+
 --patter S: while nothing has been said for S s (the preview opening, still chunks, a slow chunk playing), a filler
 line goes out (PATTER), so a show never has dead air. --hold: the fallback plays pick_lars only, so it ends holding
 Lars like a Dream-1 pick (the caller puts him back with place_lars).

@@ -30,8 +30,9 @@ facepalm at once → fallback); `agent/tests/test_dream_run.py` (stub stage) and
 `EMPTY_GRIP` needs a check on the real arms.
 
 ## Act 2's wand: Dream-1 picks, our IK hands over (`--handover`, branch `dream-labs-pick`, Nov 8, untested)
-`DREAM_ARGS = --handover --no-fallback --speed 0.5 --pick-s 90 --patter 8` (the `--cam` line stays in `agent/show.md`
-as a comment to switch back). Untested on the real arms and on the kin stage: nothing in it has run yet.
+In `agent/show.md` only as a comment: `# DREAM_ARGS = --handover --cam-fallback --no-fallback --speed 0.5 --pick-s 90
+--patter 8`. The active line stays `--cam --raw ...` (the live demo, owner). New flags go on the commented line only.
+Untested on the real arms and on the kin stage: nothing in it has run yet.
 - **Why split it.** Dream-1 has picked the green pen (drun3, and the checked 0.5-speed path at 11:39), but never a
   handover: dreamcli's hand-over run (drun4) dropped motors, the morning's zero-shot picks missed 4 of 4, and our
   path plays one arm's chunks at a time, with the stage's 15 cm arm gap that a handover breaks (raw would drop every
@@ -54,14 +55,36 @@ as a comment to switch back). Untested on the real arms and on the kin stage: no
 - **No handover** when the grasp point is over 2.5 cm from the pen in the snap (it was pushed, or that was something
   else), the pen is more than ~20° off the claw's x (`AXIS_COS`), the longer end is too short, or there's no pose at the
   handover spot. Then the same arm rolls it, comes back to where Dream-1 left it, and goes back along Dream-1's chunks
-  (checked: the reversed close opens the gripper where it picked). No plan at all: the 2.6 s wand wiggle, then the same.
+  (checked: the reversed close opens the gripper where it picked). No plan at all: straight to that way back (no raw
+  wand wiggle: the arm can be only 3 cm above the table).
 - **A miss** (`empty_grip`, `dropped`, `not_lifted`, `timeout`), a refusal by our checker (`refused`, new) or a
   Dream error (`timeout` mid-run, `no_plan` before the first chunk) all give the oops line, then the way back and the
   facepalm. With the pen still in the claw, the way back comes first (it puts the pen down), then the facepalm.
 - **Patter:** after the lift it stops saying the moves are Dream-1's (`OURS_PATTER`, then `HAND_PATTER` during a
   handover).
+- **`--cam-fallback` (Plan B):** after a miss, refusal or Dream error whose way back finished (the pen on the table,
+  or never lifted), the oops joke and the facepalm play first, then "Plan B: our own code, same pen." and the `--cam`
+  run itself (`--cam --raw`, no prop, fresh snap, cam_pick's pick, present, roll, handover, place). It waits up to
+  20 s for both arms to be free; a fault, a busy arm or a prop held means no Plan B (the done line says why). The way
+  back stopping halfway ("I'm stuck halfway") also means no Plan B. Plan B's own lines don't credit Dream-1
+  (`CAM_PATTER`, "The left arm, then."). If Plan B misses too: its own oops (`FALLBACK_OOPS`, refusals and errors
+  included), its way back, a second facepalm, done. Its done line is the run's last.
+- **Act length, estimated from cam_pick's segment times at `--speed 0.5`, not measured:** Plan B adds about 60-90 s
+  (snap and IK planning 10-20 s, pick ~9 s, present and rolls ~11 s, handover and place ~31 s, piece overhead
+  ~8 s), plus the facepalm (~4 s) before it. A Dream-1 attempt that runs out its `--pick-s 90` and then needs Plan B
+  makes act 2 about 3-3.5 minutes; a lower `--pick-s` (e.g. 60) trims the worst case, but Dream-1 needs ~15 s just
+  to open its cameras.
 - Knobs to check on the real arms: `EMPTY_GRIP` and `GRIP_BLOCK` against a real close on the pen (about 1 cm
   thick) and on air, `GRASP_TOL`, `AXIS_COS`.
+- **Review (Nov 8, code read only, nothing run).** Fixed: the grasp row was computed on the live `--cam --raw` path
+  too (now `--handover` only: that path runs main's code exactly); the raw wand wiggle could run 3 cm above the table
+  when `dream_hand.py` had no plan; with `--cam-fallback`, a refusal or a Dream error now gets its joke before Plan B.
+  Checked and fine: the frames (shared = arm frame − `OFFSET` for the right arm, as `handover()`), the handover spot
+  (`mid_y`), the long-end sign at present (`ysign = −long_sign`, matching `handover()`'s own `long_sign`), ssh
+  failures and timeouts (`station_json` gives `None`, so no pen means no handover and no plan means the way back),
+  `None` grasp or pen. Left as is: the stage dropping off the network mid-run crashes `dream_run.py` as it does on
+  main (the arm stops where its last piece ended; no prop is marked held); the show's `DREAM_OOPS` quip is random, so
+  Plan B's miss can repeat the first quip.
 
 ## Real picks with dreamcli (Nov 7, ~21:45, the owner at the e-stop)
 After the cameras were reseated (all three on USB 3.2), `dream.check` passed (a borderline 1.0° lag on the left
