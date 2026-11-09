@@ -43,8 +43,9 @@ LARS_PUT_DOWN = place:lars | right:nod
 DREAM_PICK = off
 DREAM_ARGS = --cam --raw --no-fallback --speed 0.5 --pick-s 90 --patter 8   # --cam: no Dream Labs call; a fresh overhead snap finds the pen, our IK picks it (owner, Nov 8: the demo runs this)
 # Dream-1 version (untested on the arms; needs robot/dream_hand.py copied to the station first): Dream-1 (joint head)
-# picks the pen through our checker, then our IK presents it and hands it to the other arm:
-# DREAM_ARGS = --handover --no-fallback --speed 0.5 --pick-s 90 --patter 8
+# picks the pen through our checker, then our IK presents it and hands it to the other arm. --cam-fallback: after a
+# Dream-1 miss (its joke first), the --cam pick above does the act instead (adds ~60-90 s, estimated):
+# DREAM_ARGS = --handover --cam-fallback --no-fallback --speed 0.5 --pick-s 90 --patter 8
 DREAM_OOPS = Ah, frog-nabbit. | Nobody saw that. | That was a practice grab.
 # The "Built with" card: the /show page shows it during act BUILT_WITH_ACT. One line per tool,
 # "tool: how we use it". Add a sponsor's tool as the next BUILT_n. List only what the code really uses.
