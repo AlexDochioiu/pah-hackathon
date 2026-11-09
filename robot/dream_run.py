@@ -577,7 +577,7 @@ def run(a, stage, s, end, fb=False):
         missed = "no_plan"
     if missed is None and reason and reason.startswith("no pick"):  # Dream-1's own time or chunks ran out
         missed = "not_lifted" if held else "timeout"
-    if (a.handover or fb) and reason and missed is None:  # our checker said no, or Dream-1 broke off: a joke all the same
+    if (a.handover or a.cam_fallback or fb) and reason and missed is None:  # our checker said no, or Dream-1 broke off: a joke all the same
         missed = "refused" if refused else "timeout" if played else "no_plan"
     n_played = len(played)
     out(event="info", dream_reason=reason, played=len(played), held=held, lifted=lifted, missed=missed,
