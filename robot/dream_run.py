@@ -516,7 +516,8 @@ def run(a, stage, s, end, fb=False):
                     low = min(low, r.get("tip_mm", low))
                     if not held:
                         held = True
-                        grasp = c["q"][grasp_row(c["g"])]
+                        if a.handover:  # (the live --cam --raw path computes nothing new here)
+                            grasp = c["q"][grasp_row(c["g"])]
                         say("Got it!")
                 else:
                     held, low = False, float("inf")
