@@ -38,6 +38,9 @@ lifted without that stop: a miss. A lift is RISE_MM. A miss, a refusal or a Drea
 all end in the oops line (kinds as below, plus refused), the way back and the facepalm. No handover plan: the same
 arm rolls it and puts it back the way Dream-1 came (checked).
 
+--cam-fallback (Plan B): after a miss, refusal or error whose way back finished, the joke and the facepalm, then the
+--cam run itself (cam_fallback). If Plan B misses too: its own oops line, way back and facepalm, then done.
+
 --patter S: while nothing has been said for S s (the preview opening, still chunks, a slow chunk playing), a filler
 line goes out (PATTER), so a show never has dead air. --hold: the fallback plays pick_lars only, so it ends holding
 Lars like a Dream-1 pick (the caller puts him back with place_lars).
@@ -96,6 +99,10 @@ OURS_PATTER = ["Dream-1 did the grab. Our own code takes it from here."]  # --ha
 HAND_PATTER = ["Left hand, meet right hand. Be nice.",                   # own idea" now; HAND_PATTER while it hands over
                "Hands are complicated. I wouldn't know, I'm a frog.",
                "Almost there. Nobody sneeze."]
+CAM_PATTER = ["Plan B: the overhead camera finds the pen, and plain old geometry does the rest.",  # --cam-fallback
+              "No AI this time. Just maths. Very romantic.", *HAND_PATTER]
+FALLBACK_OOPS = "Plan B didn't work either. Let's call it modern art."  # the --cam-fallback run missing too
+FALLBACK_WAIT_S = 20.0  # s the --cam-fallback waits for both arms to be free (a facepalm still playing)
 _lock, _said = threading.Lock(), [time.monotonic()]
 _lines = [PATTER]  # the patter's lines: --handover swaps in HAND_PATTER once our own code takes over
 
@@ -300,6 +307,8 @@ def main():
                     "snap and plans the pick with our IK (robot/cam_pick.py), played like Dream-1's chunks")
     ap.add_argument("--handover", action="store_true", help="Dream-1 picks the pen (checked chunks, no Lars prop), then "
                     "our IK presents it, rolls it and hands it to the other arm (robot/dream_hand.py on the station)")
+    ap.add_argument("--cam-fallback", action="store_true", help="after a Dream-1 miss, refusal or error (the pen back "
+                    "on the table, or never lifted): the oops line, then --cam's camera pick, present, handover and place")
     ap.add_argument("--replay", help="a JSON list of chunk events (dream_preview.py output) instead of the station")
     ap.add_argument("--fake", action="store_true", help="the station preview makes up a reach (no Dream call)")
     ap.add_argument("--no-fallback", action="store_true")
@@ -307,8 +316,8 @@ def main():
     ap.add_argument("--patter", type=float, default=0.0, help="s of silence before a filler line (0: none)")
     ap.add_argument("--hold", action="store_true", help="the fallback only picks Lars up (ends held, like Dream-1)")
     a = ap.parse_args()
-    if a.cam and a.handover:
-        ap.error("--cam or --handover, not both")
+    if a.cam and (a.handover or a.cam_fallback):
+        ap.error("--cam is the camera pick itself: no --handover or --cam-fallback with it")
     a.chunks = max(1, min(a.chunks, MAX_CHUNKS))
     stage, t0 = Stage(a.stage), time.monotonic()
     end = t0 + a.pick_s
@@ -407,7 +416,34 @@ def cli(a, stage, s, end):
     out(event="done", ok=True, held=False, arm=None, dream_chunks=0, fallback=False, reason=None, missed=None)
 
 
-def run(a, stage, s, end):
+def cam_fallback(a, stage, reason, missed, n_played, latency):
+    """--cam-fallback, after a Dream-1 miss whose way back finished (the pen on the table, nothing held): --cam's run
+    (snap, cam_pick.py's plan, raw like the live demo's --cam --raw) does the act instead. Its done line is the last;
+    a miss in it gets its own oops line (FALLBACK_OOPS) and the way back, and it never takes a stage prop (carry
+    None). Arms not free, a fault or a prop held: no fallback, the done line says why."""
+    t0 = time.monotonic()
+    while True:  # the facepalm may still be playing
+        st = stage.state()
+        busy = [x for x in ARMS if st["arms"][x].get("playing") not in (None, "idle_breathe") or st["arms"][x].get("queue")]
+        if not busy or st.get("fault") or time.monotonic() - t0 > FALLBACK_WAIT_S:
+            break
+        time.sleep(0.2)
+    if st.get("fault") or busy or any(st["props"].values()):
+        out(event="done", ok=False, held=any(st["props"].values()), dream_chunks=n_played, fallback=False,
+            reason=f"{reason}; no camera fallback: fault {st.get('fault')}, busy {busy}, props {st['props']}",
+            missed=missed, latency_s=latency)
+        return
+    b = argparse.Namespace(**vars(a))
+    b.cam, b.raw, b.handover, b.cam_fallback, b.no_fallback = True, True, False, False, True  # as DREAM_ARGS' --cam line
+    b.replay, b.exec, b.arm, b.carry = None, 0, "auto", None
+    out(event="info", fallback="cam", dream_reason=reason, dream_missed=missed, dream_chunks=n_played)
+    _lines[0] = list(CAM_PATTER)
+    say("Plan B: our own code, same pen.")
+    run(b, stage, st, time.monotonic() + b.pick_s, fb=True)
+
+
+def run(a, stage, s, end, fb=False):
+    """One pick (fb: the --cam-fallback run after a Dream-1 miss: our own lines, not Dream-1's)."""
     played, latency, reason, arm, pre, refused, held, lifted = [], [], None, None, None, False, False, False
     low = float("inf")  # raw: the lowest fingertip since the gripper closed
     opened = False
@@ -466,7 +502,7 @@ def run(a, stage, s, end):
             if arm is None:
                 arm = side
                 out(event="info", arm=arm, moves={x: round(moves(ch, x), 3) for x in ARMS})
-                say(f"Dream-1 picks the {arm} arm.")
+                say(f"The {arm} arm, then." if fb else f"Dream-1 picks the {arm} arm.")
             name = f"dream{k}"
             reason, r = play(stage, arm, name, c["t"], c["q"], c["g"], a.speed, a.carry, a.raw)
             out(event="info", chunk=k, g=[round(min(c["g"]), 2), round(c["g"][-1], 2)], reply=r)  # Dream-1's gripper: lowest, end
@@ -483,7 +519,8 @@ def run(a, stage, s, end):
                     low = min(low, r.get("tip_mm", low))
                     if not held:
                         held = True
-                        grasp = c["q"][grasp_row(c["g"])]
+                        if a.handover:  # (the live --cam --raw path computes nothing new here)
+                            grasp = c["q"][grasp_row(c["g"])]
                         say("Got it!")
                 else:
                     held, low = False, float("inf")
@@ -543,7 +580,7 @@ def run(a, stage, s, end):
         missed = "no_plan"
     if missed is None and reason and reason.startswith("no pick"):  # Dream-1's own time or chunks ran out
         missed = "not_lifted" if held else "timeout"
-    if a.handover and reason and missed is None:  # our checker said no, or Dream-1 broke off: a joke all the same
+    if (a.handover or a.cam_fallback or fb) and reason and missed is None:  # our checker said no, or Dream-1 broke off: a joke all the same
         missed = "refused" if refused else "timeout" if played else "no_plan"
     n_played = len(played)
     out(event="info", dream_reason=reason, played=len(played), held=held, lifted=lifted, missed=missed,
@@ -566,7 +603,7 @@ def run(a, stage, s, end):
             for i, c in enumerate(waves):
                 if (stopped := steps(stage, arm, f"dream_wave{i + 1}", c["t"], c[arm]["q"], c[arm]["g"], a, ours)):
                     break
-        else:
+        elif not a.handover:  # --handover stops 3 cm up: no raw (unchecked) wiggle that low, just the way back
             wave(stage, arm, played[-1])  # 2-3 s of a wizard's flourish with the wand, then back the way it came
         if hand and not stopped:  # cam_pick's handover (owner, Nov 8): the other hand takes it and puts it down
             say("Teamwork! Pass it to the other hand.")
@@ -576,9 +613,9 @@ def run(a, stage, s, end):
                     say("I'm stuck halfway. Can someone at the robot help?")
                     break
             if not stopped:
-                say("Thank you, Dream-1. Back on the table, safe and sound.")
+                say("Back on the table, safe and sound." if fb else "Thank you, Dream-1. Back on the table, safe and sound.")
         else:
-            say("Thank you, Dream-1. Put it back gently.")
+            say("Put it back gently." if fb else "Thank you, Dream-1. Put it back gently.")
             for i, c in enumerate(reversed(played)):
                 if steps(stage, arm, f"dream_back{i + 1}", c["t"], c["q"][::-1], c["g"][::-1], a):
                     break
@@ -592,7 +629,8 @@ def run(a, stage, s, end):
         return
     reacted = tried = False
     if missed:
-        out(event="oops", kind=missed, reaction=REACTION, sfx=OOPS_SFX, text=OOPS_LINES[missed])
+        out(event="oops", kind=missed, reaction=REACTION, sfx=OOPS_SFX, text=FALLBACK_OOPS if fb else OOPS_LINES[missed],
+            **({"fallback": True} if fb else {}))
         _said[0] = time.monotonic()  # the host says the quip: no filler line right on top of it
         react_arm = arm or "right"
         # empty hands: react from where the arm is, if the stage lets it (--handover holding the pen: back first)
@@ -605,7 +643,7 @@ def run(a, stage, s, end):
     while played and arm and time.monotonic() < t_busy and str(stage.state()["arms"][arm].get("playing") or "").startswith("dream"):
         time.sleep(0.3)
     if played:
-        say("That's where we stop Dream-1's idea. Back the way we came.")
+        say("Back the way we came." if fb else "That's where we stop Dream-1's idea. Back the way we came.")
         back = None
         for i, c in enumerate(reversed(played)):
             back, r = play(stage, arm, f"dream_back{i + 1}", c["t"], c["q"][::-1], c["g"][::-1], a.speed,
@@ -623,6 +661,9 @@ def run(a, stage, s, end):
             return
     if missed and not reacted and (went_back or not tried):
         react(stage, arm or "right")  # back where it started, the hand empty: the "ah, damn it" now
+    if a.cam_fallback and not fb:  # the pen is on the table again (or never left it): our camera pick does the act
+        cam_fallback(a, stage, reason, missed, n_played, latency)
+        return
     if a.no_fallback:
         out(event="done", ok=False, held=False, dream_chunks=n_played, fallback=False, reason=reason,
             missed=missed, latency_s=latency)
