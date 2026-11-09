@@ -48,6 +48,7 @@ Update this page when a piece is added or a connection changes. Details live on 
 | Previews (GIFs) | `robot/preview*.py` → `robot/previews/` | owner review pages | |
 | Lars pick | `robot/lars.py` (`--bake` from the fixed table dock `DOCK_RIGHT`, in the right arm's frame; live `--dry`/`--go` through `calib.json`) | its own sim checks + checker; the stage's `--dock-check` maps the dock into the camera through `calib.json` | [props.md](props.md) |
 | Dream-1 pick (`[dream:pick_lars]`) | `robot/dream_preview.py` (station `~/dream-ghost/`: cameras + `GET /state` → Dream-1, no motion) → `robot/dream_run.py` (laptop) → `POST /trajectory` | the stage: `show.Checker`, ≤ 0.3 rad/s; else our `pick_lars` | [dream-1.md](dream-1.md) |
+| Act 2 wand, Dream-1 + handover (`dream_run.py --handover`) | station `snap.py` + `robot/dream_hand.py locate` (the pen's spot) → Dream-1's pick as above (checked, no prop) → `dream_hand.py plan` (present, roll, cam_pick's `handover()` from where Dream-1 left the arm) → `POST /trajectory` raw | Dream-1's chunks: `show.Checker`; ours: dream_hand's and `handover()`'s floor and arm-to-arm checks; a miss: the oops line, the way back | [dream-1.md](dream-1.md) |
 | dimos digital twin (parked: the owner saw no value; reference only) | `dimos/twin.py` (runs dimos from `/tmp/dimos-src`) | `dimos/check_model.sh` (FK vs `show.py`, side-by-side shots) | [dimos.md](dimos.md) |
 | Narration, tags, voices, sounds | `agent/` | `agent/tests` (`uv run --group dev pytest -q`), `fake_stage.py` | [storyteller.md](storyteller.md) |
 
