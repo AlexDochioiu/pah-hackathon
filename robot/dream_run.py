@@ -600,7 +600,7 @@ def run(a, stage, s, end, fb=False):
             for i, c in enumerate(waves):
                 if (stopped := steps(stage, arm, f"dream_wave{i + 1}", c["t"], c[arm]["q"], c[arm]["g"], a, ours)):
                     break
-        else:
+        elif not a.handover:  # --handover stops 3 cm up: no raw (unchecked) wiggle that low, just the way back
             wave(stage, arm, played[-1])  # 2-3 s of a wizard's flourish with the wand, then back the way it came
         if hand and not stopped:  # cam_pick's handover (owner, Nov 8): the other hand takes it and puts it down
             say("Teamwork! Pass it to the other hand.")
